@@ -24,29 +24,148 @@
       </section>
 
       <section id="quickCard" class="quick-card" aria-live="polite" aria-hidden="true">
+        <div class="sheet-grabber" aria-hidden="true"></div>
         <div class="quick-header">
           <p class="quick-tag">⚡ 最速攻略</p>
           <button id="closeQuickCard" class="close-card" type="button" aria-label="クイック表示を閉じる">×</button>
         </div>
-        <p class="quick-subtitle">クイック表示（詳細ではありません）</p>
         <h2 id="quickTitle" class="quick-title">隅田川花火大会</h2>
-        <p id="quickMeta" class="quick-meta">0.8km ・ 徒歩9分 ・ 開始まで42分</p>
+        <div id="quickProgress" class="quick-progress quick-progress-upcoming" aria-hidden="true">
+          <div id="quickProgressTrack" class="quick-progress-track status-track">
+            <span id="quickProgressFill" class="quick-progress-fill status-fill"></span>
+            <span id="quickProgressEndpoint" class="quick-progress-endpoint status-endpoint">
+              <span class="status-he">へ</span>
+            </span>
+            <span id="quickProgressFace" class="quick-progress-face status-face">(=˘ω˘=) zZ</span>
+          </div>
+        </div>
+        <p id="quickMeta" class="quick-meta">0.8km ・ 19:20 - 20:35</p>
         <p id="quickHint" class="quick-hint">✨ (ง •̀_•́)ง いま出発が最適</p>
-        <button class="cta-button" type="button">ルートを開始</button>
+        <div class="quick-actions">
+          <button id="openDetailButton" class="secondary-button" type="button">詳細を見る</button>
+          <button class="cta-button" type="button">ルートを開始</button>
+        </div>
+      </section>
+
+      <section id="detailPanel" class="detail-panel" aria-label="への詳細" aria-hidden="true">
+        <div id="detailGrabber" class="detail-grabber" aria-hidden="true"></div>
+        <header class="detail-header">
+          <p class="detail-label">へ 詳細</p>
+          <button id="closeDetailButton" class="close-detail" type="button" aria-label="詳細を閉じる">⌄</button>
+        </header>
+        <div id="detailContent" class="detail-content">
+          <h2 id="detailName" class="detail-name">隅田川花火大会</h2>
+          <div class="detail-meta-row">
+            <span id="detailDistance" class="detail-distance">0.8km</span>
+            <span id="detailOpenHours" class="detail-open-hours">開放時間 19:20 - 20:30</span>
+          </div>
+
+          <section id="detailProgressSection" class="detail-progress detail-progress-upcoming">
+            <div class="detail-progress-head">
+              <p id="detailProgressTitle" class="detail-progress-title">開始までの時間軸</p>
+              <p id="detailProgressMeta" class="detail-progress-meta">あと42分</p>
+            </div>
+            <div id="detailProgressTrack" class="detail-progress-track status-track">
+              <span id="detailProgressFill" class="detail-progress-fill status-fill"></span>
+              <span id="detailProgressEndpoint" class="detail-progress-endpoint status-endpoint">
+                <span class="status-he">へ</span>
+              </span>
+              <span id="detailProgressFace" class="detail-progress-face status-face">(=˘ω˘=) zZ</span>
+            </div>
+            <div class="detail-progress-foot">
+              <span id="detailProgressLeft" class="detail-progress-left">いま</span>
+              <span id="detailProgressRight" class="detail-progress-right">開始 19:20</span>
+            </div>
+          </section>
+
+          <div id="detailHero" class="detail-hero">
+            <span id="detailHeroBadge" class="detail-hero-badge">花火</span>
+            <p id="detailHeroHint" class="detail-hero-hint">川沿いの視界が広く、写真映えしやすいエリア</p>
+          </div>
+
+          <section class="detail-mini-map">
+            <div class="detail-mini-map-head">
+              <p class="detail-mini-map-title">マップ上の位置</p>
+              <button id="detailFocusButton" class="detail-focus-button" type="button">フォーカス</button>
+            </div>
+            <p id="detailMiniMapText" class="detail-mini-map-text">隅田川テラス側、南西エリア</p>
+          </section>
+
+          <section class="detail-section">
+            <h3 class="detail-section-title">紹介</h3>
+            <p id="detailDescription" class="detail-description">
+              川面に広がる花火を、橋上と河岸の両方から楽しめる定番スポットです。
+            </p>
+          </section>
+
+          <section class="detail-section">
+            <h3 class="detail-section-title">いまの空気感</h3>
+            <div class="detail-stats">
+              <div class="detail-stat">
+                <div class="detail-stat-head">
+                  <span>熱度</span>
+                  <span id="detailHeatValue">82</span>
+                </div>
+                <div class="detail-stat-bar"><span id="detailHeatBar"></span></div>
+              </div>
+              <div class="detail-stat">
+                <div class="detail-stat-head">
+                  <span>驚喜度</span>
+                  <span id="detailSurpriseValue">76</span>
+                </div>
+                <div class="detail-stat-bar"><span id="detailSurpriseBar"></span></div>
+              </div>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
 
     <script>
       const config = window.__TSUGIE_CONFIG__ || {};
+      const phoneFrame = document.querySelector('.phone-frame');
       const mapRoot = document.getElementById('googleMap');
       const fallbackLayer = document.getElementById('fallbackLayer');
       const mapHint = document.getElementById('mapHint');
 
       const quickCard = document.getElementById('quickCard');
       const quickTitle = document.getElementById('quickTitle');
+      const quickProgress = document.getElementById('quickProgress');
+      const quickProgressTrack = document.getElementById('quickProgressTrack');
+      const quickProgressFill = document.getElementById('quickProgressFill');
+      const quickProgressEndpoint = document.getElementById('quickProgressEndpoint');
+      const quickProgressFace = document.getElementById('quickProgressFace');
       const quickMeta = document.getElementById('quickMeta');
       const quickHint = document.getElementById('quickHint');
       const closeQuickCard = document.getElementById('closeQuickCard');
+      const openDetailButton = document.getElementById('openDetailButton');
+
+      const detailPanel = document.getElementById('detailPanel');
+      const detailGrabber = document.getElementById('detailGrabber');
+      const detailContent = document.getElementById('detailContent');
+      const detailName = document.getElementById('detailName');
+      const detailDistance = document.getElementById('detailDistance');
+      const detailOpenHours = document.getElementById('detailOpenHours');
+      const detailProgressSection = document.getElementById('detailProgressSection');
+      const detailProgressTitle = document.getElementById('detailProgressTitle');
+      const detailProgressMeta = document.getElementById('detailProgressMeta');
+      const detailProgressTrack = document.getElementById('detailProgressTrack');
+      const detailProgressFill = document.getElementById('detailProgressFill');
+      const detailProgressEndpoint = document.getElementById('detailProgressEndpoint');
+      const detailProgressFace = document.getElementById('detailProgressFace');
+      const detailProgressLeft = document.getElementById('detailProgressLeft');
+      const detailProgressRight = document.getElementById('detailProgressRight');
+      const detailHero = document.getElementById('detailHero');
+      const detailHeroBadge = document.getElementById('detailHeroBadge');
+      const detailHeroHint = document.getElementById('detailHeroHint');
+      const detailMiniMapText = document.getElementById('detailMiniMapText');
+      const detailDescription = document.getElementById('detailDescription');
+      const detailHeatValue = document.getElementById('detailHeatValue');
+      const detailSurpriseValue = document.getElementById('detailSurpriseValue');
+      const detailHeatBar = document.getElementById('detailHeatBar');
+      const detailSurpriseBar = document.getElementById('detailSurpriseBar');
+      const detailFocusButton = document.getElementById('detailFocusButton');
+      const closeDetailButton = document.getElementById('closeDetailButton');
       const nearbyCarousel = document.getElementById('nearbyCarousel');
       const nearbyTrack = document.getElementById('nearbyTrack');
       const topKaomoji = document.querySelector('.top-kaomoji');
@@ -58,8 +177,21 @@
           name: '隅田川花火大会',
           lat: 35.7152,
           lng: 139.7996,
+          testTimeline: {
+            mode: 'upcoming',
+            startInSec: 28 * 60,
+            durationSec: 100 * 60
+          },
           startTime: '19:20',
-          meta: '0.8km ・ 徒歩9分 ・ 開始まで42分',
+          endTime: '20:35',
+          openHours: '18:40 - 20:35',
+          imageTag: '花火',
+          imageHint: '川沿いの視界が広く、写真映えしやすいエリア',
+          mapSpot: '隅田川テラス南西、橋の手前エリア',
+          description:
+            '川面に広がる花火を、橋上と河岸の両方から楽しめる定番スポット。混雑ピーク前に入ると視界を確保しやすい。',
+          heat: 88,
+          surprise: 81,
           hint: '✨ (ง •̀_•́)ง いま出発が最適',
           markerX: '84px',
           markerY: '262px',
@@ -70,8 +202,21 @@
           name: '浅草サンバ祭',
           lat: 35.7148,
           lng: 139.795,
+          testTimeline: {
+            mode: 'ongoing',
+            elapsedSec: 30 * 60,
+            durationSec: 90 * 60
+          },
           startTime: '19:45',
-          meta: '1.1km ・ 徒歩14分 ・ 開始まで1時間22分',
+          endTime: '21:10',
+          openHours: '19:00 - 21:10',
+          imageTag: '祭り',
+          imageHint: '雷門側から音と光が集まる熱量高めのルート',
+          mapSpot: '雷門通り側、通行規制エリア手前',
+          description:
+            '浅草の夜を彩るリズム系イベント。進行ルート沿いで観ると迫力があり、早めの立ち位置確保が鍵。',
+          heat: 84,
+          surprise: 75,
           hint: '(•̀ᴗ•́)و ルートは浅草通りが最短',
           markerX: '210px',
           markerY: '300px'
@@ -81,8 +226,21 @@
           name: '目黒川さくら並木',
           lat: 35.637,
           lng: 139.702,
+          testTimeline: {
+            mode: 'ended',
+            endedAgoSec: 18 * 60,
+            durationSec: 110 * 60
+          },
           startTime: '20:10',
-          meta: '1.6km ・ 徒歩20分 ・ 見頃まで2日',
+          endTime: '22:00',
+          openHours: '17:00 - 22:00',
+          imageTag: '夜桜',
+          imageHint: '川沿い照明で淡いピンクが強く出る時間帯',
+          mapSpot: '中目黒駅側から北へ 300m 区間',
+          description:
+            '川沿いの散策と軽い食べ歩きに向くスポット。ピーク直前の時間帯は写真を撮りやすく回遊もしやすい。',
+          heat: 72,
+          surprise: 86,
           hint: '(ᵔ◡ᵔ) 夕方の光で写真がきれい',
           markerX: '122px',
           markerY: '420px'
@@ -92,8 +250,21 @@
           name: '神宮外苑いちょう並木',
           lat: 35.6764,
           lng: 139.7166,
+          testTimeline: {
+            mode: 'upcoming',
+            startInSec: 30 * 60 * 60,
+            durationSec: 80 * 60
+          },
           startTime: '20:30',
-          meta: '2.0km ・ 徒歩25分 ・ 見頃まで4日',
+          endTime: '21:50',
+          openHours: '16:30 - 21:50',
+          imageTag: '並木',
+          imageHint: '歩道広め、回遊しながら楽しめるライン',
+          mapSpot: '青山通り側エントランス付近',
+          description:
+            '広い歩道で回遊しやすく、混雑時でも流れが作りやすい定番ルート。夕方から夜にかけて雰囲気が変わる。',
+          heat: 68,
+          surprise: 73,
           hint: '(๑•̀ㅂ•́)و 広い歩道で回遊しやすい',
           markerX: '202px',
           markerY: '510px'
@@ -113,13 +284,18 @@
       const kaomojiPool = ['(ᵔ◡ᵔ)', '(•̀ᴗ•́)و', '(๑•̀ㅂ•́)و', '(ง •̀_•́)ง', '(˶ᵔ ᵕ ᵔ˶)', '(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'];
 
       const markerHandles = new Map();
+      const testTimelineCache = new Map();
       let mapInstance = null;
       let autoOpenTimer = null;
       let autoOpenScheduled = false;
       let currentFocusPlaceId = '';
+      let currentDetailPlaceId = '';
       let currentLocationMarker = null;
       let currentLocationPulseTimer = null;
       let currentLocationPosition = null;
+      let statusTicker = null;
+      let quickSwipeState = null;
+      let detailSwipeState = null;
       const DEFAULT_STREET_ZOOM = 15;
       // Test phase: keep current location fixed near Sumida / Tokyo Skytree.
       const fallbackCurrentLocation = {
@@ -158,6 +334,61 @@
         return `#${cleaned}${alphaHex}`;
       }
 
+      function hexToRgb(hex) {
+        const normalized = normalizeHex(hex).replace('#', '');
+        const value = Number.parseInt(normalized, 16);
+        if (!Number.isFinite(value)) return { r: 0, g: 0, b: 0 };
+        return {
+          r: (value >> 16) & 255,
+          g: (value >> 8) & 255,
+          b: value & 255
+        };
+      }
+
+      function mixRgb(a, b, ratio) {
+        const t = Math.max(0, Math.min(1, Number(ratio) || 0));
+        return {
+          r: Math.round(a.r + (b.r - a.r) * t),
+          g: Math.round(a.g + (b.g - a.g) * t),
+          b: Math.round(a.b + (b.b - a.b) * t)
+        };
+      }
+
+      function rgbaText(rgb, alpha) {
+        const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha.toFixed(3)})`;
+      }
+
+      const quickGlowStops = [
+        { t: 0, c: '#18f3d0' },
+        { t: 0.42, c: '#33d1ff' },
+        { t: 0.72, c: '#8b8cff' },
+        { t: 1, c: '#ff66c4' }
+      ];
+
+      function sampleQuickGradientColor(progress01) {
+        const t = Math.max(0, Math.min(1, Number(progress01) || 0));
+        for (let i = 0; i < quickGlowStops.length - 1; i += 1) {
+          const left = quickGlowStops[i];
+          const right = quickGlowStops[i + 1];
+          if (t >= left.t && t <= right.t) {
+            const local = (t - left.t) / Math.max(0.0001, right.t - left.t);
+            return mixRgb(hexToRgb(left.c), hexToRgb(right.c), local);
+          }
+        }
+        return hexToRgb(quickGlowStops[quickGlowStops.length - 1].c);
+      }
+
+      function applyQuickGlowColor(progress01) {
+        if (!quickProgress) return;
+        const sampled = sampleQuickGradientColor(progress01);
+        const white = { r: 255, g: 255, b: 255 };
+        const softTint = mixRgb(sampled, white, 0.74);
+        const strongTint = mixRgb(sampled, white, 0.58);
+        quickProgress.style.setProperty('--quick-glow-color', rgbaText(softTint, 0.34));
+        quickProgress.style.setProperty('--quick-glow-color-strong', rgbaText(strongTint, 0.52));
+      }
+
       function hashSeed(text) {
         let value = 0;
         const source = String(text || 'marker');
@@ -179,14 +410,68 @@
         });
       }
 
+      function isDetailVisible() {
+        return detailPanel.classList.contains('is-visible');
+      }
+
+      function findPlaceById(placeId) {
+        return places.find((item) => item.id === placeId) || null;
+      }
+
+      function isSameLocalDate(a, b) {
+        if (!(a instanceof Date) || Number.isNaN(a.getTime())) return false;
+        if (!(b instanceof Date) || Number.isNaN(b.getTime())) return false;
+        return (
+          a.getFullYear() === b.getFullYear() &&
+          a.getMonth() === b.getMonth() &&
+          a.getDate() === b.getDate()
+        );
+      }
+
+      function quickStartDateText(status) {
+        const start = status && status.startDate instanceof Date ? status.startDate : null;
+        if (!start || Number.isNaN(start.getTime())) return '日期未定';
+
+        if (isSameLocalDate(start, new Date())) {
+          return '本日開催！まもなく！';
+        }
+
+        const y = start.getFullYear();
+        const m = String(start.getMonth() + 1).padStart(2, '0');
+        const d = String(start.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      function resolvedDistanceText(place) {
+        const origin = currentLocationPosition || fallbackCurrentLocation;
+        const km = distanceKm(origin.lat, origin.lng, place.lat, place.lng);
+        return formatDistanceLabel(km);
+      }
+
+      function quickMetaText(place) {
+        const status = resolveEventStatus(place);
+        const distance = resolvedDistanceText(place);
+        const dateText = quickStartDateText(status);
+        const timeRange = `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
+        return `${distance} ・ ${dateText} ・ ${timeRange}`;
+      }
+
       function openQuickCard(place, source) {
+        currentDetailPlaceId = place.id;
+        const status = resolveEventStatus(place);
         quickTitle.textContent = place.name;
-        quickMeta.textContent = place.meta;
+        quickMeta.textContent = quickMetaText(place);
         quickHint.textContent = place.hint;
+        applyQuickProgress(status);
+        quickCard.style.transform = '';
+        quickCard.classList.remove('is-dragging');
         quickCard.classList.add('is-visible');
         quickCard.setAttribute('aria-hidden', 'false');
         currentFocusPlaceId = place.id;
         setMarkerActive(place.id);
+        if (isDetailVisible()) {
+          closeDetailPanel(false);
+        }
         syncBottomPanels();
 
         const handle = markerHandles.get(place.id);
@@ -194,12 +479,205 @@
       }
 
       function closeQuickCardPanel() {
+        resetQuickCardSwipe();
         quickCard.classList.remove('is-visible');
         quickCard.setAttribute('aria-hidden', 'true');
         currentFocusPlaceId = '';
+        currentDetailPlaceId = '';
         setMarkerActive('');
+        closeDetailPanel(false);
         renderNearbyCarousel();
         syncBottomPanels();
+      }
+
+      function applyDetailStats(heat, surprise) {
+        const safeHeat = Math.max(0, Math.min(100, Number(heat) || 0));
+        const safeSurprise = Math.max(0, Math.min(100, Number(surprise) || 0));
+        detailHeatValue.textContent = `${safeHeat}`;
+        detailSurpriseValue.textContent = `${safeSurprise}`;
+        detailHeatBar.style.width = `${safeHeat}%`;
+        detailSurpriseBar.style.width = `${safeSurprise}%`;
+      }
+
+      function setProgressAnchor(node, pct) {
+        if (!node) return;
+        node.classList.remove('is-edge-left', 'is-edge-right');
+        if (pct <= 8) {
+          node.classList.add('is-edge-left');
+        } else if (pct >= 92) {
+          node.classList.add('is-edge-right');
+        }
+      }
+
+      function setProgressPosition(trackNode, fillNode, faceNode, endpointNode, pct) {
+        const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
+        if (trackNode) trackNode.style.setProperty('--progress-pct', `${safePct}%`);
+        if (fillNode) fillNode.style.width = `${safePct}%`;
+        setProgressAnchor(faceNode, safePct);
+        setProgressAnchor(endpointNode, safePct);
+      }
+
+      function applyQuickProgress(status) {
+        if (!quickProgress || !quickProgressFace) return;
+        quickProgress.classList.remove('quick-progress-ongoing', 'quick-progress-upcoming', 'quick-progress-ended');
+
+        if (status.mode === 'ongoing') {
+          const pct = Math.round(Math.max(0, Math.min(1, Number(status.progress) || 0)) * 100);
+          quickProgress.classList.add('quick-progress-ongoing');
+          quickProgressFace.textContent = '(=^･ω･^=)ﾉ';
+          applyQuickGlowColor(pct / 100);
+          setProgressPosition(quickProgressTrack, quickProgressFill, quickProgressFace, quickProgressEndpoint, pct);
+          return;
+        }
+
+        if (status.mode === 'upcoming') {
+          const pct = Math.round(Math.max(0, Math.min(1, Number(status.waitProgress) || 0)) * 100);
+          quickProgress.classList.add('quick-progress-upcoming');
+          quickProgressFace.textContent = '(=˘ω˘=) zZ';
+          applyQuickGlowColor(0.08);
+          setProgressPosition(quickProgressTrack, quickProgressFill, quickProgressFace, quickProgressEndpoint, pct);
+          return;
+        }
+
+        if (status.mode === 'ended') {
+          quickProgress.classList.add('quick-progress-ended');
+          quickProgressFace.textContent = '(=•ω•=)';
+          applyQuickGlowColor(0.96);
+          setProgressPosition(quickProgressTrack, quickProgressFill, quickProgressFace, quickProgressEndpoint, 100);
+          return;
+        }
+
+        quickProgress.classList.add('quick-progress-upcoming');
+        quickProgressFace.textContent = '(=˘ω˘=)';
+        applyQuickGlowColor(0.08);
+        setProgressPosition(quickProgressTrack, quickProgressFill, quickProgressFace, quickProgressEndpoint, 8);
+      }
+
+      function applyDetailProgress(status) {
+        const safeProgress = Math.max(0, Math.min(1, Number(status.progress) || 0));
+        const safeWaitProgress = Math.max(0, Math.min(1, Number(status.waitProgress) || 0));
+
+        if (status.mode === 'ongoing') {
+          const pct = Math.round(safeProgress * 100);
+          detailProgressSection.classList.remove('detail-progress-upcoming');
+          detailProgressSection.classList.add('detail-progress-ongoing');
+          detailProgressTitle.textContent = '活動進行度';
+          detailProgressMeta.textContent = `進行中 ${pct}% ・ 残り${status.etaLabel}`;
+          detailProgressLeft.textContent = `開始 ${status.startLabel}`;
+          detailProgressRight.textContent = `終了 ${status.endLabel}`;
+          detailProgressFace.textContent = '(=^･ω･^=)ﾉ';
+          setProgressPosition(detailProgressTrack, detailProgressFill, detailProgressFace, detailProgressEndpoint, pct);
+          return;
+        }
+
+        if (status.mode === 'upcoming') {
+          const pct = Math.round(safeWaitProgress * 100);
+          detailProgressSection.classList.remove('detail-progress-ongoing');
+          detailProgressSection.classList.add('detail-progress-upcoming');
+          detailProgressTitle.textContent = '開始までの時間軸';
+          detailProgressMeta.textContent = status.etaLabel ? `あと${status.etaLabel}` : '開始時刻を確認中';
+          detailProgressLeft.textContent = 'いま';
+          detailProgressRight.textContent = `開始 ${status.startLabel}`;
+          detailProgressFace.textContent = '(=˘ω˘=) zZ';
+          setProgressPosition(detailProgressTrack, detailProgressFill, detailProgressFace, detailProgressEndpoint, pct);
+          return;
+        }
+
+        if (status.mode === 'ended') {
+          detailProgressSection.classList.remove('detail-progress-ongoing');
+          detailProgressSection.classList.add('detail-progress-upcoming');
+          detailProgressTitle.textContent = '活動ステータス';
+          detailProgressMeta.textContent = '終了済み';
+          detailProgressLeft.textContent = `開始 ${status.startLabel}`;
+          detailProgressRight.textContent = `終了 ${status.endLabel}`;
+          detailProgressFace.textContent = '(=•ω•=)';
+          setProgressPosition(detailProgressTrack, detailProgressFill, detailProgressFace, detailProgressEndpoint, 100);
+          return;
+        }
+
+        detailProgressSection.classList.remove('detail-progress-ongoing');
+        detailProgressSection.classList.add('detail-progress-upcoming');
+        detailProgressTitle.textContent = '時間情報';
+        detailProgressMeta.textContent = '時刻未定';
+        detailProgressLeft.textContent = 'いま';
+        detailProgressRight.textContent = '開始 未定';
+        detailProgressFace.textContent = '(=˘ω˘=)';
+        setProgressPosition(detailProgressTrack, detailProgressFill, detailProgressFace, detailProgressEndpoint, 8);
+      }
+
+      function updateDetailPanel(place) {
+        const pair = colorPair(place.name);
+        const from = normalizeHex(pair[0]);
+        const to = normalizeHex(pair[1]);
+        const status = resolveEventStatus(place);
+
+        detailName.textContent = place.name;
+        detailDistance.textContent = resolvedDistanceText(place);
+        detailOpenHours.textContent = `開放時間 ${place.openHours || `${place.startTime} - ${place.endTime || '未定'}`}`;
+        detailMiniMapText.textContent = place.mapSpot || '地図上の中心エリア';
+        detailDescription.textContent = place.description || place.hint || '';
+        detailHeroBadge.textContent = place.imageTag || 'イベント';
+        detailHeroHint.textContent = place.imageHint || '';
+        detailHero.style.setProperty('--hero-from', from);
+        detailHero.style.setProperty('--hero-to', to);
+        applyDetailStats(place.heat, place.surprise);
+        applyDetailProgress(status);
+      }
+
+      function openDetailPanel(place, source) {
+        updateDetailPanel(place);
+        currentDetailPlaceId = place.id;
+        currentFocusPlaceId = place.id;
+        setMarkerActive(place.id);
+        quickCard.classList.remove('is-visible');
+        quickCard.setAttribute('aria-hidden', 'true');
+        quickCard.style.transform = '';
+        quickCard.classList.remove('is-dragging');
+        detailPanel.classList.add('is-visible');
+        detailPanel.classList.remove('is-dragging');
+        detailPanel.style.transform = '';
+        detailPanel.setAttribute('aria-hidden', 'false');
+        detailContent.scrollTop = 0;
+        phoneFrame.classList.add('is-detail-open');
+        syncBottomPanels();
+      }
+
+      function closeDetailPanel(restoreQuickCard) {
+        if (!isDetailVisible()) return;
+        resetDetailSwipe();
+        detailPanel.classList.remove('is-visible');
+        detailPanel.classList.remove('is-dragging');
+        detailPanel.setAttribute('aria-hidden', 'true');
+        detailPanel.style.transform = '';
+        phoneFrame.classList.remove('is-detail-open');
+        syncBottomPanels();
+
+        if (restoreQuickCard && currentFocusPlaceId) {
+          const place = findPlaceById(currentFocusPlaceId);
+          if (place) {
+            const status = resolveEventStatus(place);
+            quickTitle.textContent = place.name;
+            quickMeta.textContent = quickMetaText(place);
+            quickHint.textContent = place.hint;
+            applyQuickProgress(status);
+            quickCard.classList.add('is-visible');
+            quickCard.setAttribute('aria-hidden', 'false');
+            syncBottomPanels();
+          }
+        }
+      }
+
+      function focusPlaceOnMap(place, fromDetailPanel) {
+        if (!place) return;
+        if (mapInstance && window.google && window.google.maps) {
+          mapInstance.panTo({ lat: place.lat, lng: place.lng });
+          mapInstance.setZoom(Math.max(DEFAULT_STREET_ZOOM, 16));
+        } else {
+          showHint('Embed モードでは地図フォーカスの位置移動は固定されています。');
+        }
+        if (fromDetailPanel) {
+          closeDetailPanel(true);
+        }
       }
 
       function createMarkerElement(place) {
@@ -365,6 +843,207 @@
         return start;
       }
 
+      function parseTimeParts(timeText) {
+        const safe = String(timeText || '');
+        const pieces = safe.split(':');
+        const hour = Number(pieces[0]);
+        const minute = Number(pieces[1]);
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+        return { hour, minute };
+      }
+
+      function formatCountdownByGranularity(totalSeconds) {
+        const safe = Math.max(0, Math.ceil(Number(totalSeconds) || 0));
+        const days = Math.floor(safe / 86400);
+        const hours = Math.floor(safe / 3600);
+        const minutes = Math.floor((safe % 3600) / 60);
+        const seconds = safe % 60;
+
+        if (safe >= 86400) {
+          return `${days}日${hours % 24}时`;
+        }
+        if (safe >= 3600) {
+          return `${hours}时${minutes}分${seconds}秒`;
+        }
+        if (safe >= 300) {
+          const mm = Math.floor(safe / 60);
+          return `${mm}分${seconds}秒`;
+        }
+        return `${safe}秒`;
+      }
+
+      function etaLabelFromMinutes(totalMinutes) {
+        const safe = Math.max(1, Math.ceil(totalMinutes));
+        const days = Math.floor(safe / (24 * 60));
+        const hours = Math.floor((safe % (24 * 60)) / 60);
+        const minutes = safe % 60;
+        if (days > 0) return `${days}日${hours}時間`;
+        if (hours > 0) return `${hours}時間${minutes}分`;
+        return `${minutes}分`;
+      }
+
+      function dateFromParts(baseDate, hour, minute, dayOffset) {
+        const d = new Date(baseDate);
+        d.setDate(d.getDate() + dayOffset);
+        d.setHours(hour, minute, 0, 0);
+        return d;
+      }
+
+      function formatHm(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '--:--';
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      }
+
+      function ensureTestTimeline(place) {
+        if (!place || !place.testTimeline || typeof place.testTimeline !== 'object') return null;
+        if (testTimelineCache.has(place.id)) {
+          return testTimelineCache.get(place.id);
+        }
+
+        const now = Date.now();
+        const cfg = place.testTimeline;
+        const mode = String(cfg.mode || '').toLowerCase();
+        const durationSec = Math.max(60, Number(cfg.durationSec) || 60 * 60);
+        let startMs = now;
+        let endMs = now + durationSec * 1000;
+
+        if (mode === 'upcoming') {
+          const startInSec = Number(cfg.startInSec);
+          startMs = now + (Number.isFinite(startInSec) ? startInSec : 20 * 60) * 1000;
+          endMs = startMs + durationSec * 1000;
+        } else if (mode === 'ongoing') {
+          const elapsedSec = Number(cfg.elapsedSec);
+          startMs = now - (Number.isFinite(elapsedSec) ? elapsedSec : durationSec / 3) * 1000;
+          endMs = startMs + durationSec * 1000;
+        } else if (mode === 'ended') {
+          const endedAgoSec = Number(cfg.endedAgoSec);
+          endMs = now - (Number.isFinite(endedAgoSec) ? endedAgoSec : 15 * 60) * 1000;
+          startMs = endMs - durationSec * 1000;
+        }
+
+        const timeline = { startMs, endMs, durationSec };
+        testTimelineCache.set(place.id, timeline);
+        return timeline;
+      }
+
+      function resolveStatusByAbsoluteWindow(startDate, endDate, now) {
+        const startMs = startDate.getTime();
+        const endMs = endDate ? endDate.getTime() : null;
+        const safeNow = now instanceof Date ? now : new Date();
+        const nowMs = safeNow.getTime();
+
+        if (endMs && nowMs >= startMs && nowMs <= endMs) {
+          const totalMs = Math.max(1, endMs - startMs);
+          const passedMs = Math.max(0, nowMs - startMs);
+          const remainSec = Math.max(0, Math.ceil((endMs - nowMs) / 1000));
+          const progress = Math.max(0, Math.min(1, passedMs / totalMs));
+          return {
+            mode: 'ongoing',
+            leftLabel: `残り${formatCountdownByGranularity(remainSec)}`,
+            rightLabel: `終了 ${formatHm(endDate)}`,
+            startLabel: formatHm(startDate),
+            endLabel: formatHm(endDate),
+            etaLabel: formatCountdownByGranularity(remainSec),
+            progress,
+            waitProgress: 1,
+            countdownSec: remainSec,
+            startDate,
+            endDate
+          };
+        }
+
+        if (nowMs < startMs) {
+          const diffSec = Math.max(1, Math.ceil((startMs - nowMs) / 1000));
+          const etaClock = formatCountdownByGranularity(diffSec);
+          const diffMinutes = Math.max(1, Math.ceil(diffSec / 60));
+          const waitProgress = Math.max(0, Math.min(1, 1 - diffMinutes / 180));
+          return {
+            mode: 'upcoming',
+            leftLabel: `開始まで${etaClock}`,
+            rightLabel: `開始 ${formatHm(startDate)}`,
+            startLabel: formatHm(startDate),
+            endLabel: endDate ? formatHm(endDate) : '--:--',
+            etaLabel: etaClock,
+            progress: 0,
+            waitProgress,
+            countdownSec: diffSec,
+            startDate,
+            endDate
+          };
+        }
+
+        return {
+          mode: 'ended',
+          leftLabel: '終了済み',
+          rightLabel: endDate ? `終了 ${formatHm(endDate)}` : '終了',
+          startLabel: formatHm(startDate),
+          endLabel: endDate ? formatHm(endDate) : '--:--',
+          etaLabel: '00:00:00',
+          progress: 1,
+          waitProgress: 1,
+          countdownSec: 0,
+          startDate,
+          endDate
+        };
+      }
+
+      function resolveEventStatus(place) {
+        const now = new Date();
+        const testTimeline = ensureTestTimeline(place);
+        if (testTimeline) {
+          const startDate = new Date(testTimeline.startMs);
+          const endDate = new Date(testTimeline.endMs);
+          return resolveStatusByAbsoluteWindow(startDate, endDate, now);
+        }
+
+        const startParts = parseTimeParts(place.startTime || '');
+        if (!startParts) {
+          return {
+            mode: 'unknown',
+            leftLabel: '時刻未定',
+            rightLabel: '開始 未定',
+            startLabel: '--:--',
+            endLabel: '--:--',
+            etaLabel: '',
+            progress: 0,
+            waitProgress: 0,
+            countdownSec: 0
+          };
+        }
+
+        const endParts = parseTimeParts(place.endTime || '');
+
+        const windows = [-1, 0, 1].map((offset) => {
+          const start = dateFromParts(now, startParts.hour, startParts.minute, offset);
+          let end = null;
+          if (endParts) {
+            end = dateFromParts(now, endParts.hour, endParts.minute, offset);
+            if (end.getTime() <= start.getTime()) {
+              end.setDate(end.getDate() + 1);
+            }
+          }
+          return { start, end };
+        });
+
+        const ongoing = windows.find((item) => item.end && now >= item.start && now <= item.end);
+        if (ongoing) {
+          return resolveStatusByAbsoluteWindow(ongoing.start, ongoing.end, now);
+        }
+
+        const candidateStarts = windows.map((item) => item.start).filter((date) => date.getTime() > now.getTime());
+        candidateStarts.sort((a, b) => a.getTime() - b.getTime());
+        const nextStart = candidateStarts[0] || dateFromParts(now, startParts.hour, startParts.minute, 1);
+        let nextEnd = null;
+        if (endParts) {
+          nextEnd = new Date(nextStart);
+          nextEnd.setHours(endParts.hour, endParts.minute, 0, 0);
+          if (nextEnd.getTime() <= nextStart.getTime()) {
+            nextEnd.setDate(nextEnd.getDate() + 1);
+          }
+        }
+        return resolveStatusByAbsoluteWindow(nextStart, nextEnd, now);
+      }
+
       function formatStartCountdown(startTime) {
         const start = resolveNextStart(startTime);
         if (!start) return { startLabel: '時刻未定', etaLabel: '' };
@@ -372,20 +1051,10 @@
         const nowMs = Date.now();
         const diffMs = Math.max(0, start.getTime() - nowMs);
         const totalMinutes = Math.max(1, Math.ceil(diffMs / 60000));
-        const days = Math.floor(totalMinutes / (24 * 60));
-        const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-        const minutes = totalMinutes % 60;
         const hh = String(start.getHours()).padStart(2, '0');
         const mm = String(start.getMinutes()).padStart(2, '0');
         const startLabel = `${hh}:${mm}`;
-
-        if (days > 0) {
-          return { startLabel, etaLabel: `${days}日${hours}時間後` };
-        }
-        if (hours > 0) {
-          return { startLabel, etaLabel: `${hours}時間${minutes}分後` };
-        }
-        return { startLabel, etaLabel: `${minutes}分後` };
+        return { startLabel, etaLabel: `${etaLabelFromMinutes(totalMinutes)}後` };
       }
 
       function distanceKm(fromLat, fromLng, toLat, toLng) {
@@ -406,9 +1075,10 @@
 
       function syncBottomPanels() {
         const quickVisible = quickCard.classList.contains('is-visible');
+        const detailVisible = detailPanel.classList.contains('is-visible');
         if (!nearbyCarousel) return;
-        nearbyCarousel.classList.toggle('is-visible', !quickVisible);
-        nearbyCarousel.setAttribute('aria-hidden', quickVisible ? 'true' : 'false');
+        nearbyCarousel.classList.toggle('is-visible', !quickVisible && !detailVisible);
+        nearbyCarousel.setAttribute('aria-hidden', quickVisible || detailVisible ? 'true' : 'false');
       }
 
       function collectNearbyPlaces() {
@@ -506,6 +1176,32 @@
         if (autoOpenTimer) window.clearTimeout(autoOpenTimer);
         autoOpenTimer = null;
         autoOpenScheduled = false;
+      }
+
+      function refreshActiveStatusUI() {
+        const activeQuickId = currentFocusPlaceId || currentDetailPlaceId;
+        if (activeQuickId && quickCard.classList.contains('is-visible')) {
+          const place = findPlaceById(activeQuickId);
+          if (place) {
+            const status = resolveEventStatus(place);
+            quickMeta.textContent = quickMetaText(place);
+            applyQuickProgress(status);
+          }
+        }
+
+        if (isDetailVisible()) {
+          const place = findPlaceById(currentDetailPlaceId || currentFocusPlaceId);
+          if (place) {
+            updateDetailPanel(place);
+          }
+        }
+      }
+
+      function startStatusTicker() {
+        if (statusTicker) {
+          window.clearInterval(statusTicker);
+        }
+        statusTicker = window.setInterval(refreshActiveStatusUI, 1000);
       }
 
       function renderMarkerOverlay(blockMapDrag) {
@@ -724,8 +1420,197 @@
         mapRoot.appendChild(iframe);
       }
 
+      function canStartQuickSwipe(target) {
+        const isGrabber = target.closest('.sheet-grabber');
+        const isActionButton = target.closest('.quick-actions');
+        return Boolean(isGrabber || !isActionButton);
+      }
+
+      function canStartDetailSwipe(target) {
+        return Boolean(target.closest('.detail-grabber') || target.closest('.detail-header'));
+      }
+
+      function shouldExpandDetailBySwipe(delta, startAt) {
+        const elapsed = Date.now() - Number(startAt || Date.now());
+        if (delta <= -44) return true;
+        if (delta <= -20 && elapsed <= 220) return true;
+        return false;
+      }
+
+      function shouldCloseQuickCardBySwipe(delta, startAt) {
+        const elapsed = Date.now() - Number(startAt || Date.now());
+        if (delta >= 56) return true;
+        if (delta >= 26 && elapsed <= 220) return true;
+        return false;
+      }
+
+      function resetQuickCardSwipe() {
+        quickSwipeState = null;
+        quickCard.classList.remove('is-dragging');
+        quickCard.style.transform = '';
+      }
+
+      function handleQuickCardPointerDown(event) {
+        if (!quickCard.classList.contains('is-visible') || isDetailVisible()) return;
+        if (!canStartQuickSwipe(event.target)) return;
+
+        quickSwipeState = {
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          deltaY: 0,
+          startAt: Date.now()
+        };
+        quickCard.classList.add('is-dragging');
+        quickCard.setPointerCapture(event.pointerId);
+      }
+
+      function handleQuickCardPointerMove(event) {
+        if (!quickSwipeState || quickSwipeState.pointerId !== event.pointerId) return;
+        const rawDelta = event.clientY - quickSwipeState.startY;
+        const delta = Math.max(-190, Math.min(180, rawDelta));
+        quickSwipeState.deltaY = delta;
+        quickCard.style.transform = `translateY(${delta}px)`;
+        if (Math.abs(delta) > 1) event.preventDefault();
+      }
+
+      function handleQuickCardPointerEnd(event) {
+        if (!quickSwipeState || quickSwipeState.pointerId !== event.pointerId) return;
+        const delta = quickSwipeState.deltaY;
+        const startAt = quickSwipeState.startAt;
+        resetQuickCardSwipe();
+
+        if (shouldExpandDetailBySwipe(delta, startAt)) {
+          const target = findPlaceById(currentFocusPlaceId || currentDetailPlaceId);
+          if (target) {
+            openDetailPanel(target, 'swipe');
+          }
+          return;
+        }
+
+        if (shouldCloseQuickCardBySwipe(delta, startAt)) {
+          closeQuickCardPanel();
+        }
+      }
+
+      function resetDetailSwipe() {
+        detailSwipeState = null;
+        detailPanel.classList.remove('is-dragging');
+        detailPanel.style.transform = '';
+      }
+
+      function handleDetailPointerDown(event) {
+        if (!isDetailVisible()) return;
+        if (!canStartDetailSwipe(event.target)) return;
+        detailSwipeState = {
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          deltaY: 0,
+          startAt: Date.now()
+        };
+        detailPanel.classList.add('is-dragging');
+        detailPanel.setPointerCapture(event.pointerId);
+      }
+
+      function handleDetailPointerMove(event) {
+        if (!detailSwipeState || detailSwipeState.pointerId !== event.pointerId) return;
+        const rawDelta = event.clientY - detailSwipeState.startY;
+        const delta = Math.max(0, Math.min(260, rawDelta));
+        detailSwipeState.deltaY = delta;
+        detailPanel.style.transform = `translateY(${delta}px)`;
+      }
+
+      function handleDetailPointerEnd(event) {
+        if (!detailSwipeState || detailSwipeState.pointerId !== event.pointerId) return;
+        const delta = detailSwipeState.deltaY;
+        resetDetailSwipe();
+        if (delta >= 120) {
+          closeDetailPanel(true);
+        }
+      }
+
+      function openCurrentPlaceDetail() {
+        const target = findPlaceById(currentFocusPlaceId || currentDetailPlaceId);
+        if (!target) return;
+        openDetailPanel(target, 'button');
+      }
+
+      function handleQuickCardTouchStart(event) {
+        if (!quickCard.classList.contains('is-visible') || isDetailVisible()) return;
+        if (!canStartQuickSwipe(event.target)) return;
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
+        quickSwipeState = {
+          pointerId: `touch-${touch.identifier}`,
+          startY: touch.clientY,
+          deltaY: 0,
+          startAt: Date.now()
+        };
+        quickCard.classList.add('is-dragging');
+      }
+
+      function handleQuickCardTouchMove(event) {
+        if (!quickSwipeState) return;
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
+        const delta = Math.max(-190, Math.min(180, touch.clientY - quickSwipeState.startY));
+        quickSwipeState.deltaY = delta;
+        quickCard.style.transform = `translateY(${delta}px)`;
+        if (Math.abs(delta) > 1) event.preventDefault();
+      }
+
+      function handleQuickCardTouchEnd() {
+        if (!quickSwipeState) return;
+        const delta = quickSwipeState.deltaY;
+        const startAt = quickSwipeState.startAt;
+        resetQuickCardSwipe();
+        if (shouldExpandDetailBySwipe(delta, startAt)) {
+          const target = findPlaceById(currentFocusPlaceId || currentDetailPlaceId);
+          if (target) {
+            openDetailPanel(target, 'swipe');
+          }
+          return;
+        }
+
+        if (shouldCloseQuickCardBySwipe(delta, startAt)) {
+          closeQuickCardPanel();
+        }
+      }
+
+      function handleDetailTouchStart(event) {
+        if (!isDetailVisible()) return;
+        if (!canStartDetailSwipe(event.target)) return;
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
+        detailSwipeState = {
+          pointerId: `touch-${touch.identifier}`,
+          startY: touch.clientY,
+          deltaY: 0,
+          startAt: Date.now()
+        };
+        detailPanel.classList.add('is-dragging');
+      }
+
+      function handleDetailTouchMove(event) {
+        if (!detailSwipeState) return;
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
+        const delta = Math.max(0, Math.min(260, touch.clientY - detailSwipeState.startY));
+        detailSwipeState.deltaY = delta;
+        detailPanel.style.transform = `translateY(${delta}px)`;
+      }
+
+      function handleDetailTouchEnd() {
+        if (!detailSwipeState) return;
+        const delta = detailSwipeState.deltaY;
+        resetDetailSwipe();
+        if (delta >= 110) {
+          closeDetailPanel(true);
+        }
+      }
+
       async function init() {
         setRandomKaomoji();
+        startStatusTicker();
         const apiKey = resolveApiKey();
         resetAutoOpen();
         syncBottomPanels();
@@ -757,6 +1642,33 @@
       }
 
       closeQuickCard.addEventListener('click', closeQuickCardPanel);
+      openDetailButton.addEventListener('click', openCurrentPlaceDetail);
+      closeDetailButton.addEventListener('click', () => closeDetailPanel(true));
+      detailFocusButton.addEventListener('click', () => {
+        const target = findPlaceById(currentFocusPlaceId || currentDetailPlaceId);
+        if (target) {
+          focusPlaceOnMap(target, true);
+        }
+      });
+      if ('PointerEvent' in window) {
+        quickCard.addEventListener('pointerdown', handleQuickCardPointerDown);
+        quickCard.addEventListener('pointermove', handleQuickCardPointerMove);
+        quickCard.addEventListener('pointerup', handleQuickCardPointerEnd);
+        quickCard.addEventListener('pointercancel', handleQuickCardPointerEnd);
+        detailPanel.addEventListener('pointerdown', handleDetailPointerDown);
+        detailPanel.addEventListener('pointermove', handleDetailPointerMove);
+        detailPanel.addEventListener('pointerup', handleDetailPointerEnd);
+        detailPanel.addEventListener('pointercancel', handleDetailPointerEnd);
+      } else {
+        quickCard.addEventListener('touchstart', handleQuickCardTouchStart, { passive: true });
+        quickCard.addEventListener('touchmove', handleQuickCardTouchMove, { passive: false });
+        quickCard.addEventListener('touchend', handleQuickCardTouchEnd, { passive: true });
+        quickCard.addEventListener('touchcancel', handleQuickCardTouchEnd, { passive: true });
+        detailPanel.addEventListener('touchstart', handleDetailTouchStart, { passive: true });
+        detailPanel.addEventListener('touchmove', handleDetailTouchMove, { passive: false });
+        detailPanel.addEventListener('touchend', handleDetailTouchEnd, { passive: true });
+        detailPanel.addEventListener('touchcancel', handleDetailTouchEnd, { passive: true });
+      }
       locateButton.addEventListener('click', () => focusCurrentLocation(true));
       init();
     </script>
