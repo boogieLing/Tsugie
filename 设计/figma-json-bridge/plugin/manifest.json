@@ -1,0 +1,8 @@
+{
+  "name": "Tsugie UI Schema Bridge",
+  "id": "tsugie-ui-schema-bridge",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"]
+}

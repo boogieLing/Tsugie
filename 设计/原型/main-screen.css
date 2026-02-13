@@ -1,0 +1,136 @@
+:root {
+  --bg-base: #0f1115;
+  --bg-topbar: #151821;
+  --bg-map: #1c1f2a;
+  --bg-card: #1a1d27;
+  --bg-image: #2a2e3a;
+  --text-primary: #ffffff;
+  --text-muted: #9ca3af;
+  --text-subtle: #6b7280;
+  --brand-blue: #2563eb;
+  --dot-blue: #3b82f6;
+  --card-radius: 20px;
+  --inner-radius: 12px;
+  --screen-width: 390px;
+  --screen-height: 844px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 80% 20%, #1a2235 0%, rgba(26, 34, 53, 0) 32%),
+    radial-gradient(circle at 20% 80%, #121927 0%, rgba(18, 25, 39, 0) 30%),
+    var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Hiragino Sans", "Noto Sans JP", "Helvetica Neue", sans-serif;
+}
+
+.phone-frame {
+  width: min(100vw, var(--screen-width));
+  height: min(100dvh, var(--screen-height));
+  background: var(--bg-base);
+  overflow: hidden;
+  position: relative;
+}
+
+.top-bar {
+  height: 88px;
+  background: var(--bg-topbar);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 20px 24px;
+}
+
+.brand {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.map-area {
+  height: 500px;
+  background: var(--bg-map);
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.map-label {
+  color: var(--text-subtle);
+  font-size: 16px;
+}
+
+.user-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--dot-blue);
+  position: absolute;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2);
+}
+
+.activity-card {
+  width: calc(100% - 32px);
+  margin: -28px auto 0;
+  border-radius: var(--card-radius);
+  background: var(--bg-card);
+  padding: 20px 16px 16px;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+.activity-image {
+  height: 100px;
+  border-radius: var(--inner-radius);
+  background: var(--bg-image);
+  color: var(--text-subtle);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.card-title {
+  margin: 18px 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.cta-button {
+  margin-top: 10px;
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-radius: var(--inner-radius);
+  background: var(--brand-blue);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.cta-button:hover {
+  background: #1f57cc;
+}
+
+.cta-button:active {
+  transform: translateY(1px);
+}
+
+.cta-button:focus-visible {
+  outline: 2px solid #9ec5ff;
+  outline-offset: 2px;
+}

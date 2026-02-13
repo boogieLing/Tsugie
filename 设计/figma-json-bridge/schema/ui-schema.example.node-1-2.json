@@ -1,0 +1,167 @@
+{
+  "version": "1.0",
+  "frames": [
+    {
+      "id": "home-map-idle",
+      "name": "home-map-idle",
+      "type": "FRAME",
+      "position": { "x": 0, "y": 0 },
+      "size": { "width": 390, "height": 844 },
+      "fills": ["#0F1115"],
+      "children": [
+        {
+          "id": "idle-topbar",
+          "name": "idle-topbar",
+          "type": "RECTANGLE",
+          "position": { "x": 0, "y": 0 },
+          "size": { "width": 390, "height": 88 },
+          "fills": ["#151821"]
+        },
+        {
+          "id": "idle-title",
+          "name": "idle-title",
+          "type": "TEXT",
+          "position": { "x": 20, "y": 27 },
+          "size": { "width": 84, "height": 32 },
+          "characters": "つぎへ",
+          "fontFamily": "Inter",
+          "fontStyle": "Medium",
+          "fontSize": 28,
+          "fills": ["#FFFFFF"]
+        },
+        {
+          "id": "idle-map",
+          "name": "idle-map",
+          "type": "RECTANGLE",
+          "position": { "x": 0, "y": 88 },
+          "size": { "width": 390, "height": 756 },
+          "fills": ["#1C1F2A"]
+        },
+        {
+          "id": "idle-map-label",
+          "name": "idle-map-label",
+          "type": "TEXT",
+          "position": { "x": 150, "y": 324 },
+          "size": { "width": 69, "height": 18 },
+          "characters": "Map Area",
+          "fontFamily": "Inter",
+          "fontStyle": "Regular",
+          "fontSize": 16,
+          "fills": ["#6B7280"]
+        },
+        {
+          "id": "idle-marker-main",
+          "name": "idle-marker-main",
+          "type": "ELLIPSE",
+          "position": { "x": 187, "y": 330 },
+          "size": { "width": 16, "height": 16 },
+          "fills": ["#3B82F6"]
+        }
+      ]
+    },
+    {
+      "id": "home-map-quick-view",
+      "name": "home-map-quick-view",
+      "type": "FRAME",
+      "position": { "x": 430, "y": 0 },
+      "size": { "width": 390, "height": 844 },
+      "fills": ["#0F1115"],
+      "children": [
+        {
+          "id": "quick-topbar",
+          "name": "quick-topbar",
+          "type": "RECTANGLE",
+          "position": { "x": 0, "y": 0 },
+          "size": { "width": 390, "height": 88 },
+          "fills": ["#151821"]
+        },
+        {
+          "id": "quick-title",
+          "name": "quick-title",
+          "type": "TEXT",
+          "position": { "x": 20, "y": 27 },
+          "size": { "width": 84, "height": 32 },
+          "characters": "つぎへ",
+          "fontFamily": "Inter",
+          "fontStyle": "Medium",
+          "fontSize": 28,
+          "fills": ["#FFFFFF"]
+        },
+        {
+          "id": "quick-map",
+          "name": "quick-map",
+          "type": "RECTANGLE",
+          "position": { "x": 0, "y": 88 },
+          "size": { "width": 390, "height": 500 },
+          "fills": ["#1C1F2A"]
+        },
+        {
+          "id": "quick-marker-main",
+          "name": "quick-marker-main",
+          "type": "ELLIPSE",
+          "position": { "x": 187, "y": 330 },
+          "size": { "width": 16, "height": 16 },
+          "fills": ["#3B82F6"]
+        },
+        {
+          "id": "quick-view-card",
+          "name": "quick-view-card",
+          "type": "FRAME",
+          "position": { "x": 16, "y": 560 },
+          "size": { "width": 358, "height": 220 },
+          "cornerRadius": 20,
+          "fills": ["#1A1D27"],
+          "children": [
+            {
+              "id": "quick-image",
+              "name": "quick-image",
+              "type": "RECTANGLE",
+              "position": { "x": 16, "y": 20 },
+              "size": { "width": 326, "height": 100 },
+              "cornerRadius": 12,
+              "fills": ["#2A2E3A"]
+            },
+            {
+              "id": "quick-activity-name",
+              "name": "quick-activity-name",
+              "type": "TEXT",
+              "position": { "x": 16, "y": 132 },
+              "size": { "width": 126, "height": 21 },
+              "characters": "今日のおすすめ",
+              "fontFamily": "Inter",
+              "fontStyle": "Medium",
+              "fontSize": 18,
+              "fills": ["#FFFFFF"]
+            },
+            {
+              "id": "quick-distance",
+              "name": "quick-distance",
+              "type": "TEXT",
+              "position": { "x": 16, "y": 160 },
+              "size": { "width": 140, "height": 16 },
+              "characters": "1.2km ・ 徒歩15分",
+              "fontFamily": "Inter",
+              "fontStyle": "Regular",
+              "fontSize": 14,
+              "fills": ["#9CA3AF"]
+            },
+            {
+              "id": "quick-cta",
+              "name": "quick-cta",
+              "type": "BUTTON",
+              "position": { "x": 16, "y": 176 },
+              "size": { "width": 326, "height": 44 },
+              "cornerRadius": 12,
+              "fills": ["#2563EB"],
+              "characters": "查看路线",
+              "fontFamily": "Inter",
+              "fontStyle": "Medium",
+              "fontSize": 16,
+              "textFills": ["#FFFFFF"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

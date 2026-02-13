@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tsugie UI Schema v1.0",
+  "type": "object",
+  "required": ["version", "frames"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/node"
+      }
+    }
+  },
+  "definitions": {
+    "paint": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$"
+        },
+        {
+          "type": "object",
+          "required": ["color"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["SOLID"]
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$"
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "position": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "size": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number" },
+        "height": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["NONE", "HORIZONTAL", "VERTICAL"]
+        },
+        "primaryAxisSizingMode": {
+          "type": "string",
+          "enum": ["AUTO", "FIXED"]
+        },
+        "counterAxisSizingMode": {
+          "type": "string",
+          "enum": ["AUTO", "FIXED"]
+        },
+        "primaryAxisAlignItems": {
+          "type": "string",
+          "enum": ["MIN", "MAX", "CENTER", "SPACE_BETWEEN"]
+        },
+        "counterAxisAlignItems": {
+          "type": "string",
+          "enum": ["MIN", "MAX", "CENTER", "BASELINE"]
+        },
+        "itemSpacing": { "type": "number" },
+        "paddingLeft": { "type": "number" },
+        "paddingRight": { "type": "number" },
+        "paddingTop": { "type": "number" },
+        "paddingBottom": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "name", "type", "size"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["FRAME", "RECTANGLE", "TEXT", "ELLIPSE", "BUTTON"]
+        },
+        "position": { "$ref": "#/definitions/position" },
+        "size": { "$ref": "#/definitions/size" },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cornerRadius": { "type": "number" },
+        "fills": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/paint" }
+        },
+        "strokes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/paint" }
+        },
+        "strokeWeight": { "type": "number", "minimum": 0 },
+        "layout": { "$ref": "#/definitions/layout" },
+        "characters": { "type": "string" },
+        "fontFamily": { "type": "string" },
+        "fontStyle": { "type": "string" },
+        "fontWeight": { "type": "number" },
+        "fontSize": { "type": "number" },
+        "lineHeightPx": { "type": "number" },
+        "textAlignHorizontal": {
+          "type": "string",
+          "enum": ["LEFT", "CENTER", "RIGHT", "JUSTIFIED"]
+        },
+        "textAlignVertical": {
+          "type": "string",
+          "enum": ["TOP", "CENTER", "BOTTOM"]
+        },
+        "textFills": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/paint" }
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/node" }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

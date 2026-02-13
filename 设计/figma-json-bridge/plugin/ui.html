@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tsugie UI Schema Bridge</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-border: #2a3040;
+        --text: #edf1fb;
+        --muted: #99a2b6;
+        --primary: #2d63ea;
+        --danger: #f16363;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .wrap {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        height: 100vh;
+      }
+
+      .header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--panel-border);
+      }
+
+      .header h1 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .header p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .editor {
+        padding: 12px;
+      }
+
+      textarea {
+        width: 100%;
+        height: 100%;
+        resize: none;
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+        padding: 10px;
+      }
+
+      .footer {
+        padding: 10px 12px 12px;
+        border-top: 1px solid var(--panel-border);
+        display: grid;
+        gap: 8px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        color: #fff;
+        background: #2a3346;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--primary);
+      }
+
+      button.ghost {
+        background: #202633;
+      }
+
+      label {
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .log {
+        min-height: 34px;
+        max-height: 120px;
+        overflow: auto;
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 8px;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+
+      .ok {
+        color: #84d39f;
+      }
+
+      .error {
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="header">
+        <h1>Tsugie UI Schema Bridge</h1>
+        <p>粘贴 Codex 输出的 <code>ui-schema.json</code>，一键同步到当前 Figma 页面。</p>
+      </div>
+      <div class="editor">
+        <textarea id="schemaInput" spellcheck="false"></textarea>
+      </div>
+      <div class="footer">
+        <div class="row">
+          <button id="loadExample" class="ghost">加载示例</button>
+          <button id="validate">校验</button>
+          <button id="apply" class="primary">应用到 Figma</button>
+          <label>
+            <input id="pruneMissing" type="checkbox" />
+            删除 schema 中不存在的托管节点
+          </label>
+        </div>
+        <div id="log" class="log">等待输入...</div>
+      </div>
+    </div>
+
+    <script>
+      const schemaInput = document.getElementById("schemaInput");
+      const log = document.getElementById("log");
+      const pruneMissing = document.getElementById("pruneMissing");
+
+      const exampleSchema = {
+        version: "1.0",
+        frames: [
+          {
+            id: "home-map-idle",
+            name: "home-map-idle",
+            type: "FRAME",
+            position: { x: 0, y: 0 },
+            size: { width: 390, height: 844 },
+            fills: ["#0F1115"],
+            children: [
+              {
+                id: "topbar",
+                name: "topbar",
+                type: "RECTANGLE",
+                position: { x: 0, y: 0 },
+                size: { width: 390, height: 88 },
+                fills: ["#151821"]
+              },
+              {
+                id: "title",
+                name: "title",
+                type: "TEXT",
+                position: { x: 20, y: 27 },
+                size: { width: 84, height: 32 },
+                characters: "つぎへ",
+                fontFamily: "Inter",
+                fontStyle: "Medium",
+                fontSize: 28,
+                fills: ["#FFFFFF"]
+              },
+              {
+                id: "map-area",
+                name: "map-area",
+                type: "RECTANGLE",
+                position: { x: 0, y: 88 },
+                size: { width: 390, height: 756 },
+                fills: ["#1C1F2A"]
+              },
+              {
+                id: "marker-main",
+                name: "marker-main",
+                type: "ELLIPSE",
+                position: { x: 187, y: 330 },
+                size: { width: 16, height: 16 },
+                fills: ["#3B82F6"]
+              }
+            ]
+          },
+          {
+            id: "home-map-quick-view",
+            name: "home-map-quick-view",
+            type: "FRAME",
+            position: { x: 420, y: 0 },
+            size: { width: 390, height: 844 },
+            fills: ["#0F1115"],
+            children: [
+              {
+                id: "map-area-quick",
+                name: "map-area-quick",
+                type: "RECTANGLE",
+                position: { x: 0, y: 88 },
+                size: { width: 390, height: 500 },
+                fills: ["#1C1F2A"]
+              },
+              {
+                id: "quick-view-card",
+                name: "quick-view-card",
+                type: "FRAME",
+                position: { x: 16, y: 560 },
+                size: { width: 358, height: 220 },
+                cornerRadius: 20,
+                fills: ["#1A1D27"],
+                children: [
+                  {
+                    id: "quick-view-title",
+                    name: "quick-view-title",
+                    type: "TEXT",
+                    position: { x: 20, y: 132 },
+                    size: { width: 126, height: 21 },
+                    characters: "今日のおすすめ",
+                    fontFamily: "Inter",
+                    fontStyle: "Medium",
+                    fontSize: 18,
+                    fills: ["#FFFFFF"]
+                  },
+                  {
+                    id: "quick-view-cta",
+                    name: "quick-view-cta",
+                    type: "BUTTON",
+                    position: { x: 16, y: 160 },
+                    size: { width: 326, height: 44 },
+                    cornerRadius: 12,
+                    fills: ["#2563EB"],
+                    characters: "查看路线",
+                    fontFamily: "Inter",
+                    fontStyle: "Medium",
+                    fontSize: 16,
+                    textFills: ["#FFFFFF"]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+
+      function setLog(text, mode) {
+        log.textContent = text;
+        log.className = "log " + (mode || "");
+      }
+
+      document.getElementById("loadExample").addEventListener("click", () => {
+        schemaInput.value = JSON.stringify(exampleSchema, null, 2);
+        setLog("已加载示例 schema。", "ok");
+      });
+
+      document.getElementById("validate").addEventListener("click", () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "validate",
+              payload: schemaInput.value
+            }
+          },
+          "*"
+        );
+      });
+
+      document.getElementById("apply").addEventListener("click", () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "apply",
+              payload: schemaInput.value,
+              pruneMissing: pruneMissing.checked
+            }
+          },
+          "*"
+        );
+      });
+
+      window.onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === "validated") {
+          if (msg.payload.ok) {
+            setLog("schema 校验通过。", "ok");
+          } else {
+            setLog(`schema 校验失败:\n- ${msg.payload.errors.join("\n- ")}`, "error");
+          }
+          return;
+        }
+
+        if (msg.type === "applied") {
+          if (msg.payload.ok) {
+            setLog(msg.payload.message || "已完成同步。", "ok");
+          } else {
+            const details = msg.payload.errors && msg.payload.errors.length > 0
+              ? `\n- ${msg.payload.errors.join("\n- ")}`
+              : "";
+            setLog(`应用失败: ${msg.payload.message || "未知错误"}${details}`, "error");
+          }
+        }
+      };
+    </script>
+  </body>
+</html>

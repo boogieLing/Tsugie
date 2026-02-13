@@ -1,0 +1,9 @@
+{
+  "name": "tsugie-figma-json-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Codex ui-schema to Figma plugin bridge",
+  "scripts": {
+    "validate:example": "node scripts/validate-ui-schema.js schema/ui-schema.example.node-1-2.json"
+  }
+}
