@@ -3,9 +3,32 @@
 const fs = require("fs");
 const path = require("path");
 
+const SUPPORTED_TYPES = new Set([
+  "FRAME",
+  "GROUP",
+  "COMPONENT",
+  "SECTION",
+  "RECTANGLE",
+  "ELLIPSE",
+  "LINE",
+  "POLYGON",
+  "STAR",
+  "VECTOR",
+  "TEXT",
+  "SLICE",
+  "INSTANCE",
+  "BUTTON"
+]);
+
 function fail(message) {
   console.error(`ERROR: ${message}`);
   process.exit(1);
+}
+
+function rootsFromSchema(schema) {
+  if (Array.isArray(schema.frames) && schema.frames.length > 0) return schema.frames;
+  if (Array.isArray(schema.nodes) && schema.nodes.length > 0) return schema.nodes;
+  return [];
 }
 
 function walk(node, pointer, idSet, errors) {
@@ -13,6 +36,7 @@ function walk(node, pointer, idSet, errors) {
     errors.push(`${pointer} must be an object`);
     return;
   }
+
   if (typeof node.id !== "string" || node.id.trim() === "") {
     errors.push(`${pointer}.id must be a non-empty string`);
   } else if (idSet.has(node.id)) {
@@ -20,18 +44,27 @@ function walk(node, pointer, idSet, errors) {
   } else {
     idSet.add(node.id);
   }
+
   if (typeof node.name !== "string" || node.name.trim() === "") {
     errors.push(`${pointer}.name must be a non-empty string`);
   }
-  if (typeof node.type !== "string") {
-    errors.push(`${pointer}.type must be a string`);
+
+  if (typeof node.type !== "string" || !SUPPORTED_TYPES.has(node.type)) {
+    errors.push(`${pointer}.type unsupported: ${node.type}`);
   }
+
   if (!node.size || typeof node.size.width !== "number" || typeof node.size.height !== "number") {
     errors.push(`${pointer}.size.width/height must be numbers`);
   }
+
+  if (node.type === "INSTANCE" && !node.componentId && !node.componentKey) {
+    errors.push(`${pointer} (INSTANCE) requires componentId or componentKey`);
+  }
+
   if (node.children !== undefined && !Array.isArray(node.children)) {
     errors.push(`${pointer}.children must be an array`);
   }
+
   if (Array.isArray(node.children)) {
     node.children.forEach((child, idx) => walk(child, `${pointer}.children[${idx}]`, idSet, errors));
   }
@@ -46,12 +79,15 @@ function validate(schema) {
   if (schema.version !== "1.0") {
     errors.push('schema.version must be "1.0"');
   }
-  if (!Array.isArray(schema.frames) || schema.frames.length === 0) {
-    errors.push("schema.frames must be a non-empty array");
+
+  const roots = rootsFromSchema(schema);
+  if (roots.length === 0) {
+    errors.push("schema.frames or schema.nodes must be a non-empty array");
     return errors;
   }
+
   const idSet = new Set();
-  schema.frames.forEach((frame, idx) => walk(frame, `frames[${idx}]`, idSet, errors));
+  roots.forEach((node, idx) => walk(node, `roots[${idx}]`, idSet, errors));
   return errors;
 }
 

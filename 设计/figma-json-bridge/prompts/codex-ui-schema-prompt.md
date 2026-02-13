@@ -13,11 +13,13 @@
 - 点击点位状态：home-map-quick-view（有快速查看卡片）
 
 约束：
-- 顶层字段必须包含：version, frames
+- 顶层字段必须包含：version，以及 frames（或 nodes）
 - 每个节点必须包含：id, name, type, size
-- type 仅允许：FRAME, RECTANGLE, TEXT, ELLIPSE, BUTTON
+- type 仅允许：
+  FRAME, GROUP, COMPONENT, SECTION, RECTANGLE, ELLIPSE, LINE, POLYGON, STAR, VECTOR, TEXT, SLICE, INSTANCE, BUTTON
 - 所有颜色用 hex（例如 #1A1D27）
 - id 全局唯一
+- 若 type=INSTANCE，必须提供 componentId 或 componentKey
 
 业务语义：
 - “快速查看”不等同于详情页
