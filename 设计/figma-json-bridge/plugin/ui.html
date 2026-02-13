@@ -124,13 +124,17 @@
       .error {
         color: var(--danger);
       }
+
+      #localJsonFile {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="header">
         <h1>Tsugie UI Schema Bridge</h1>
-        <p>粘贴 Codex 输出的 <code>ui-schema.json</code>，一键同步到当前 Figma 页面。</p>
+        <p>支持两种模式：<code>ui-schema</code>（建改节点）与 <code>color-system</code>（给托管节点批量上色）。</p>
       </div>
       <div class="editor">
         <textarea id="schemaInput" spellcheck="false"></textarea>
@@ -138,13 +142,18 @@
       <div class="footer">
         <div class="row">
           <button id="loadExample" class="ghost">加载示例</button>
+          <button id="loadLocalJson" class="ghost">导入本地 JSON</button>
           <button id="validate">校验</button>
+          <button id="validateColorSystem">校验 color-system</button>
           <button id="apply" class="primary">应用到 Figma</button>
+          <button id="applyColorSystem" class="primary">应用 color-system 到托管节点</button>
+          <button id="applyColorSystemAllPages" class="primary">全文件应用 color-system</button>
           <label>
             <input id="pruneMissing" type="checkbox" />
             删除 schema 中不存在的托管节点
           </label>
         </div>
+        <input id="localJsonFile" type="file" accept=".json,application/json" />
         <div id="log" class="log">等待输入...</div>
       </div>
     </div>
@@ -153,6 +162,7 @@
       const schemaInput = document.getElementById("schemaInput");
       const log = document.getElementById("log");
       const pruneMissing = document.getElementById("pruneMissing");
+      const localJsonFile = document.getElementById("localJsonFile");
 
       const exampleSchema = {
         version: "1.0",
@@ -271,6 +281,36 @@
         setLog("已加载示例 schema。", "ok");
       });
 
+      document.getElementById("loadLocalJson").addEventListener("click", () => {
+        localJsonFile.value = "";
+        localJsonFile.click();
+      });
+
+      localJsonFile.addEventListener("change", () => {
+        if (!localJsonFile.files || localJsonFile.files.length === 0) return;
+        const file = localJsonFile.files[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = typeof reader.result === "string" ? reader.result : "";
+          if (!text) {
+            setLog("导入失败：文件为空或读取失败。", "error");
+            return;
+          }
+          try {
+            const parsed = JSON.parse(text);
+            schemaInput.value = JSON.stringify(parsed, null, 2);
+            setLog(`已导入本地 JSON：${file.name}`, "ok");
+          } catch (err) {
+            schemaInput.value = text;
+            setLog(`已导入文本但 JSON 解析失败：${file.name}`, "error");
+          }
+        };
+        reader.onerror = () => {
+          setLog("导入失败：无法读取文件。", "error");
+        };
+        reader.readAsText(file, "utf-8");
+      });
+
       document.getElementById("validate").addEventListener("click", () => {
         parent.postMessage(
           {
@@ -290,6 +330,42 @@
               type: "apply",
               payload: schemaInput.value,
               pruneMissing: pruneMissing.checked
+            }
+          },
+          "*"
+        );
+      });
+
+      document.getElementById("validateColorSystem").addEventListener("click", () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "validateColorSystem",
+              payload: schemaInput.value
+            }
+          },
+          "*"
+        );
+      });
+
+      document.getElementById("applyColorSystem").addEventListener("click", () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "applyColorSystem",
+              payload: schemaInput.value
+            }
+          },
+          "*"
+        );
+      });
+
+      document.getElementById("applyColorSystemAllPages").addEventListener("click", () => {
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "applyColorSystemAllPages",
+              payload: schemaInput.value
             }
           },
           "*"
@@ -317,6 +393,39 @@
               ? `\n- ${msg.payload.errors.join("\n- ")}`
               : "";
             setLog(`应用失败: ${msg.payload.message || "未知错误"}${details}`, "error");
+          }
+          return;
+        }
+
+        if (msg.type === "colorSystemValidated") {
+          if (msg.payload.ok) {
+            setLog("color-system 校验通过。", "ok");
+          } else {
+            setLog(`color-system 校验失败:\n- ${msg.payload.errors.join("\n- ")}`, "error");
+          }
+          return;
+        }
+
+        if (msg.type === "colorSystemApplied") {
+          if (msg.payload.ok) {
+            setLog(msg.payload.message || "color-system 应用成功。", "ok");
+          } else {
+            const details = msg.payload.errors && msg.payload.errors.length > 0
+              ? `\n- ${msg.payload.errors.join("\n- ")}`
+              : "";
+            setLog(`color-system 应用失败: ${msg.payload.message || "未知错误"}${details}`, "error");
+          }
+          return;
+        }
+
+        if (msg.type === "colorSystemAppliedAllPages") {
+          if (msg.payload.ok) {
+            setLog(msg.payload.message || "color-system 全文件应用成功。", "ok");
+          } else {
+            const details = msg.payload.errors && msg.payload.errors.length > 0
+              ? `\n- ${msg.payload.errors.join("\n- ")}`
+              : "";
+            setLog(`color-system 全文件应用失败: ${msg.payload.message || "未知错误"}${details}`, "error");
           }
         }
       };

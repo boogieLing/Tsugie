@@ -4,7 +4,11 @@
 - 线框来源：`设计/figma/tsugihe_main_screen_wireframe.svg`
 - Figma 对齐节点：`设计/figma/node-1-2-reference.md`
 - 节点改稿方案：`设计/文档/node-1-2-figma-adjustment-v2.md`
+- 节点改稿方案（地图优先版）：`设计/文档/node-1-18-ui优化执行单-v1.md`
+- 节点改稿方案（清新渐变版）：`设计/文档/node-2-29-ui优化执行单-v1.md`
+- 语义命名与へ抽象：`设计/文档/figma-语义命名与へ抽象规范-v1.md`
 - Figma 自动化工具：`设计/figma-json-bridge/README.md`
+- 节点参考（2:29）：`设计/figma/node-2-29-reference.md`
 - 可调页面：`设计/原型/main-screen.html`
 - 样式变量：`设计/原型/main-screen.css`
 

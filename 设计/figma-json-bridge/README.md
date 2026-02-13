@@ -10,9 +10,13 @@
 
 - `plugin/manifest.json`：Figma 插件清单
 - `plugin/code.js`：插件执行引擎（解析 schema、幂等同步）
-- `plugin/ui.html`：插件面板（粘贴 JSON、校验、应用、prune）
+- `plugin/ui.html`：插件面板（支持 `ui-schema` / `color-system` 双模式）
 - `schema/ui-schema.v1.schema.json`：JSON Schema 规范
 - `schema/ui-schema.example.node-1-2.json`：可直接演示的示例
+- `schema/ui-schema.node-1-18.map-first-fast-guide.v1.json`：Node `1:18` 地图优先优化方案
+- `schema/ui-schema.node-2-29.map-first-fresh-gradient.v1.json`：Node `2:29` 清新渐变 + 示例地图 + 快速查看方案
+- `schema/color-system.tsugie-he.v1.json`：统一配色管理
+- `schema/color-system.tsugie-he.v2.fresh.json`：普通模式清新渐变配色管理
 - `prompts/codex-ui-schema-prompt.md`：让 Codex 产出 schema 的提示模板
 - `scripts/validate-ui-schema.js`：本地结构校验脚本
 - `package.json`：本目录脚本入口
@@ -32,8 +36,30 @@
 
 3. 使用 Codex 产出 schema
 - 参考：`prompts/codex-ui-schema-prompt.md`
-- 将输出 JSON 粘贴到插件面板
+- 将输出 JSON 粘贴到插件面板，或点击 `导入本地 JSON` 选择文件
 - 按 `校验 -> 应用到 Figma` 执行
+
+4. 应用本项目 UI 优化稿（Node `1:18`）
+- 点击 `导入本地 JSON`，选择 `schema/ui-schema.node-1-18.map-first-fast-guide.v1.json`
+- 执行 `校验 -> 应用到 Figma`
+- 在 Prototype 中按 `设计/文档/node-1-18-ui优化执行单-v1.md` 配置延时自动弹卡
+
+5. 应用 Node `2:29` 的清新渐变地图版
+- 点击 `导入本地 JSON`，选择 `schema/ui-schema.node-2-29.map-first-fresh-gradient.v1.json`
+- 执行 `校验 -> 应用到 Figma`
+- 在 Prototype 中设置 `idle -> fast-guide` 的延时自动切换（表示“进入一定时间后自动弹出最速攻略”）
+
+6. 应用 color-system 到当前托管节点
+- 点击 `导入本地 JSON`，选择 `schema/color-system.tsugie-he.v2.fresh.json`
+- 点击 `校验 color-system`
+- 点击 `应用 color-system 到托管节点`
+- 说明：仅影响当前页面中由本插件托管（`uiSchemaManaged=1`）的节点
+
+7. 应用 color-system 到当前文件所有页面托管节点
+- 点击 `导入本地 JSON`，选择 `schema/color-system.tsugie-he.v2.fresh.json`
+- 点击 `校验 color-system`
+- 点击 `全文件应用 color-system`
+- 说明：会遍历当前 Figma 文件内所有页面，仅更新托管节点颜色，不创建/删除节点
 
 ## 3. 核心机制
 
@@ -48,6 +74,14 @@
 ### 3.3 顶层入口
 - 可使用 `frames`（推荐）
 - 或使用 `nodes`（兼容）
+
+### 3.4 color-system 模式
+- 输入 `color-system.*.json` 后，不会创建/删除节点
+- 仅根据节点命名语义批量刷新颜色（地图底色、点位、卡片、文案、CTA）
+- 推荐先应用 `ui-schema`，再应用 `color-system` 做主题切换
+- 支持两种作用范围：
+  - 当前页面托管节点
+  - 当前文件所有页面托管节点（全局模式）
 
 ## 4. 支持能力（v1.1）
 
@@ -127,8 +161,16 @@ npm run validate:example
 
 ## 9. 推荐工作流
 
-1. 先在 Figma 明确要改的节点范围与命名
-2. 用 Codex 产出 schema（带稳定 id）
+1. 先在 `设计/原型/` 做 HTML 迭代，直到需求封板
+2. 封板后再由 Codex 产出 schema（带稳定 id）
 3. 在插件先 `校验` 再 `应用`
-4. 大改时开启 prune，小改时关闭 prune
-5. 调整后把 schema 归档到 `schema/` 便于复用
+4. 主题切换使用 `color-system` 模式（当前页或全文件）
+5. 大改时开启 prune，小改时关闭 prune
+6. 调整后把 schema 归档到 `schema/` 便于复用
+
+## 10. 与主项目研发流程对齐
+
+- 本项目已正式纳入主项目研发流程。
+- 研发执行标准见：`记录/figma-json-bridge研发接入SOP.md`
+- UI 研发节奏见：`记录/ui-html-first-figma-batch-sop.md`
+- 协作规范入口见：`AGENTS.md`（第 8 节）

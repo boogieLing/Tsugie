@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "systemName": "tsugie-he-color-system-fresh-v2",
+  "description": "Tsugie 通用「へ」场景清新渐变配色系统。默认用于普通模式（昼间）地图、点位、快速查看卡片与品牌元素。",
+  "foundations": {
+    "neutral": {
+      "bgBase": "#F4FEFF",
+      "bgTop": "#FFFFFFF2",
+      "bgMap": "#E9FBFF",
+      "bgCard": "#FFFFFFF2",
+      "textPrimary": "#2D3436",
+      "textMuted": "#636E72",
+      "textSecondary": "#4F5B62",
+      "divider": "#DCEBEE"
+    }
+  },
+  "gradientPairs": {
+    "blueGreen": ["#00CEC9", "#00CEC9"],
+    "green": ["#00B894", "#55EFC4"],
+    "yellow": ["#55EFC4", "#FDCB6E"],
+    "yellowOrange": ["#E17055", "#E17055"],
+    "red": ["#DFE6E9", "#D63031"],
+    "rose": ["#A29BFE", "#E84393"],
+    "grayBlack": ["#DFE6E9", "#2D3436"],
+    "gray": ["#B2BEC3", "#B2BEC3"],
+    "purple": ["#DFE6E9", "#6C5CE7"],
+    "blue": ["#0984E3", "#74B9FF"]
+  },
+  "usageRules": {
+    "defaultTheme": [
+      "普通模式默认使用清新渐变底，不再以深色底作为首选。",
+      "地图背景建议在 bgMap 与 bgBase 之间使用 2~3 段线性渐变。"
+    ],
+    "mapMarker": [
+      "从 gradientPairs 中随机抽取 1 组作为点位主色。",
+      "同屏相邻点位避免使用同一色组。",
+      "点位使用 halo + core + label 的三层结构，确保在地图底图上可读。"
+    ],
+    "quickViewCard": [
+      "底部卡片定义为快速查看（非详情）。",
+      "卡片底色优先 bgCard，CTA 建议使用 blueGreen / blue / green 之一。",
+      "文本层级遵循 textPrimary > textSecondary > textMuted。"
+    ],
+    "brandAndEmoji": [
+      "logo 与颜表情优先使用 textSecondary + 单一强调色。",
+      "高饱和色同屏不超过 3 个，避免视觉噪声。"
+    ]
+  }
+}

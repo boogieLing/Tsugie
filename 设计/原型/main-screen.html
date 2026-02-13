@@ -3,27 +3,762 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tsugie UI Sandbox</title>
+    <title>Tsugie マップ</title>
     <link rel="stylesheet" href="./main-screen.css" />
+    <script src="./local-config.js"></script>
   </head>
   <body>
-    <main class="phone-frame">
-      <header class="top-bar">
-        <h1 class="brand">つぎへ</h1>
-      </header>
+    <main class="phone-frame" aria-label="Tsugie ホーム試作">
+      <button class="top-kaomoji" type="button" aria-label="メニューを開く">(ᵔ◡ᵔ)</button>
+      <button id="locateButton" class="locate-button" type="button" aria-label="現在地へ戻る">⌖</button>
 
-      <section class="map-area" aria-label="Map preview">
-        <span class="map-label">Map Area</span>
-        <span class="user-dot" aria-hidden="true"></span>
+      <section class="map-stage" aria-label="地図とスポット">
+        <div id="googleMap" class="google-map" role="img" aria-label="地図"></div>
+        <div class="map-tint" aria-hidden="true"></div>
+        <div id="fallbackLayer" class="fallback-layer" hidden></div>
+        <p id="mapHint" class="map-hint" hidden></p>
       </section>
 
-      <section class="activity-card" aria-label="今日のおすすめ">
-        <div class="activity-image">Activity Image</div>
-        <h2 class="card-title">今日のおすすめ</h2>
-        <p class="meta">1.2km ・ 徒歩15分</p>
-        <p class="meta">開始まで：残り2時間10分</p>
-        <button class="cta-button" type="button">詳細を見る</button>
+      <section id="nearbyCarousel" class="nearby-carousel" aria-label="近くのスポット" aria-hidden="false">
+        <div id="nearbyTrack" class="nearby-track"></div>
+      </section>
+
+      <section id="quickCard" class="quick-card" aria-live="polite" aria-hidden="true">
+        <div class="quick-header">
+          <p class="quick-tag">⚡ 最速攻略</p>
+          <button id="closeQuickCard" class="close-card" type="button" aria-label="クイック表示を閉じる">×</button>
+        </div>
+        <p class="quick-subtitle">クイック表示（詳細ではありません）</p>
+        <h2 id="quickTitle" class="quick-title">隅田川花火大会</h2>
+        <p id="quickMeta" class="quick-meta">0.8km ・ 徒歩9分 ・ 開始まで42分</p>
+        <p id="quickHint" class="quick-hint">✨ (ง •̀_•́)ง いま出発が最適</p>
+        <button class="cta-button" type="button">ルートを開始</button>
       </section>
     </main>
+
+    <script>
+      const config = window.__TSUGIE_CONFIG__ || {};
+      const mapRoot = document.getElementById('googleMap');
+      const fallbackLayer = document.getElementById('fallbackLayer');
+      const mapHint = document.getElementById('mapHint');
+
+      const quickCard = document.getElementById('quickCard');
+      const quickTitle = document.getElementById('quickTitle');
+      const quickMeta = document.getElementById('quickMeta');
+      const quickHint = document.getElementById('quickHint');
+      const closeQuickCard = document.getElementById('closeQuickCard');
+      const nearbyCarousel = document.getElementById('nearbyCarousel');
+      const nearbyTrack = document.getElementById('nearbyTrack');
+      const topKaomoji = document.querySelector('.top-kaomoji');
+      const locateButton = document.getElementById('locateButton');
+
+      const places = [
+        {
+          id: 'sumida-fireworks',
+          name: '隅田川花火大会',
+          lat: 35.7152,
+          lng: 139.7996,
+          startTime: '19:20',
+          meta: '0.8km ・ 徒歩9分 ・ 開始まで42分',
+          hint: '✨ (ง •̀_•́)ง いま出発が最適',
+          markerX: '84px',
+          markerY: '262px',
+          recommended: true
+        },
+        {
+          id: 'asakusa-samba',
+          name: '浅草サンバ祭',
+          lat: 35.7148,
+          lng: 139.795,
+          startTime: '19:45',
+          meta: '1.1km ・ 徒歩14分 ・ 開始まで1時間22分',
+          hint: '(•̀ᴗ•́)و ルートは浅草通りが最短',
+          markerX: '210px',
+          markerY: '300px'
+        },
+        {
+          id: 'meguro-sakura',
+          name: '目黒川さくら並木',
+          lat: 35.637,
+          lng: 139.702,
+          startTime: '20:10',
+          meta: '1.6km ・ 徒歩20分 ・ 見頃まで2日',
+          hint: '(ᵔ◡ᵔ) 夕方の光で写真がきれい',
+          markerX: '122px',
+          markerY: '420px'
+        },
+        {
+          id: 'jingu-icho',
+          name: '神宮外苑いちょう並木',
+          lat: 35.6764,
+          lng: 139.7166,
+          startTime: '20:30',
+          meta: '2.0km ・ 徒歩25分 ・ 見頃まで4日',
+          hint: '(๑•̀ㅂ•́)و 広い歩道で回遊しやすい',
+          markerX: '202px',
+          markerY: '510px'
+        }
+      ];
+
+      const colorPairs = [
+        ['#00CEC9', '#00CEC9'],
+        ['#00B894', '#55EFC4'],
+        ['#55EFC4', '#FDCB6E'],
+        ['#E17055', '#E17055'],
+        ['#DFE6E9', '#D63031'],
+        ['#A29BFE', '#E84393'],
+        ['#DFE6E9', '#6C5CE7'],
+        ['#0984E3', '#74B9FF']
+      ];
+      const kaomojiPool = ['(ᵔ◡ᵔ)', '(•̀ᴗ•́)و', '(๑•̀ㅂ•́)و', '(ง •̀_•́)ง', '(˶ᵔ ᵕ ᵔ˶)', '(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'];
+
+      const markerHandles = new Map();
+      let mapInstance = null;
+      let autoOpenTimer = null;
+      let autoOpenScheduled = false;
+      let currentFocusPlaceId = '';
+      let currentLocationMarker = null;
+      let currentLocationPulseTimer = null;
+      let currentLocationPosition = null;
+      const DEFAULT_STREET_ZOOM = 15;
+      // Test phase: keep current location fixed near Sumida / Tokyo Skytree.
+      const fallbackCurrentLocation = {
+        lat: 35.710063,
+        lng: 139.8107,
+        markerX: 'calc(50% - 8px)',
+        markerY: 'calc(58% - 8px)'
+      };
+
+      const mapStyle = [
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+        { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#f7fcff' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cbe9ff' }] },
+        { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#eefaf4' }] }
+      ];
+
+      function showHint(text) {
+        mapHint.hidden = false;
+        mapHint.textContent = text;
+      }
+
+      function hideHint() {
+        mapHint.hidden = true;
+        mapHint.textContent = '';
+      }
+
+      function normalizeHex(hex) {
+        const cleaned = String(hex || '').replace('#', '').trim();
+        return cleaned.length === 6 ? `#${cleaned}` : '#00B894';
+      }
+
+      function withAlpha(hex, alphaHex) {
+        const cleaned = normalizeHex(hex).replace('#', '');
+        return `#${cleaned}${alphaHex}`;
+      }
+
+      function hashSeed(text) {
+        let value = 0;
+        const source = String(text || 'marker');
+        for (let i = 0; i < source.length; i += 1) {
+          value = (value * 31 + source.charCodeAt(i)) >>> 0;
+        }
+        return value;
+      }
+
+      function colorPair(name) {
+        return colorPairs[hashSeed(name) % colorPairs.length];
+      }
+
+      function setMarkerActive(activeId) {
+        markerHandles.forEach((handle, id) => {
+          if (typeof handle.setActive === 'function') {
+            handle.setActive(id === activeId);
+          }
+        });
+      }
+
+      function openQuickCard(place, source) {
+        quickTitle.textContent = place.name;
+        quickMeta.textContent = place.meta;
+        quickHint.textContent = place.hint;
+        quickCard.classList.add('is-visible');
+        quickCard.setAttribute('aria-hidden', 'false');
+        currentFocusPlaceId = place.id;
+        setMarkerActive(place.id);
+        syncBottomPanels();
+
+        const handle = markerHandles.get(place.id);
+        if (handle && typeof handle.focus === 'function') handle.focus();
+      }
+
+      function closeQuickCardPanel() {
+        quickCard.classList.remove('is-visible');
+        quickCard.setAttribute('aria-hidden', 'true');
+        currentFocusPlaceId = '';
+        setMarkerActive('');
+        renderNearbyCarousel();
+        syncBottomPanels();
+      }
+
+      function createMarkerElement(place) {
+        const colors = colorPair(place.name);
+        const from = colors[0];
+        const to = colors[1];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'he-marker is-fallback';
+        button.setAttribute('aria-label', place.name);
+        button.style.setProperty('--marker-from', normalizeHex(from));
+        button.style.setProperty('--marker-to', normalizeHex(to));
+        button.style.setProperty('--marker-halo', withAlpha(to, '3d'));
+        button.style.setProperty('--x', place.markerX);
+        button.style.setProperty('--y', place.markerY);
+
+        button.innerHTML = [
+          '<span class="marker-halo" aria-hidden="true"></span>',
+          '<span class="marker-core" aria-hidden="true">へ</span>',
+          `<span class="marker-label">${place.name}</span>`
+        ].join('');
+        button.addEventListener('click', () => openQuickCard(place, 'tap'));
+        return button;
+      }
+
+      function recommendedPlace() {
+        return places.find((place) => place.recommended) || places[0];
+      }
+
+      function setRandomKaomoji() {
+        if (!topKaomoji || !kaomojiPool.length) return;
+        const random = kaomojiPool[Math.floor(Math.random() * kaomojiPool.length)];
+        topKaomoji.textContent = random;
+      }
+
+      function clearCurrentLocationMarker() {
+        if (currentLocationPulseTimer) {
+          window.clearInterval(currentLocationPulseTimer);
+          currentLocationPulseTimer = null;
+        }
+        if (!currentLocationMarker) return;
+
+        if (currentLocationMarker.halo) currentLocationMarker.halo.setMap(null);
+        if (currentLocationMarker.core) currentLocationMarker.core.setMap(null);
+        currentLocationMarker = null;
+      }
+
+      function createCurrentLocationFallbackElement() {
+        const wrap = document.createElement('div');
+        wrap.className = 'current-location is-fallback';
+        wrap.id = 'currentLocationFallback';
+        wrap.style.setProperty('--x', fallbackCurrentLocation.markerX);
+        wrap.style.setProperty('--y', fallbackCurrentLocation.markerY);
+        wrap.innerHTML = [
+          '<span class="current-halo" aria-hidden="true"></span>',
+          '<span class="current-core" aria-hidden="true"></span>',
+          '<span class="current-label">現在地</span>'
+        ].join('');
+        return wrap;
+      }
+
+      function renderCurrentLocationOnGoogleMap(position) {
+        if (!mapInstance || !window.google || !window.google.maps) return;
+        clearCurrentLocationMarker();
+        currentLocationPosition = { lat: position.lat, lng: position.lng };
+
+        const pos = { lat: position.lat, lng: position.lng };
+        const coreIcon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#0A84FF',
+          fillOpacity: 1,
+          strokeColor: '#FFFFFF',
+          strokeWeight: 3
+        };
+        const buildHaloIcon = (scale, opacity) => ({
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale,
+          fillColor: '#0A84FF',
+          fillOpacity: opacity,
+          strokeColor: '#0A84FF',
+          strokeWeight: 1
+        });
+
+        const halo = new window.google.maps.Marker({
+          map: mapInstance,
+          position: pos,
+          icon: buildHaloIcon(12, 0.22),
+          clickable: false,
+          zIndex: 820
+        });
+        const core = new window.google.maps.Marker({
+          map: mapInstance,
+          position: pos,
+          icon: coreIcon,
+          title: '現在地',
+          zIndex: 880
+        });
+
+        let expanded = false;
+        currentLocationPulseTimer = window.setInterval(() => {
+          expanded = !expanded;
+          halo.setIcon(buildHaloIcon(expanded ? 14 : 11.5, expanded ? 0.12 : 0.24));
+        }, 760);
+
+        currentLocationMarker = { core, halo };
+      }
+
+      async function resolveCurrentLocationPosition() {
+        currentLocationPosition = {
+          lat: fallbackCurrentLocation.lat,
+          lng: fallbackCurrentLocation.lng
+        };
+        return currentLocationPosition;
+      }
+
+      function pulseFallbackCurrentLocation() {
+        const node = document.getElementById('currentLocationFallback');
+        if (!node) return;
+        node.classList.remove('is-locating');
+        window.requestAnimationFrame(() => {
+          node.classList.add('is-locating');
+          window.setTimeout(() => node.classList.remove('is-locating'), 760);
+        });
+      }
+
+      function focusCurrentLocation(animated) {
+        if (!mapInstance || !currentLocationPosition || !window.google || !window.google.maps) {
+          pulseFallbackCurrentLocation();
+          return;
+        }
+        const target = { lat: currentLocationPosition.lat, lng: currentLocationPosition.lng };
+        if (animated) {
+          mapInstance.panTo(target);
+        } else {
+          mapInstance.setCenter(target);
+        }
+        window.google.maps.event.addListenerOnce(mapInstance, 'idle', () => {
+          mapInstance.panBy(0, -140);
+        });
+      }
+
+      function formatDistanceLabel(km) {
+        if (!Number.isFinite(km)) return '少し先';
+        if (km < 1) return `${Math.max(80, Math.round(km * 1000))}m`;
+        return `${km.toFixed(1)}km`;
+      }
+
+      function resolveNextStart(startTime) {
+        const now = new Date();
+        const safe = String(startTime || '19:30');
+        const parts = safe.split(':');
+        const hour = Number(parts[0]);
+        const minute = Number(parts[1]);
+
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+
+        const start = new Date(now);
+        start.setHours(hour, minute, 0, 0);
+        if (start.getTime() < now.getTime() - 60000) {
+          start.setDate(start.getDate() + 1);
+        }
+        return start;
+      }
+
+      function formatStartCountdown(startTime) {
+        const start = resolveNextStart(startTime);
+        if (!start) return { startLabel: '時刻未定', etaLabel: '' };
+
+        const nowMs = Date.now();
+        const diffMs = Math.max(0, start.getTime() - nowMs);
+        const totalMinutes = Math.max(1, Math.ceil(diffMs / 60000));
+        const days = Math.floor(totalMinutes / (24 * 60));
+        const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+        const minutes = totalMinutes % 60;
+        const hh = String(start.getHours()).padStart(2, '0');
+        const mm = String(start.getMinutes()).padStart(2, '0');
+        const startLabel = `${hh}:${mm}`;
+
+        if (days > 0) {
+          return { startLabel, etaLabel: `${days}日${hours}時間後` };
+        }
+        if (hours > 0) {
+          return { startLabel, etaLabel: `${hours}時間${minutes}分後` };
+        }
+        return { startLabel, etaLabel: `${minutes}分後` };
+      }
+
+      function distanceKm(fromLat, fromLng, toLat, toLng) {
+        const earthRadius = 6371;
+        const toRad = (deg) => (deg * Math.PI) / 180;
+        const dLat = toRad(toLat - fromLat);
+        const dLng = toRad(toLng - fromLng);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(dLng / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadius * c;
+      }
+
+      function isInRect(place, rect) {
+        return place.lat >= rect.south && place.lat <= rect.north && place.lng >= rect.west && place.lng <= rect.east;
+      }
+
+      function syncBottomPanels() {
+        const quickVisible = quickCard.classList.contains('is-visible');
+        if (!nearbyCarousel) return;
+        nearbyCarousel.classList.toggle('is-visible', !quickVisible);
+        nearbyCarousel.setAttribute('aria-hidden', quickVisible ? 'true' : 'false');
+      }
+
+      function collectNearbyPlaces() {
+        const recommended = recommendedPlace();
+        let centerLat = recommended.lat;
+        let centerLng = recommended.lng;
+        let pool = [];
+
+        if (mapInstance && window.google && window.google.maps && typeof mapInstance.getBounds === 'function') {
+          const bounds = mapInstance.getBounds();
+          const center = mapInstance.getCenter();
+
+          if (bounds && center) {
+            centerLat = center.lat();
+            centerLng = center.lng();
+
+            const ne = bounds.getNorthEast();
+            const sw = bounds.getSouthWest();
+            const latSpan = Math.max(0.0012, Math.abs(ne.lat() - sw.lat()));
+            const lngSpan = Math.max(0.0012, Math.abs(ne.lng() - sw.lng()));
+            const expanded = {
+              north: ne.lat() + latSpan * 1.15,
+              south: sw.lat() - latSpan * 1.15,
+              east: ne.lng() + lngSpan * 1.15,
+              west: sw.lng() - lngSpan * 1.15
+            };
+
+            const visibleIds = new Set(
+              places.filter((place) => bounds.contains({ lat: place.lat, lng: place.lng })).map((place) => place.id)
+            );
+            const inExpanded = places.filter((place) => place.id !== currentFocusPlaceId && isInRect(place, expanded));
+            const justOutside = inExpanded.filter((place) => !visibleIds.has(place.id));
+            pool = justOutside.length ? justOutside : inExpanded;
+          }
+        }
+
+        if (!pool.length) {
+          pool = places.filter((place) => place.id !== currentFocusPlaceId);
+        }
+
+        const sorted = pool
+          .map((place) => ({
+            ...place,
+            distanceFromCenter: distanceKm(centerLat, centerLng, place.lat, place.lng)
+          }))
+          .sort((a, b) => a.distanceFromCenter - b.distanceFromCenter);
+
+        return sorted.slice(0, 6);
+      }
+
+      function renderNearbyCarousel() {
+        if (!nearbyTrack) return;
+        const nearby = collectNearbyPlaces();
+        nearbyTrack.innerHTML = '';
+
+        if (!nearby.length) {
+          return;
+        }
+
+        nearby.forEach((place) => {
+          const colors = colorPair(place.name);
+          const from = normalizeHex(colors[0]);
+          const to = normalizeHex(colors[1]);
+          const distance = formatDistanceLabel(place.distanceFromCenter);
+          const countdown = formatStartCountdown(place.startTime);
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'nearby-item';
+          button.style.setProperty('--nearby-from', from);
+          button.style.setProperty('--nearby-to', to);
+          button.innerHTML = [
+            '<span class="nearby-top">',
+            `  <span class="nearby-name">${place.name}</span>`,
+            `  <span class="nearby-distance">${distance}</span>`,
+            '</span>',
+            '<span class="nearby-time">',
+            `  <span class="nearby-eta">${countdown.etaLabel}</span>`,
+            `  <span class="nearby-start">${countdown.startLabel}</span>`,
+            '</span>'
+          ].join('');
+          button.addEventListener('click', () => openQuickCard(place, 'nearby'));
+          nearbyTrack.appendChild(button);
+        });
+      }
+
+      function scheduleAutoOpen() {
+        if (autoOpenScheduled) return;
+        autoOpenScheduled = true;
+        const target = recommendedPlace();
+        autoOpenTimer = window.setTimeout(() => openQuickCard(target, 'auto'), 2200);
+      }
+
+      function resetAutoOpen() {
+        if (autoOpenTimer) window.clearTimeout(autoOpenTimer);
+        autoOpenTimer = null;
+        autoOpenScheduled = false;
+      }
+
+      function renderMarkerOverlay(blockMapDrag) {
+        fallbackLayer.hidden = false;
+        fallbackLayer.classList.toggle('is-blocking', Boolean(blockMapDrag));
+        fallbackLayer.innerHTML = '';
+        markerHandles.clear();
+
+        places.forEach((place) => {
+          const markerEl = createMarkerElement(place);
+          fallbackLayer.appendChild(markerEl);
+          markerHandles.set(place.id, {
+            setActive(active) {
+              markerEl.classList.toggle('is-active', active);
+            }
+          });
+        });
+
+        fallbackLayer.appendChild(createCurrentLocationFallbackElement());
+        pulseFallbackCurrentLocation();
+      }
+
+      function resolveApiKey() {
+        const queryKey = new URL(window.location.href).searchParams.get('gmapsKey');
+        if (queryKey && queryKey.trim() !== '') return queryKey.trim();
+        return String(config.gmapsKey || '').trim();
+      }
+
+      function loadGoogleMaps(apiKey) {
+        return new Promise((resolve, reject) => {
+          if (window.google && window.google.maps) {
+            resolve(window.google.maps);
+            return;
+          }
+
+          const callbackName = '__tsugieMapsReady';
+          const timeoutId = window.setTimeout(() => {
+            delete window[callbackName];
+            reject(new Error('Google Maps の初期化がタイムアウトしました'));
+          }, 9000);
+
+          window[callbackName] = () => {
+            window.clearTimeout(timeoutId);
+            delete window[callbackName];
+            resolve(window.google.maps);
+          };
+
+          const script = document.createElement('script');
+          script.async = true;
+          script.defer = true;
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&callback=${callbackName}`;
+          script.onerror = () => {
+            window.clearTimeout(timeoutId);
+            delete window[callbackName];
+            reject(new Error('Google Maps script の読み込みに失敗しました'));
+          };
+          document.head.appendChild(script);
+        });
+      }
+
+      function createGoogleMarker(place) {
+        const colors = colorPair(place.name);
+        const from = normalizeHex(colors[0]);
+        const to = normalizeHex(colors[1]);
+        const position = { lat: place.lat, lng: place.lng };
+
+        const defaultIcon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 13.5,
+          fillColor: from,
+          fillOpacity: 0.95,
+          strokeColor: to,
+          strokeWeight: 3
+        };
+        const activeIconA = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 16,
+          fillColor: from,
+          fillOpacity: 0.95,
+          strokeColor: '#FFFFFF',
+          strokeWeight: 5
+        };
+        const activeIconB = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 18,
+          fillColor: from,
+          fillOpacity: 0.68,
+          strokeColor: to,
+          strokeWeight: 7
+        };
+        let pulseTimer = null;
+
+        const marker = new window.google.maps.Marker({
+          map: mapInstance,
+          position,
+          title: place.name,
+          icon: defaultIcon,
+          label: {
+            text: 'へ',
+            color: '#FFFFFF',
+            fontSize: '13px',
+            fontWeight: '800'
+          }
+        });
+
+        marker.addListener('click', () => openQuickCard(place, 'tap'));
+        markerHandles.set(place.id, {
+          setActive(active) {
+            if (!active) {
+              if (pulseTimer) {
+                window.clearInterval(pulseTimer);
+                pulseTimer = null;
+              }
+              marker.setAnimation(null);
+              marker.setIcon(defaultIcon);
+              marker.setZIndex(undefined);
+              marker.setLabel({
+                text: 'へ',
+                color: '#FFFFFF',
+                fontSize: '11px',
+                fontWeight: '700'
+              });
+              return;
+            }
+
+            marker.setZIndex(999);
+            marker.setLabel({
+              text: 'へ',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: '800'
+            });
+            marker.setIcon(activeIconA);
+
+            if (window.google.maps.Animation && window.google.maps.Animation.BOUNCE) {
+              marker.setAnimation(window.google.maps.Animation.BOUNCE);
+              window.setTimeout(() => marker.setAnimation(null), 680);
+            }
+
+            if (!pulseTimer) {
+              let glow = false;
+              pulseTimer = window.setInterval(() => {
+                glow = !glow;
+                marker.setIcon(glow ? activeIconB : activeIconA);
+              }, 420);
+            }
+          },
+          focus() {
+            if (mapInstance) mapInstance.panTo(position);
+          }
+        });
+        return marker;
+      }
+
+      async function renderInteractiveMap(apiKey) {
+        const location = await resolveCurrentLocationPosition();
+        await loadGoogleMaps(apiKey);
+        mapRoot.innerHTML = '';
+        clearCurrentLocationMarker();
+        markerHandles.clear();
+        fallbackLayer.hidden = true;
+        fallbackLayer.classList.remove('is-blocking');
+        fallbackLayer.innerHTML = '';
+
+        mapInstance = new window.google.maps.Map(mapRoot, {
+          center: { lat: location.lat, lng: location.lng },
+          zoom: DEFAULT_STREET_ZOOM,
+          disableDefaultUI: true,
+          gestureHandling: 'greedy',
+          clickableIcons: false,
+          styles: mapStyle
+        });
+
+        places.forEach((place) => {
+          createGoogleMarker(place);
+        });
+        renderCurrentLocationOnGoogleMap(location);
+        focusCurrentLocation(false);
+
+        window.google.maps.event.addListener(mapInstance, 'idle', () => {
+          if (!quickCard.classList.contains('is-visible')) {
+            renderNearbyCarousel();
+          }
+        });
+      }
+
+      function buildEmbedUrl(apiKey) {
+        const target = recommendedPlace();
+        const params = new URLSearchParams({
+          key: apiKey,
+          center: `${target.lat},${target.lng}`,
+          zoom: String(DEFAULT_STREET_ZOOM),
+          maptype: 'roadmap',
+          language: 'ja',
+          region: 'JP'
+        });
+        return `https://www.google.com/maps/embed/v1/view?${params.toString()}`;
+      }
+
+      function renderEmbedMap(apiKey) {
+        mapRoot.innerHTML = '';
+        clearCurrentLocationMarker();
+        mapInstance = null;
+        if (!apiKey) return;
+
+        const iframe = document.createElement('iframe');
+        iframe.className = 'google-map-embed';
+        iframe.src = buildEmbedUrl(apiKey);
+        iframe.title = '地図';
+        iframe.loading = 'eager';
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.addEventListener('error', () => {
+          showHint('Google Maps Embed の読み込みに失敗しました。サンプル背景とタップ可能なスポットを表示しています。');
+        });
+        mapRoot.appendChild(iframe);
+      }
+
+      async function init() {
+        setRandomKaomoji();
+        const apiKey = resolveApiKey();
+        resetAutoOpen();
+        syncBottomPanels();
+
+        if (apiKey) {
+          try {
+            await renderInteractiveMap(apiKey);
+            renderNearbyCarousel();
+            syncBottomPanels();
+            scheduleAutoOpen();
+            return;
+          } catch (error) {
+            renderEmbedMap(apiKey);
+            renderMarkerOverlay(true);
+            showHint('現在のキーには JS 地図の権限がないため、Embed モードに切り替えました。ずれ防止のためドラッグは固定されています。');
+            renderNearbyCarousel();
+            syncBottomPanels();
+            scheduleAutoOpen();
+            return;
+          }
+        }
+
+        renderEmbedMap('');
+        renderMarkerOverlay(true);
+        showHint('gmapsKey が見つからないため、サンプル背景とタップ可能なスポットを表示しています。');
+        renderNearbyCarousel();
+        syncBottomPanels();
+        scheduleAutoOpen();
+      }
+
+      closeQuickCard.addEventListener('click', closeQuickCardPanel);
+      locateButton.addEventListener('click', () => focusCurrentLocation(true));
+      init();
+    </script>
   </body>
 </html>

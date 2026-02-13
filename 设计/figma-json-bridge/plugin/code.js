@@ -261,12 +261,13 @@ function normalizeEffect(effectDef) {
 
   if (type === "DROP_SHADOW" || type === "INNER_SHADOW") {
     const color = normalizeColorInput(effectDef.color || "#00000066") || { r: 0, g: 0, b: 0, a: 0.4 };
+    const offset = effectDef.offset && typeof effectDef.offset === "object" ? effectDef.offset : {};
     return {
       type,
       color: { r: color.r, g: color.g, b: color.b, a: color.a },
       offset: {
-        x: toNumber(effectDef.offset?.x, 0),
-        y: toNumber(effectDef.offset?.y, 0)
+        x: toNumber(offset.x, 0),
+        y: toNumber(offset.y, 0)
       },
       radius: toNumber(effectDef.radius, 0),
       spread: toNumber(effectDef.spread, 0),
@@ -303,6 +304,11 @@ function schemaRoots(schema) {
   return [];
 }
 
+function isColorSystemLike(schema) {
+  if (!schema || typeof schema !== "object") return false;
+  return typeof schema.systemName === "string" && !!schema.gradientPairs;
+}
+
 function validateSchema(schema) {
   const errors = [];
 
@@ -310,6 +316,14 @@ function validateSchema(schema) {
     errors.push("schema 必须是对象");
     return errors;
   }
+
+  if (isColorSystemLike(schema)) {
+    errors.push(
+      "当前导入的是配色系统文件（color-system），不是可落图的 ui-schema。请导入包含 frames/nodes 的文件，例如 ui-schema.node-2-29.map-first-fresh-gradient.v1.json。"
+    );
+    return errors;
+  }
+
   if (schema.version !== "1.0") {
     errors.push('schema.version 必须为 "1.0"');
   }
@@ -361,6 +375,339 @@ function validateSchema(schema) {
 
   roots.forEach((root, idx) => walk(root, `roots[${idx}]`));
   return errors;
+}
+
+function validateColorSystem(system) {
+  const errors = [];
+
+  if (!system || typeof system !== "object") {
+    errors.push("color-system 必须是对象");
+    return errors;
+  }
+
+  if (system.version !== "1.0") {
+    errors.push('color-system.version 必须为 "1.0"');
+  }
+
+  if (typeof system.systemName !== "string" || system.systemName.trim() === "") {
+    errors.push("color-system.systemName 必须是非空字符串");
+  }
+
+  const neutral = system.foundations && system.foundations.neutral;
+  if (!neutral || typeof neutral !== "object") {
+    errors.push("color-system.foundations.neutral 必须存在");
+  } else {
+    const requiredNeutralKeys = [
+      "bgBase",
+      "bgTop",
+      "bgMap",
+      "bgCard",
+      "textPrimary",
+      "textMuted",
+      "textSecondary",
+      "divider"
+    ];
+    for (const key of requiredNeutralKeys) {
+      if (!normalizeColorInput(neutral[key])) {
+        errors.push(`color-system.foundations.neutral.${key} 必须是合法颜色`);
+      }
+    }
+  }
+
+  const pairs = system.gradientPairs;
+  if (!pairs || typeof pairs !== "object") {
+    errors.push("color-system.gradientPairs 必须存在");
+  } else {
+    let validPairCount = 0;
+    for (const [name, pair] of Object.entries(pairs)) {
+      if (!Array.isArray(pair) || pair.length < 2) {
+        errors.push(`color-system.gradientPairs.${name} 必须是至少包含 2 个颜色的数组`);
+        continue;
+      }
+      if (!normalizeColorInput(pair[0]) || !normalizeColorInput(pair[1])) {
+        errors.push(`color-system.gradientPairs.${name} 的前两个颜色必须合法`);
+        continue;
+      }
+      validPairCount += 1;
+    }
+    if (validPairCount === 0) {
+      errors.push("color-system.gradientPairs 需要至少 1 组可用渐变");
+    }
+  }
+
+  return errors;
+}
+
+function gradientPairEntries(system) {
+  const pairs = [];
+  if (!system || typeof system !== "object" || !system.gradientPairs || typeof system.gradientPairs !== "object") {
+    return pairs;
+  }
+
+  for (const [name, value] of Object.entries(system.gradientPairs)) {
+    if (!Array.isArray(value) || value.length < 2) continue;
+    if (!normalizeColorInput(value[0]) || !normalizeColorInput(value[1])) continue;
+    pairs.push({ name, from: value[0], to: value[1] });
+  }
+  return pairs;
+}
+
+function hashString(text) {
+  const source = String(text || "");
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function pickGradientPair(pairs, seed) {
+  if (!Array.isArray(pairs) || pairs.length === 0) return null;
+  const idx = hashString(seed) % pairs.length;
+  return pairs[idx];
+}
+
+function gradientPaint(fromColor, toColor, transform) {
+  const from = normalizeColorInput(fromColor);
+  const to = normalizeColorInput(toColor);
+  if (!from || !to) return null;
+
+  return {
+    type: "GRADIENT_LINEAR",
+    gradientStops: [
+      { position: 0, color: { r: from.r, g: from.g, b: from.b, a: from.a } },
+      { position: 1, color: { r: to.r, g: to.g, b: to.b, a: to.a } }
+    ],
+    gradientTransform: Array.isArray(transform)
+      ? transform
+      : [
+          [1, 0, 0],
+          [0, 1, 0]
+        ],
+    opacity: 1
+  };
+}
+
+function solidPaint(color, opacity) {
+  const paint = toSolidPaint(color, opacity);
+  return paint || null;
+}
+
+function applyFills(node, fills) {
+  if (!("fills" in node) || !Array.isArray(fills) || fills.length === 0) return false;
+  try {
+    node.fills = fills;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function applyStrokes(node, strokes) {
+  if (!("strokes" in node) || !Array.isArray(strokes) || strokes.length === 0) return false;
+  try {
+    node.strokes = strokes;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function neutralColor(system, key, fallback) {
+  const value = system && system.foundations && system.foundations.neutral
+    ? system.foundations.neutral[key]
+    : undefined;
+  return normalizeColorInput(value) ? value : fallback;
+}
+
+function findPairByName(pairs, name) {
+  return pairs.find((pair) => pair.name === name) || null;
+}
+
+function buildColorSystemTheme(system) {
+  const pairs = gradientPairEntries(system);
+  const blueGreenPair = findPairByName(pairs, "blueGreen") || findPairByName(pairs, "blue") || pairs[0];
+  const greenPair = findPairByName(pairs, "green") || blueGreenPair;
+  const bluePair = findPairByName(pairs, "blue") || blueGreenPair;
+  const bgBase = neutralColor(system, "bgBase", "#F4FEFF");
+  const bgMap = neutralColor(system, "bgMap", "#E9FBFF");
+
+  const mapGradient = gradientPaint(bgMap, bgBase, [
+    [0.98, -0.2, 0.04],
+    [0.2, 0.98, 0.02]
+  ]);
+  const waterGradient = gradientPaint(
+    bluePair ? bluePair.to : bgMap,
+    bluePair ? bluePair.from : bgBase,
+    [
+      [0.76, -0.65, 0.12],
+      [0.65, 0.76, 0.09]
+    ]
+  );
+  const ctaGradient = gradientPaint(
+    blueGreenPair ? blueGreenPair.from : "#00CEC9",
+    blueGreenPair ? blueGreenPair.to : "#74B9FF"
+  );
+
+  return {
+    pairs,
+    greenPair,
+    bluePair,
+    bgTop: neutralColor(system, "bgTop", "#FFFFFFF2"),
+    bgCard: neutralColor(system, "bgCard", "#FFFFFFF2"),
+    textPrimary: neutralColor(system, "textPrimary", "#2D3436"),
+    textSecondary: neutralColor(system, "textSecondary", "#4F5B62"),
+    textMuted: neutralColor(system, "textMuted", "#636E72"),
+    divider: neutralColor(system, "divider", "#DCEBEE"),
+    mapGradient,
+    waterGradient,
+    ctaGradient
+  };
+}
+
+function applyColorSystemToNodeList(managedNodes, theme, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  const selectUpdated = opts.selectUpdated === true;
+
+  let updatedCount = 0;
+  const touched = [];
+
+  for (const node of managedNodes) {
+    const name = String(node.name || "").toLowerCase();
+    let updated = false;
+
+    if (node.type === "TEXT") {
+      let textColor = theme.textPrimary;
+
+      if (
+        name.includes("mood") ||
+        name.includes("hint") ||
+        name.includes("muted") ||
+        name.includes("subtitle")
+      ) {
+        textColor = theme.textMuted;
+      } else if (name.includes("logo") || name.includes("secondary") || name.includes("meta")) {
+        textColor = theme.textSecondary;
+      } else if (name.includes("fast-guide-tag") && theme.greenPair) {
+        textColor = theme.greenPair.from;
+      }
+
+      const textPaint = solidPaint(textColor);
+      if (textPaint && applyFills(node, [textPaint])) {
+        updated = true;
+      }
+    } else {
+      if (name.includes("map-bg") && theme.mapGradient && applyFills(node, [theme.mapGradient])) {
+        updated = true;
+      } else if (name.includes("map-water") && theme.waterGradient && applyFills(node, [theme.waterGradient])) {
+        updated = true;
+      } else if (name.includes("topbar-bg")) {
+        const paint = solidPaint(theme.bgTop);
+        if (paint && applyFills(node, [paint])) updated = true;
+      } else if (name.includes("label-bg")) {
+        const paint = solidPaint(theme.bgTop);
+        if (paint && applyFills(node, [paint])) updated = true;
+      } else if (name.includes("card")) {
+        const paint = solidPaint(theme.bgCard);
+        if (paint && applyFills(node, [paint])) updated = true;
+      } else if (name.includes("cta") && theme.ctaGradient && applyFills(node, [theme.ctaGradient])) {
+        updated = true;
+      } else if (name.includes("current-halo")) {
+        const base = theme.bluePair ? theme.bluePair.from : "#74B9FF";
+        const paint = solidPaint(base, 0.22);
+        if (paint && applyFills(node, [paint])) updated = true;
+      } else if (name.includes("current-core")) {
+        const base = theme.bluePair ? theme.bluePair.from : "#0984E3";
+        const paint = solidPaint(base);
+        if (paint && applyFills(node, [paint])) updated = true;
+      } else if (name.includes("marker")) {
+        const pair = pickGradientPair(theme.pairs, node.getPluginData(PLUGIN_DATA_KEY_ID) || node.name);
+        if (pair) {
+          if (name.includes("halo")) {
+            const paint = solidPaint(pair.from, 0.22);
+            if (paint && applyFills(node, [paint])) updated = true;
+          } else {
+            const markerGradient = gradientPaint(pair.from, pair.to);
+            if (markerGradient && applyFills(node, [markerGradient])) updated = true;
+          }
+        }
+      }
+    }
+
+    if (name.includes("divider")) {
+      const dividerPaint = solidPaint(theme.divider);
+      if (dividerPaint && applyStrokes(node, [dividerPaint])) {
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      updatedCount += 1;
+      touched.push(node);
+    }
+  }
+
+  if (selectUpdated && touched.length > 0) {
+    figma.currentPage.selection = touched.slice(0, 100);
+    figma.viewport.scrollAndZoomIntoView(touched.slice(0, 20));
+  }
+
+  return { updatedCount, managedCount: managedNodes.length, warnings: [] };
+}
+
+async function applyColorSystemToManagedNodes(system) {
+  const validationErrors = validateColorSystem(system);
+  if (validationErrors.length > 0) {
+    return { ok: false, message: "color-system 校验失败", errors: validationErrors };
+  }
+
+  const managedNodes = figma.currentPage.findAll((node) => isManaged(node));
+  if (managedNodes.length === 0) {
+    return { ok: true, updatedCount: 0, managedCount: 0, warnings: ["当前页面没有托管节点可更新。"] };
+  }
+
+  const theme = buildColorSystemTheme(system);
+  const result = applyColorSystemToNodeList(managedNodes, theme, { selectUpdated: true });
+  return { ok: true, updatedCount: result.updatedCount, managedCount: result.managedCount, warnings: result.warnings };
+}
+
+async function applyColorSystemToAllPages(system) {
+  const validationErrors = validateColorSystem(system);
+  if (validationErrors.length > 0) {
+    return { ok: false, message: "color-system 校验失败", errors: validationErrors };
+  }
+
+  const pages = figma.root.children.filter((node) => node.type === "PAGE");
+  const theme = buildColorSystemTheme(system);
+  let managedCount = 0;
+  let updatedCount = 0;
+  let pagesWithManaged = 0;
+  let pagesUpdated = 0;
+
+  for (const page of pages) {
+    const pageManagedNodes = page.findAll((node) => isManaged(node));
+    if (pageManagedNodes.length === 0) continue;
+
+    pagesWithManaged += 1;
+    const result = applyColorSystemToNodeList(pageManagedNodes, theme, { selectUpdated: false });
+    managedCount += result.managedCount;
+    updatedCount += result.updatedCount;
+    if (result.updatedCount > 0) pagesUpdated += 1;
+  }
+
+  if (managedCount === 0) {
+    return {
+      ok: true,
+      updatedCount: 0,
+      managedCount: 0,
+      pageCount: pages.length,
+      pagesWithManaged: 0,
+      pagesUpdated: 0,
+      warnings: ["当前文件所有页面都没有托管节点可更新。"]
+    };
+  }
+
+  return { ok: true, updatedCount, managedCount, pageCount: pages.length, pagesWithManaged, pagesUpdated, warnings: [] };
 }
 
 async function loadFontForText(def) {
@@ -556,7 +903,8 @@ async function createNodeByType(def, parent, warnings) {
       return figma.createFrame();
     case "GROUP": {
       const rect = figma.createRectangle();
-      rect.resize(toNumber(def.size?.width, 100), toNumber(def.size?.height, 100));
+      const size = def.size && typeof def.size === "object" ? def.size : {};
+      rect.resize(toNumber(size.width, 100), toNumber(size.height, 100));
       rect.opacity = 0;
       parent.appendChild(rect);
       const group = figma.group([rect], parent);
@@ -639,14 +987,13 @@ async function upsertNode(def, parent, idIndex, touched, options, warnings) {
   ensureParent(node, parent, options.indexInParent);
 
   if (def.type === "BUTTON") {
-    def.layout = {
-      ...(def.layout || {}),
-      mode: "HORIZONTAL",
-      primaryAxisAlignItems: "CENTER",
-      counterAxisAlignItems: "CENTER",
-      primaryAxisSizingMode: "FIXED",
-      counterAxisSizingMode: "FIXED"
-    };
+    const buttonLayout = def.layout && typeof def.layout === "object" ? def.layout : {};
+    buttonLayout.mode = "HORIZONTAL";
+    buttonLayout.primaryAxisAlignItems = "CENTER";
+    buttonLayout.counterAxisAlignItems = "CENTER";
+    buttonLayout.primaryAxisSizingMode = "FIXED";
+    buttonLayout.counterAxisSizingMode = "FIXED";
+    def.layout = buttonLayout;
   }
 
   applyGeometry(node, def);
@@ -665,8 +1012,8 @@ async function upsertNode(def, parent, idIndex, touched, options, warnings) {
       type: "TEXT",
       position: { x: 0, y: 0 },
       size: {
-        width: toNumber(def.size?.width, 120),
-        height: toNumber(def.size?.height, 20)
+        width: toNumber(def.size && typeof def.size === "object" ? def.size.width : undefined, 120),
+        height: toNumber(def.size && typeof def.size === "object" ? def.size.height : undefined, 20)
       },
       characters: def.characters || def.label || "Button",
       fontFamily: def.fontFamily || "Inter",
@@ -678,7 +1025,17 @@ async function upsertNode(def, parent, idIndex, touched, options, warnings) {
       textFills: def.textFills || ["#FFFFFF"]
     };
 
-    await upsertNode(labelDef, node, idIndex, touched, { ...options, indexInParent: 0 }, warnings);
+    await upsertNode(
+      labelDef,
+      node,
+      idIndex,
+      touched,
+      {
+        indexInParent: 0,
+        pruneMissing: options.pruneMissing
+      },
+      warnings
+    );
   } else if (Array.isArray(def.children) && hasChildren(node)) {
     for (let i = 0; i < def.children.length; i += 1) {
       await upsertNode(def.children[i], node, idIndex, touched, {
@@ -692,7 +1049,8 @@ async function upsertNode(def, parent, idIndex, touched, options, warnings) {
     const shouldKeep = new Set(asArray(def.children).map((child) => child.id));
     if (def.type === "BUTTON") shouldKeep.add(`${def.id}__label`);
 
-    for (const child of [...node.children]) {
+    const childNodes = node.children.slice();
+    for (const child of childNodes) {
       const childId = child.getPluginData(PLUGIN_DATA_KEY_ID);
       if (isManaged(child) && childId && !shouldKeep.has(childId)) {
         child.remove();
@@ -743,6 +1101,77 @@ async function applySchema(schema, options) {
 
 figma.ui.onmessage = async (msg) => {
   if (!msg || typeof msg !== "object") return;
+
+  if (msg.type === "validateColorSystem") {
+    try {
+      const colorSystem = JSON.parse(msg.payload || "{}");
+      const errors = validateColorSystem(colorSystem);
+      post("colorSystemValidated", { ok: errors.length === 0, errors });
+    } catch (error) {
+      post("colorSystemValidated", { ok: false, errors: [String(error.message || error)] });
+    }
+    return;
+  }
+
+  if (msg.type === "applyColorSystem") {
+    try {
+      const colorSystem = JSON.parse(msg.payload || "{}");
+      const result = await applyColorSystemToManagedNodes(colorSystem);
+      if (!result.ok) {
+        post("colorSystemApplied", {
+          ok: false,
+          message: result.message || "color-system 应用失败",
+          errors: result.errors || []
+        });
+        return;
+      }
+
+      const warningText = result.warnings && result.warnings.length > 0
+        ? `\n警告:\n- ${result.warnings.join("\n- ")}`
+        : "";
+      post("colorSystemApplied", {
+        ok: true,
+        message: `已将 color-system 应用于 ${result.updatedCount}/${result.managedCount} 个托管节点${warningText}`
+      });
+    } catch (error) {
+      post("colorSystemApplied", {
+        ok: false,
+        message: String(error.message || error),
+        errors: []
+      });
+    }
+    return;
+  }
+
+  if (msg.type === "applyColorSystemAllPages") {
+    try {
+      const colorSystem = JSON.parse(msg.payload || "{}");
+      const result = await applyColorSystemToAllPages(colorSystem);
+      if (!result.ok) {
+        post("colorSystemAppliedAllPages", {
+          ok: false,
+          message: result.message || "color-system 全局应用失败",
+          errors: result.errors || []
+        });
+        return;
+      }
+
+      const warningText = result.warnings && result.warnings.length > 0
+        ? `\n警告:\n- ${result.warnings.join("\n- ")}`
+        : "";
+      post("colorSystemAppliedAllPages", {
+        ok: true,
+        message: `已将 color-system 全局应用到 ${result.updatedCount}/${result.managedCount} 个托管节点，覆盖 ${result.pagesUpdated}/${result.pagesWithManaged} 个有托管节点的页面（当前文件共 ${result.pageCount} 页）${warningText}`
+      });
+    } catch (error) {
+      post("colorSystemAppliedAllPages", {
+        ok: false,
+        message: String(error.message || error),
+        errors: []
+      });
+    }
+    return;
+  }
 
   if (msg.type === "validate") {
     try {

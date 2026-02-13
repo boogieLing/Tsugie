@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "systemName": "tsugie-he-color-system",
+  "description": "Tsugie 通用「へ」场景配色系统。用于地图点位、状态层、最速攻略卡片与品牌元素。",
+  "foundations": {
+    "neutral": {
+      "bgBase": "#0F1115",
+      "bgTop": "#151821",
+      "bgMap": "#1C1F2A",
+      "bgCard": "#1A1D27",
+      "textPrimary": "#FFFFFF",
+      "textMuted": "#B2BEC3",
+      "textSecondary": "#DFE6E9",
+      "divider": "#2D3436"
+    }
+  },
+  "gradientPairs": {
+    "blueGreen": ["#00CEC9", "#00CEC9"],
+    "green": ["#00B894", "#55EFC4"],
+    "yellow": ["#55EFC4", "#FDCB6E"],
+    "yellowOrange": ["#E17055", "#E17055"],
+    "red": ["#DFE6E9", "#D63031"],
+    "rose": ["#A29BFE", "#E84393"],
+    "grayBlack": ["#DFE6E9", "#2D3436"],
+    "gray": ["#B2BEC3", "#B2BEC3"],
+    "purple": ["#DFE6E9", "#6C5CE7"],
+    "blue": ["#0984E3", "#74B9FF"]
+  },
+  "usageRules": {
+    "mapMarker": [
+      "从 gradientPairs 中随机抽取 1 组作为点位主色。",
+      "同屏相邻点位应避免使用同一色组。",
+      "默认一个点位一组渐变，不叠加多重阴影。"
+    ],
+    "fastGuideCard": [
+      "卡片主体保持深色中性底，避免与地图抢焦点。",
+      "CTA 可用 blue / blueGreen / rose 三组之一。",
+      "文本层级使用 textPrimary > textSecondary > textMuted。"
+    ],
+    "brandAndEmoji": [
+      "logo 与颜表情优先使用 textSecondary + 单一强调色。",
+      "避免超过 3 个高饱和色同时出现。"
+    ]
+  }
+}
