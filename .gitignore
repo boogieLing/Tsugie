@@ -1,5 +1,13 @@
 
 r0-submit/
+r0-review/
+
+.DS_Store
+**/.DS_Store
+
+ios开发/tsugie/.derivedData/
+ios开发/tsugie/tsugie.xcodeproj/xcuserdata/
+ios开发/tsugie/tsugie.xcodeproj/project.xcworkspace/xcuserdata/
 
 设计/原型/local-config.js
 
@@ -10,3 +18,6 @@ japan-260212.osm.pbf
 # 本地前端代码快照归档（不入库）
 记录/归档/frontend-code-snapshots/
 数据端/地图
+设计/static/asserts/
+
+r0-review/

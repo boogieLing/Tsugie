@@ -47,6 +47,28 @@ Tsugi e 的目标是：在「当前时间 + 当前地点」条件下，给用户
 3. 协作规范：`AGENTS.md`
 4. 变更追踪：`记录/项目变更记录.md`
 
+## iOS 研发统一流程（默认）
+
+从当前阶段开始，iOS 迭代统一按三段执行：
+
+1. 研发实现：功能落地与主链路可用（不扩 MVP 边界）
+2. UI 优化：视觉层级、动效反馈、可访问性达标
+3. 安全/提审审查：代码质量门禁 + App Store 高压线预检
+
+阶段启动门禁（强制）：
+
+- 每个阶段开始前，先主动检索可用 skill，再进入该阶段执行。
+- UI 相关迭代必须按“已封板原型 + CSS”1:1 复刻，不做主观再设计。
+- 本地检索默认命令：
+  - `python3 /Users/r0/.codex/skills/local-skill-finder/scripts/list_local_skills.py --query ios swiftui`
+  - `python3 /Users/r0/.codex/skills/local-skill-finder/scripts/list_local_skills.py --query design ui animation`
+  - `python3 /Users/r0/.codex/skills/local-skill-finder/scripts/list_local_skills.py --query review security privacy`
+
+对应执行文档：
+
+- UI 技能编排流程：`记录/tsugie-ios-ui美化技能编排流程-v1.md`
+- App Store 预检清单：`ios开发/tsugie/tsugie/APP_STORE_PRECHECK.md`
+
 ## Figma 自动化子项目
 
 本仓库已内置独立子项目：`设计/figma-json-bridge/`
