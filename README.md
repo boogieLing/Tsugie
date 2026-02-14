@@ -68,6 +68,7 @@ Tsugi e 的目标是：在「当前时间 + 当前地点」条件下，给用户
 
 - UI 技能编排流程：`记录/tsugie-ios-ui美化技能编排流程-v1.md`
 - App Store 预检清单：`ios开发/tsugie/tsugie/APP_STORE_PRECHECK.md`
+- App Store 高压线定期检查记录：`记录/高压线检查/`
 
 ## Figma 自动化子项目
 
@@ -88,6 +89,7 @@ Tsugi e 的目标是：在「当前时间 + 当前地点」条件下，给用户
 
 - 项目协作规范：`AGENTS.md`
 - 项目变更记录：`记录/项目变更记录.md`
+- App Store 高压线检查归档：`记录/高压线检查/`
 - Node `1:2` 调整方案：`设计/文档/node-1-2-figma-adjustment-v2.md`
 - Node `1:18` 调整方案：`设计/文档/node-1-18-ui优化执行单-v1.md`
 - Node `2:29` 调整方案：`设计/文档/node-2-29-ui优化执行单-v1.md`

@@ -34,3 +34,4 @@
 - UI 技能编排流程：`记录/tsugie-ios-ui美化技能编排流程-v1.md`
 - 发光效果复用规范：`记录/tsugie-ios-发光效果复用规范-v1.md`
 - 提审预检清单：`ios开发/tsugie/tsugie/APP_STORE_PRECHECK.md`
+- 高压线定期检查记录：`记录/高压线检查/`
