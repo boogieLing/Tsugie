@@ -9,7 +9,56 @@
   </head>
   <body>
     <main class="phone-frame" aria-label="Tsugie ホーム試作">
-      <button class="top-kaomoji" type="button" aria-label="メニューを開く">(ᵔ◡ᵔ)</button>
+      <button
+        class="top-kaomoji"
+        type="button"
+        aria-label="メニューを開く"
+        aria-haspopup="true"
+        aria-expanded="false"
+      >
+        (ᵔ◡ᵔ)
+      </button>
+      <div id="sideDrawerLayer" class="side-drawer-layer" aria-hidden="true">
+        <button id="sideDrawerBackdrop" class="side-drawer-backdrop" type="button" aria-label="メニューを閉じる"></button>
+        <aside id="sideDrawer" class="side-drawer" aria-label="サイドメニュー">
+          <header class="side-drawer-header">
+            <p class="side-drawer-title">つぎへ ナビ</p>
+            <div class="side-drawer-head-actions">
+              <button
+                id="toggleThemePalette"
+                class="theme-toggle-pill"
+                type="button"
+                aria-label="配色を選ぶ"
+                aria-expanded="false"
+                aria-controls="themePalettePanel"
+              ></button>
+              <button id="closeSideDrawer" class="close-side-drawer" type="button" aria-label="メニューを閉じる">×</button>
+            </div>
+          </header>
+          <section id="themePalettePanel" class="theme-palette-panel" aria-label="配色テーマ">
+            <button class="theme-chip is-active" type="button" data-theme-scheme="fresh" aria-label="清爽ミント"></button>
+            <button class="theme-chip" type="button" data-theme-scheme="ocean" aria-label="青空オーシャン"></button>
+            <button class="theme-chip" type="button" data-theme-scheme="sunset" aria-label="夕焼けシトラス"></button>
+            <button class="theme-chip" type="button" data-theme-scheme="sakura" aria-label="桜ローズ"></button>
+            <button class="theme-chip" type="button" data-theme-scheme="night" aria-label="夜霧インク"></button>
+          </section>
+          <nav class="side-drawer-nav" aria-label="メニュー項目">
+            <button class="side-drawer-item is-active" data-menu-id="favorites" type="button">
+              <span class="side-item-pill" aria-hidden="true"></span>
+              <span class="side-item-text">お気に入りスポット</span>
+            </button>
+            <button class="side-drawer-item" data-menu-id="notifications" type="button">
+              <span class="side-item-pill" aria-hidden="true"></span>
+              <span class="side-item-text">通知設定</span>
+            </button>
+            <button class="side-drawer-item" data-menu-id="contact" type="button">
+              <span class="side-item-pill" aria-hidden="true"></span>
+              <span class="side-item-text">お問い合わせ</span>
+            </button>
+          </nav>
+          <section id="sideDrawerContent" class="side-drawer-content" aria-live="polite"></section>
+        </aside>
+      </div>
       <button id="locateButton" class="locate-button" type="button" aria-label="現在地へ戻る">⌖</button>
 
       <section class="map-stage" aria-label="地図とスポット">
@@ -169,6 +218,14 @@
       const nearbyCarousel = document.getElementById('nearbyCarousel');
       const nearbyTrack = document.getElementById('nearbyTrack');
       const topKaomoji = document.querySelector('.top-kaomoji');
+      const sideDrawerLayer = document.getElementById('sideDrawerLayer');
+      const sideDrawerBackdrop = document.getElementById('sideDrawerBackdrop');
+      const closeSideDrawer = document.getElementById('closeSideDrawer');
+      const toggleThemePalette = document.getElementById('toggleThemePalette');
+      const themePalettePanel = document.getElementById('themePalettePanel');
+      const themeChips = Array.from(document.querySelectorAll('.theme-chip'));
+      const sideDrawerItems = Array.from(document.querySelectorAll('.side-drawer-item'));
+      const sideDrawerContent = document.getElementById('sideDrawerContent');
       const locateButton = document.getElementById('locateButton');
 
       const places = [
@@ -296,6 +353,16 @@
       let statusTicker = null;
       let quickSwipeState = null;
       let detailSwipeState = null;
+      let activeMenuId = 'favorites';
+      let activeColorScheme = 'fresh';
+      const favoritePlaceIds = ['sumida-fireworks', 'asakusa-samba', 'jingu-icho'];
+      const sideDrawerState = {
+        worldMode: false,
+        notifications: {
+          start: true,
+          nearby: false
+        }
+      };
       const DEFAULT_STREET_ZOOM = 15;
       // Test phase: keep current location fixed near Sumida / Tokyo Skytree.
       const fallbackCurrentLocation = {
@@ -625,6 +692,7 @@
       }
 
       function openDetailPanel(place, source) {
+        closeSideDrawerPanel();
         updateDetailPanel(place);
         currentDetailPlaceId = place.id;
         currentFocusPlaceId = place.id;
@@ -711,6 +779,270 @@
         if (!topKaomoji || !kaomojiPool.length) return;
         const random = kaomojiPool[Math.floor(Math.random() * kaomojiPool.length)];
         topKaomoji.textContent = random;
+      }
+
+      function setThemePaletteOpen(nextOpen) {
+        if (!themePalettePanel || !toggleThemePalette) return;
+        const open = Boolean(nextOpen);
+        themePalettePanel.classList.toggle('is-open', open);
+        toggleThemePalette.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+
+      function toggleThemePalettePanel() {
+        if (!themePalettePanel) return;
+        setThemePaletteOpen(!themePalettePanel.classList.contains('is-open'));
+      }
+
+      function applyColorScheme(schemeId) {
+        const safe = ['fresh', 'ocean', 'sunset', 'sakura', 'night'].includes(String(schemeId))
+          ? String(schemeId)
+          : 'fresh';
+        activeColorScheme = safe;
+        phoneFrame.setAttribute('data-color-scheme', safe);
+        themeChips.forEach((chip) => {
+          chip.classList.toggle('is-active', chip.dataset.themeScheme === safe);
+        });
+      }
+
+      function escapeHtml(text) {
+        return String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function sideStatusText(status) {
+        if (!status) return '調整中';
+        if (status.mode === 'ongoing') return '開催中';
+        if (status.mode === 'upcoming') return status.etaLabel ? `あと${status.etaLabel}` : 'まもなく';
+        if (status.mode === 'ended') return '終了';
+        return '調整中';
+      }
+
+      function sideStatusClass(status) {
+        if (!status) return 'is-unknown';
+        if (status.mode === 'ongoing') return 'is-ongoing';
+        if (status.mode === 'upcoming') return 'is-upcoming';
+        if (status.mode === 'ended') return 'is-ended';
+        return 'is-unknown';
+      }
+
+      function applyWorldMode() {
+        phoneFrame.classList.toggle('is-other-world-mode', sideDrawerState.worldMode);
+      }
+
+      function renderFavoritesContent() {
+        const favorites = favoritePlaceIds.map((id) => findPlaceById(id)).filter(Boolean);
+        if (!favorites.length) {
+          sideDrawerContent.innerHTML = [
+            '<div class="drawer-section">',
+            '  <p class="drawer-section-title">お気に入りスポット</p>',
+            '  <p class="drawer-muted">まだ登録されていません。</p>',
+            '</div>'
+          ].join('');
+          return;
+        }
+
+        const cards = favorites
+          .map((place) => {
+            const status = resolveEventStatus(place);
+            const range = `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
+            return [
+              `<button class="drawer-favorite-item" type="button" data-favorite-place="${escapeHtml(place.id)}">`,
+              '  <span class="drawer-favorite-head">',
+              `    <span class="drawer-favorite-name">${escapeHtml(place.name)}</span>`,
+              `    <span class="drawer-favorite-distance">${escapeHtml(resolvedDistanceText(place))}</span>`,
+              '  </span>',
+              '  <span class="drawer-favorite-foot">',
+              `    <span class="drawer-favorite-status ${sideStatusClass(status)}">${escapeHtml(sideStatusText(status))}</span>`,
+              `    <span class="drawer-favorite-time">${escapeHtml(range)}</span>`,
+              '  </span>',
+              '</button>'
+            ].join('');
+          })
+          .join('');
+
+        sideDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-section-title">お気に入りスポット</p>',
+          '  <p class="drawer-muted">タップするとクイック表示を開きます。</p>',
+          `  <div class="drawer-favorite-list">${cards}</div>`,
+          '</div>'
+        ].join('');
+
+        sideDrawerContent.querySelectorAll('[data-favorite-place]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const place = findPlaceById(button.getAttribute('data-favorite-place'));
+            if (!place) return;
+            openQuickCard(place, 'favorite');
+            closeSideDrawerPanel();
+          });
+        });
+      }
+
+      function renderOtherWorldContent() {
+        const modeText = sideDrawerState.worldMode ? '異世界モード ON' : '異世界モード OFF';
+        const actionText = sideDrawerState.worldMode ? '通常モードへ戻す' : '異世界モードへ切り替え';
+        sideDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-section-title">もうひとつの世界</p>',
+          `  <p class="drawer-muted">${modeText}</p>`,
+          `  <button id="worldModeToggle" class="drawer-primary-action" type="button">${actionText}</button>`,
+          '  <p class="drawer-muted">地図の色調と空気感だけを静かに切り替えます。</p>',
+          '</div>'
+        ].join('');
+
+        const toggleButton = document.getElementById('worldModeToggle');
+        if (toggleButton) {
+          toggleButton.addEventListener('click', () => {
+            sideDrawerState.worldMode = !sideDrawerState.worldMode;
+            applyWorldMode();
+            renderSideDrawerContent('other-world');
+          });
+        }
+      }
+
+      function renderNotificationsContent() {
+        const rows = [
+          {
+            key: 'start',
+            title: '開始前リマインド',
+            hint: '開催直前にお知らせ'
+          },
+          {
+            key: 'nearby',
+            title: '周辺スポット通知',
+            hint: '少し遠めの候補も通知'
+          }
+        ];
+        const settings = rows
+          .map((item) => {
+            const checked = Boolean(sideDrawerState.notifications[item.key]);
+            return [
+              '<div class="drawer-setting-row">',
+              '  <div class="drawer-setting-copy">',
+              `    <p class="drawer-setting-title">${item.title}</p>`,
+              `    <p class="drawer-setting-hint">${item.hint}</p>`,
+              '  </div>',
+              `  <button class="drawer-switch ${checked ? 'is-on' : ''}" type="button" data-notif-key="${item.key}" role="switch" aria-checked="${checked ? 'true' : 'false'}">`,
+              '    <span class="drawer-switch-knob" aria-hidden="true"></span>',
+              '  </button>',
+              '</div>'
+            ].join('');
+          })
+          .join('');
+
+        sideDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-section-title">通知設定</p>',
+          `  <div class="drawer-settings">${settings}</div>`,
+          '</div>'
+        ].join('');
+
+        sideDrawerContent.querySelectorAll('[data-notif-key]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const key = button.getAttribute('data-notif-key');
+            if (!key || !Object.prototype.hasOwnProperty.call(sideDrawerState.notifications, key)) return;
+            sideDrawerState.notifications[key] = !sideDrawerState.notifications[key];
+            renderSideDrawerContent('notifications');
+          });
+        });
+      }
+
+      async function copyTextToClipboard(text) {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+        return false;
+      }
+
+      function renderContactContent() {
+        const mail = 'contact@tsugie.app';
+        sideDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-section-title">お問い合わせ</p>',
+          '  <a class="drawer-contact-link" href="mailto:contact@tsugie.app?subject=Tsugie%20問い合わせ">メールで連絡する</a>',
+          '  <button id="copyContactMail" class="drawer-secondary-action" type="button">メールアドレスをコピー</button>',
+          `  <p class="drawer-muted">${mail}</p>`,
+          '</div>'
+        ].join('');
+
+        const copyButton = document.getElementById('copyContactMail');
+        if (copyButton) {
+          copyButton.addEventListener('click', async () => {
+            const ok = await copyTextToClipboard(mail).catch(() => false);
+            copyButton.textContent = ok ? 'コピーしました' : 'コピー失敗';
+            window.setTimeout(() => {
+              copyButton.textContent = 'メールアドレスをコピー';
+            }, 1200);
+          });
+        }
+      }
+
+      function renderSideDrawerContent(menuId) {
+        if (!sideDrawerContent) return;
+        const nextMenu = menuId || activeMenuId || 'favorites';
+        activeMenuId = nextMenu;
+        if (nextMenu === 'other-world') {
+          renderOtherWorldContent();
+          return;
+        }
+        if (nextMenu === 'notifications') {
+          renderNotificationsContent();
+          return;
+        }
+        if (nextMenu === 'contact') {
+          renderContactContent();
+          return;
+        }
+        renderFavoritesContent();
+      }
+
+      function isSideDrawerOpen() {
+        return Boolean(sideDrawerLayer && sideDrawerLayer.classList.contains('is-open'));
+      }
+
+      function setSideDrawerOpen(nextOpen) {
+        if (!sideDrawerLayer || !topKaomoji) return;
+        const open = Boolean(nextOpen);
+        sideDrawerLayer.classList.toggle('is-open', open);
+        sideDrawerLayer.setAttribute('aria-hidden', open ? 'false' : 'true');
+        topKaomoji.setAttribute('aria-expanded', open ? 'true' : 'false');
+        phoneFrame.classList.toggle('is-side-open', open);
+        if (!open) {
+          setThemePaletteOpen(false);
+        }
+      }
+
+      function closeSideDrawerPanel() {
+        setSideDrawerOpen(false);
+      }
+
+      function openSideDrawerPanel() {
+        if (isDetailVisible()) return;
+        setSideDrawerOpen(true);
+        renderSideDrawerContent(activeMenuId);
+      }
+
+      function toggleSideDrawerPanel() {
+        if (isSideDrawerOpen()) {
+          closeSideDrawerPanel();
+          return;
+        }
+        openSideDrawerPanel();
+      }
+
+      function setActiveSideItem(menuId) {
+        const nextMenu = menuId || activeMenuId || 'favorites';
+        activeMenuId = nextMenu;
+        if (!sideDrawerItems.length) return;
+        sideDrawerItems.forEach((item) => {
+          item.classList.toggle('is-active', item.dataset.menuId === nextMenu);
+        });
+        renderSideDrawerContent(nextMenu);
       }
 
       function clearCurrentLocationMarker() {
@@ -1195,6 +1527,10 @@
             updateDetailPanel(place);
           }
         }
+
+        if (isSideDrawerOpen() && activeMenuId === 'favorites') {
+          renderFavoritesContent();
+        }
       }
 
       function startStatusTicker() {
@@ -1610,6 +1946,10 @@
 
       async function init() {
         setRandomKaomoji();
+        applyColorScheme(activeColorScheme);
+        setThemePaletteOpen(false);
+        applyWorldMode();
+        setActiveSideItem(activeMenuId);
         startStatusTicker();
         const apiKey = resolveApiKey();
         resetAutoOpen();
@@ -1642,6 +1982,21 @@
       }
 
       closeQuickCard.addEventListener('click', closeQuickCardPanel);
+      topKaomoji.addEventListener('click', toggleSideDrawerPanel);
+      sideDrawerBackdrop.addEventListener('click', closeSideDrawerPanel);
+      closeSideDrawer.addEventListener('click', closeSideDrawerPanel);
+      toggleThemePalette.addEventListener('click', toggleThemePalettePanel);
+      themeChips.forEach((chip) => {
+        chip.addEventListener('click', () => {
+          applyColorScheme(chip.dataset.themeScheme || 'fresh');
+          setThemePaletteOpen(false);
+        });
+      });
+      sideDrawerItems.forEach((item) => {
+        item.addEventListener('click', () => {
+          setActiveSideItem(item.dataset.menuId || '');
+        });
+      });
       openDetailButton.addEventListener('click', openCurrentPlaceDetail);
       closeDetailButton.addEventListener('click', () => closeDetailPanel(true));
       detailFocusButton.addEventListener('click', () => {
@@ -1670,6 +2025,11 @@
         detailPanel.addEventListener('touchcancel', handleDetailTouchEnd, { passive: true });
       }
       locateButton.addEventListener('click', () => focusCurrentLocation(true));
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeSideDrawerPanel();
+        }
+      });
       init();
     </script>
   </body>
