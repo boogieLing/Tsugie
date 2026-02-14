@@ -9,17 +9,30 @@
   </head>
   <body>
     <main class="phone-frame" aria-label="Tsugie ホーム試作">
-      <button
-        class="top-kaomoji"
-        type="button"
-        aria-label="メニューを開く"
-        aria-haspopup="true"
-        aria-expanded="false"
-      >
-        (ᵔ◡ᵔ)
-      </button>
+      <div class="top-controls">
+        <button id="openCalendarButton" class="open-calendar-button" type="button" aria-label="時めぐりカレンダーを開く">
+          時めぐり
+        </button>
+        <button id="locateButton" class="locate-button" type="button" aria-label="現在地へ戻る">⌖</button>
+        <button
+          class="top-kaomoji"
+          type="button"
+          aria-label="メニューを開く"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
+          (ᵔ◡ᵔ)
+        </button>
+      </div>
       <div id="sideDrawerLayer" class="side-drawer-layer" aria-hidden="true">
         <button id="sideDrawerBackdrop" class="side-drawer-backdrop" type="button" aria-label="メニューを閉じる"></button>
+        <aside id="favoriteDrawer" class="favorite-drawer" aria-label="行きたい栞ドロワー" aria-hidden="true">
+          <header class="favorite-drawer-header">
+            <p class="favorite-drawer-title">行きたい栞</p>
+            <button id="closeFavoriteDrawer" class="close-favorite-drawer" type="button" aria-label="栞ドロワーを閉じる">×</button>
+          </header>
+          <section id="favoriteDrawerContent" class="favorite-drawer-content" aria-live="polite"></section>
+        </aside>
         <aside id="sideDrawer" class="side-drawer" aria-label="サイドメニュー">
           <header class="side-drawer-header">
             <p class="side-drawer-title">つぎへ ナビ</p>
@@ -41,30 +54,41 @@
             <button class="theme-chip" type="button" data-theme-scheme="sunset" aria-label="夕焼けシトラス"></button>
             <button class="theme-chip" type="button" data-theme-scheme="sakura" aria-label="桜ローズ"></button>
             <button class="theme-chip" type="button" data-theme-scheme="night" aria-label="夜霧インク"></button>
+            <div class="theme-adjusters" aria-label="色調整">
+              <label class="theme-adjuster-row" for="themeAlphaRatioRange">
+                <span class="theme-adjuster-label">透過比率</span>
+                <input id="themeAlphaRatioRange" class="theme-adjuster-range" type="range" min="70" max="130" step="1" value="100" />
+                <span id="themeAlphaRatioValue" class="theme-adjuster-value">100%</span>
+              </label>
+              <label class="theme-adjuster-row" for="themeSaturationRange">
+                <span class="theme-adjuster-label">彩度</span>
+                <input id="themeSaturationRange" class="theme-adjuster-range" type="range" min="70" max="150" step="1" value="100" />
+                <span id="themeSaturationValue" class="theme-adjuster-value">100%</span>
+              </label>
+            </div>
           </section>
           <nav class="side-drawer-nav" aria-label="メニュー項目">
-            <button class="side-drawer-item is-active" data-menu-id="favorites" type="button">
+            <button class="side-drawer-item" data-menu-id="favorites" type="button">
               <span class="side-item-pill" aria-hidden="true"></span>
-              <span class="side-item-text">お気に入りスポット</span>
+              <span class="side-item-text">行きたい栞</span>
             </button>
             <button class="side-drawer-item" data-menu-id="notifications" type="button">
               <span class="side-item-pill" aria-hidden="true"></span>
-              <span class="side-item-text">通知設定</span>
+              <span class="side-item-text">知らせの灯</span>
             </button>
             <button class="side-drawer-item" data-menu-id="contact" type="button">
               <span class="side-item-pill" aria-hidden="true"></span>
-              <span class="side-item-text">お問い合わせ</span>
+              <span class="side-item-text">ことづて</span>
             </button>
           </nav>
           <section id="sideDrawerContent" class="side-drawer-content" aria-live="polite"></section>
         </aside>
       </div>
-      <button id="locateButton" class="locate-button" type="button" aria-label="現在地へ戻る">⌖</button>
-
       <section class="map-stage" aria-label="地図とスポット">
         <div id="googleMap" class="google-map" role="img" aria-label="地図"></div>
         <div class="map-tint" aria-hidden="true"></div>
         <div id="fallbackLayer" class="fallback-layer" hidden></div>
+        <div id="markerActionBubble" class="marker-action-bubble" hidden aria-live="polite"></div>
         <p id="mapHint" class="map-hint" hidden></p>
       </section>
 
@@ -76,9 +100,15 @@
         <div class="sheet-grabber" aria-hidden="true"></div>
         <div class="quick-header">
           <p class="quick-tag">⚡ 最速攻略</p>
-          <button id="closeQuickCard" class="close-card" type="button" aria-label="クイック表示を閉じる">×</button>
+          <div class="quick-head-actions">
+            <span id="quickStateIcons" class="place-state-icons place-state-icons-quick" aria-label="地点ステータス"></span>
+            <button id="closeQuickCard" class="close-card" type="button" aria-label="クイック表示を閉じる">×</button>
+          </div>
         </div>
-        <h2 id="quickTitle" class="quick-title">隅田川花火大会</h2>
+        <div class="quick-title-row">
+          <h2 id="quickTitle" class="quick-title">隅田川花火大会</h2>
+          <p id="quickDuration" class="quick-duration">19:20 - 20:35</p>
+        </div>
         <div id="quickProgress" class="quick-progress quick-progress-upcoming" aria-hidden="true">
           <div id="quickProgressTrack" class="quick-progress-track status-track">
             <span id="quickProgressFill" class="quick-progress-fill status-fill"></span>
@@ -88,7 +118,7 @@
             <span id="quickProgressFace" class="quick-progress-face status-face">(=˘ω˘=) zZ</span>
           </div>
         </div>
-        <p id="quickMeta" class="quick-meta">0.8km ・ 19:20 - 20:35</p>
+        <p id="quickMeta" class="quick-meta">0.8km ・ 本日開催！まもなく！</p>
         <p id="quickHint" class="quick-hint">✨ (ง •̀_•́)ง いま出発が最適</p>
         <div class="quick-actions">
           <button id="openDetailButton" class="secondary-button" type="button">詳細を見る</button>
@@ -103,7 +133,10 @@
           <button id="closeDetailButton" class="close-detail" type="button" aria-label="詳細を閉じる">⌄</button>
         </header>
         <div id="detailContent" class="detail-content">
-          <h2 id="detailName" class="detail-name">隅田川花火大会</h2>
+          <div class="detail-name-row">
+            <h2 id="detailName" class="detail-name">隅田川花火大会</h2>
+            <span id="detailStateIcons" class="place-state-icons place-state-icons-detail" aria-label="地点ステータス"></span>
+          </div>
           <div class="detail-meta-row">
             <span id="detailDistance" class="detail-distance">0.8km</span>
             <span id="detailOpenHours" class="detail-open-hours">開放時間 19:20 - 20:30</span>
@@ -168,6 +201,32 @@
           </section>
         </div>
       </section>
+
+      <section id="calendarPanel" class="calendar-panel" aria-label="時間軸カレンダー" aria-hidden="true">
+        <header class="calendar-header">
+          <div>
+            <p class="calendar-label">時めぐりカレンダー</p>
+            <p class="calendar-semantic-note">時間軸のへ統計（マップは位置軸）</p>
+          </div>
+          <button id="closeCalendarButton" class="close-calendar" type="button" aria-label="カレンダーを閉じる">⌄</button>
+        </header>
+        <div id="calendarList" class="calendar-list"></div>
+        <div id="calendarDayDrawerLayer" class="calendar-day-drawer-layer" aria-hidden="true">
+          <button
+            id="calendarDayDrawerBackdrop"
+            class="calendar-day-drawer-backdrop"
+            type="button"
+            aria-label="日付の詳細を閉じる"
+          ></button>
+          <aside id="calendarDayDrawer" class="calendar-day-drawer" aria-label="日付ごとのへ一覧">
+            <header class="calendar-day-drawer-header">
+              <p id="calendarDayDrawerTitle" class="calendar-day-drawer-title">日付のへ</p>
+              <button id="closeCalendarDayDrawer" class="close-calendar-day-drawer" type="button" aria-label="閉じる">×</button>
+            </header>
+            <div id="calendarDayDrawerContent" class="calendar-day-drawer-content"></div>
+          </aside>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -179,11 +238,13 @@
 
       const quickCard = document.getElementById('quickCard');
       const quickTitle = document.getElementById('quickTitle');
+      const quickDuration = document.getElementById('quickDuration');
       const quickProgress = document.getElementById('quickProgress');
       const quickProgressTrack = document.getElementById('quickProgressTrack');
       const quickProgressFill = document.getElementById('quickProgressFill');
       const quickProgressEndpoint = document.getElementById('quickProgressEndpoint');
       const quickProgressFace = document.getElementById('quickProgressFace');
+      const quickStateIcons = document.getElementById('quickStateIcons');
       const quickMeta = document.getElementById('quickMeta');
       const quickHint = document.getElementById('quickHint');
       const closeQuickCard = document.getElementById('closeQuickCard');
@@ -195,6 +256,7 @@
       const detailName = document.getElementById('detailName');
       const detailDistance = document.getElementById('detailDistance');
       const detailOpenHours = document.getElementById('detailOpenHours');
+      const detailStateIcons = document.getElementById('detailStateIcons');
       const detailProgressSection = document.getElementById('detailProgressSection');
       const detailProgressTitle = document.getElementById('detailProgressTitle');
       const detailProgressMeta = document.getElementById('detailProgressMeta');
@@ -221,12 +283,29 @@
       const sideDrawerLayer = document.getElementById('sideDrawerLayer');
       const sideDrawerBackdrop = document.getElementById('sideDrawerBackdrop');
       const closeSideDrawer = document.getElementById('closeSideDrawer');
+      const favoriteDrawer = document.getElementById('favoriteDrawer');
+      const favoriteDrawerContent = document.getElementById('favoriteDrawerContent');
+      const closeFavoriteDrawer = document.getElementById('closeFavoriteDrawer');
       const toggleThemePalette = document.getElementById('toggleThemePalette');
       const themePalettePanel = document.getElementById('themePalettePanel');
       const themeChips = Array.from(document.querySelectorAll('.theme-chip'));
+      const themeAlphaRatioRange = document.getElementById('themeAlphaRatioRange');
+      const themeAlphaRatioValue = document.getElementById('themeAlphaRatioValue');
+      const themeSaturationRange = document.getElementById('themeSaturationRange');
+      const themeSaturationValue = document.getElementById('themeSaturationValue');
       const sideDrawerItems = Array.from(document.querySelectorAll('.side-drawer-item'));
       const sideDrawerContent = document.getElementById('sideDrawerContent');
       const locateButton = document.getElementById('locateButton');
+      const markerActionBubble = document.getElementById('markerActionBubble');
+      const openCalendarButton = document.getElementById('openCalendarButton');
+      const calendarPanel = document.getElementById('calendarPanel');
+      const closeCalendarButton = document.getElementById('closeCalendarButton');
+      const calendarList = document.getElementById('calendarList');
+      const calendarDayDrawerLayer = document.getElementById('calendarDayDrawerLayer');
+      const calendarDayDrawerBackdrop = document.getElementById('calendarDayDrawerBackdrop');
+      const closeCalendarDayDrawerButton = document.getElementById('closeCalendarDayDrawer');
+      const calendarDayDrawerTitle = document.getElementById('calendarDayDrawerTitle');
+      const calendarDayDrawerContent = document.getElementById('calendarDayDrawerContent');
 
       const places = [
         {
@@ -339,6 +418,11 @@
         ['#0984E3', '#74B9FF']
       ];
       const kaomojiPool = ['(ᵔ◡ᵔ)', '(•̀ᴗ•́)و', '(๑•̀ㅂ•́)و', '(ง •̀_•́)ง', '(˶ᵔ ᵕ ᵔ˶)', '(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧'];
+      const defaultPlaceStates = {
+        'sumida-fireworks': { favorite: true, checkedIn: false },
+        'asakusa-samba': { favorite: true, checkedIn: true },
+        'jingu-icho': { favorite: true, checkedIn: false }
+      };
 
       const markerHandles = new Map();
       const testTimelineCache = new Map();
@@ -353,9 +437,22 @@
       let statusTicker = null;
       let quickSwipeState = null;
       let detailSwipeState = null;
-      let activeMenuId = 'favorites';
+      let suppressDetailUntil = 0;
+      let activeMenuId = '';
       let activeColorScheme = 'fresh';
-      const favoritePlaceIds = ['sumida-fireworks', 'asakusa-samba', 'jingu-icho'];
+      let activeThemeAlphaRatio = 1;
+      let activeThemeSaturation = 1;
+      let calendarDayFilter = 'all';
+      let calendarDayKey = '';
+      let favoriteDrawerFilter = 'all';
+      let markerBubbleInfoWindow = null;
+      const markerBubbleState = {
+        placeId: '',
+        mode: '',
+        anchor: null
+      };
+      const PLACE_STATE_STORAGE_KEY = 'tsugie.placeState.v1';
+      const placeStateMap = new Map();
       const sideDrawerState = {
         worldMode: false,
         notifications: {
@@ -363,6 +460,30 @@
           nearby: false
         }
       };
+      const calendarCategoryDefs = [
+        { key: 'all', label: '全部', logo: '◎' },
+        { key: 'hanabi', label: '花火', logo: '花' },
+        { key: 'matsuri', label: '祭典', logo: '祭' },
+        { key: 'nature', label: '景観', logo: '景' },
+        { key: 'other', label: 'その他', logo: '他' }
+      ];
+      const COLOR_SCHEME_STORAGE_KEY = 'tsugie.colorScheme';
+      const THEME_ALPHA_RATIO_STORAGE_KEY = 'tsugie.themeAlphaRatio';
+      const THEME_SATURATION_STORAGE_KEY = 'tsugie.themeSaturationRatio';
+      const THEME_TOKEN_KEYS = [
+        '--theme-accent-1',
+        '--theme-accent-2',
+        '--theme-accent-3',
+        '--theme-pill-1',
+        '--theme-pill-2',
+        '--theme-pill-3',
+        '--theme-map-glow',
+        '--theme-drawer-bg-1',
+        '--theme-drawer-bg-2',
+        '--theme-drawer-bg-3'
+      ];
+      const CALENDAR_MONTHS_BEFORE = 1;
+      const CALENDAR_MONTHS_AFTER = 5;
       const DEFAULT_STREET_ZOOM = 15;
       // Test phase: keep current location fixed near Sumida / Tokyo Skytree.
       const fallbackCurrentLocation = {
@@ -424,6 +545,123 @@
       function rgbaText(rgb, alpha) {
         const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
         return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha.toFixed(3)})`;
+      }
+
+      function clampNumber(value, min, max) {
+        return Math.max(min, Math.min(max, Number(value) || 0));
+      }
+
+      function parseColorText(colorText) {
+        const safe = String(colorText || '').trim();
+        if (!safe) return null;
+        if (safe.startsWith('#')) {
+          const hex = safe.slice(1);
+          if (hex.length === 3 || hex.length === 4) {
+            const r = Number.parseInt(`${hex[0]}${hex[0]}`, 16);
+            const g = Number.parseInt(`${hex[1]}${hex[1]}`, 16);
+            const b = Number.parseInt(`${hex[2]}${hex[2]}`, 16);
+            const a = hex.length === 4 ? Number.parseInt(`${hex[3]}${hex[3]}`, 16) / 255 : 1;
+            return { r, g, b, a };
+          }
+          if (hex.length === 6 || hex.length === 8) {
+            const r = Number.parseInt(hex.slice(0, 2), 16);
+            const g = Number.parseInt(hex.slice(2, 4), 16);
+            const b = Number.parseInt(hex.slice(4, 6), 16);
+            const a = hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) / 255 : 1;
+            return { r, g, b, a };
+          }
+          return null;
+        }
+        const rgbMatch = safe.match(/^rgba?\(([^)]+)\)$/i);
+        if (!rgbMatch) return null;
+        const parts = rgbMatch[1].split(',').map((part) => part.trim());
+        if (parts.length < 3) return null;
+        const r = clampNumber(Number(parts[0]), 0, 255);
+        const g = clampNumber(Number(parts[1]), 0, 255);
+        const b = clampNumber(Number(parts[2]), 0, 255);
+        const a = parts.length >= 4 ? clampNumber(Number(parts[3]), 0, 1) : 1;
+        return { r: Math.round(r), g: Math.round(g), b: Math.round(b), a };
+      }
+
+      function rgbToHsl(rgb) {
+        const r = clampNumber(rgb.r, 0, 255) / 255;
+        const g = clampNumber(rgb.g, 0, 255) / 255;
+        const b = clampNumber(rgb.b, 0, 255) / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const d = max - min;
+        let h = 0;
+        let s = 0;
+        const l = (max + min) / 2;
+
+        if (d !== 0) {
+          s = d / (1 - Math.abs(2 * l - 1));
+          switch (max) {
+            case r:
+              h = ((g - b) / d) % 6;
+              break;
+            case g:
+              h = (b - r) / d + 2;
+              break;
+            default:
+              h = (r - g) / d + 4;
+              break;
+          }
+        }
+        h *= 60;
+        if (h < 0) h += 360;
+        return { h, s, l };
+      }
+
+      function hslToRgb(hsl) {
+        const h = ((Number(hsl.h) % 360) + 360) % 360;
+        const s = clampNumber(hsl.s, 0, 1);
+        const l = clampNumber(hsl.l, 0, 1);
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = l - c / 2;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        if (h < 60) {
+          r = c;
+          g = x;
+        } else if (h < 120) {
+          r = x;
+          g = c;
+        } else if (h < 180) {
+          g = c;
+          b = x;
+        } else if (h < 240) {
+          g = x;
+          b = c;
+        } else if (h < 300) {
+          r = x;
+          b = c;
+        } else {
+          r = c;
+          b = x;
+        }
+
+        return {
+          r: Math.round((r + m) * 255),
+          g: Math.round((g + m) * 255),
+          b: Math.round((b + m) * 255)
+        };
+      }
+
+      function adjustColorTone(colorText, saturationRatio, alphaRatio) {
+        const parsed = parseColorText(colorText);
+        if (!parsed) return colorText;
+        const hsl = rgbToHsl(parsed);
+        const rgb = hslToRgb({
+          h: hsl.h,
+          s: clampNumber(hsl.s * saturationRatio, 0, 1),
+          l: hsl.l
+        });
+        const alpha = clampNumber(parsed.a * alphaRatio, 0, 1);
+        return rgbaText(rgb, alpha);
       }
 
       const quickGlowStops = [
@@ -497,7 +735,7 @@
 
       function quickStartDateText(status) {
         const start = status && status.startDate instanceof Date ? status.startDate : null;
-        if (!start || Number.isNaN(start.getTime())) return '日期未定';
+        if (!start || Number.isNaN(start.getTime())) return '日付未定';
 
         if (isSameLocalDate(start, new Date())) {
           return '本日開催！まもなく！';
@@ -515,20 +753,161 @@
         return formatDistanceLabel(km);
       }
 
-      function quickMetaText(place) {
-        const status = resolveEventStatus(place);
+      function quickDurationText(status) {
+        if (!status) return '--:-- - --:--';
+        return `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
+      }
+
+      function quickMetaText(place, status) {
+        const safeStatus = status || resolveEventStatus(place);
         const distance = resolvedDistanceText(place);
-        const dateText = quickStartDateText(status);
-        const timeRange = `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
-        return `${distance} ・ ${dateText} ・ ${timeRange}`;
+        const dateText = quickStartDateText(safeStatus);
+        return `${distance} ・ ${dateText}`;
+      }
+
+      function markerBubbleMarkup(place) {
+        if (!place) return '';
+        const state = placeStateOf(place.id);
+        return [
+          `<div class="marker-action-bubble-inner" data-marker-bubble-place="${escapeHtml(place.id)}">`,
+          '  <span class="marker-action-arc" aria-hidden="true"></span>',
+          `  <button class="marker-action-button marker-action-favorite ${state.favorite ? 'is-on' : ''}" type="button" data-marker-action="favorite" data-place-id="${escapeHtml(place.id)}" aria-label="行きたいに留める">${state.favorite ? '★' : '☆'}</button>`,
+          `  <button class="marker-action-button marker-action-open marker-action-quick" type="button" data-marker-action="quick" data-place-id="${escapeHtml(place.id)}" aria-label="クイック表示を開く">↗</button>`,
+          `  <button class="marker-action-button marker-action-checkin ${state.checkedIn ? 'is-on' : ''}" type="button" data-marker-action="checkin" data-place-id="${escapeHtml(place.id)}" aria-label="訪問ずみとして記録">${state.checkedIn ? '◉' : '◌'}</button>`,
+          `  <p class="marker-action-place">${escapeHtml(place.name)}</p>`,
+          '</div>'
+        ].join('');
+      }
+
+      function closeMarkerActionBubble() {
+        const closingPlaceId = markerBubbleState.placeId;
+        markerBubbleState.placeId = '';
+        markerBubbleState.mode = '';
+        markerBubbleState.anchor = null;
+        if (markerActionBubble) {
+          markerActionBubble.hidden = true;
+          markerActionBubble.innerHTML = '';
+        }
+        if (markerBubbleInfoWindow) {
+          markerBubbleInfoWindow.close();
+        }
+        if (!quickCard.classList.contains('is-visible') && !isDetailVisible() && closingPlaceId) {
+          currentFocusPlaceId = '';
+          currentDetailPlaceId = '';
+          setMarkerActive('');
+        }
+      }
+
+      function isMarkerActionBubbleOpen() {
+        return Boolean(markerBubbleState.placeId);
+      }
+
+      function bindMarkerBubbleNode(node) {
+        if (!node) return;
+        node.addEventListener('click', (event) => {
+          const actionButton = event.target.closest('[data-marker-action]');
+          if (!actionButton) return;
+          const action = actionButton.getAttribute('data-marker-action');
+          const placeId = actionButton.getAttribute('data-place-id') || markerBubbleState.placeId;
+          const place = findPlaceById(placeId);
+          if (!place) return;
+
+          if (action === 'favorite') {
+            toggleFavoriteState(placeId);
+            rerenderMarkerActionBubble();
+            refreshAfterPlaceStateChange();
+            return;
+          }
+
+          if (action === 'checkin') {
+            toggleCheckinState(placeId);
+            rerenderMarkerActionBubble();
+            refreshAfterPlaceStateChange();
+            return;
+          }
+
+          if (action === 'quick') {
+            closeMarkerActionBubble();
+            openQuickCard(place, 'marker-bubble');
+          }
+        });
+      }
+
+      function openFallbackMarkerBubble(place, markerElement) {
+        if (!markerActionBubble || !markerElement) return;
+        const markerRect = markerElement.getBoundingClientRect();
+        const frameRect = phoneFrame.getBoundingClientRect();
+        const x = markerRect.left - frameRect.left + markerRect.width / 2;
+        const y = markerRect.top - frameRect.top - 8;
+        markerActionBubble.style.setProperty('--bubble-x', `${x}px`);
+        markerActionBubble.style.setProperty('--bubble-y', `${y}px`);
+        markerActionBubble.innerHTML = markerBubbleMarkup(place);
+        markerActionBubble.hidden = false;
+        bindMarkerBubbleNode(markerActionBubble.querySelector('.marker-action-bubble-inner'));
+      }
+
+      function openGoogleMarkerBubble(place, googleMarker) {
+        if (!mapInstance || !window.google || !window.google.maps || !googleMarker) return false;
+        if (!markerBubbleInfoWindow) {
+          markerBubbleInfoWindow = new window.google.maps.InfoWindow();
+        }
+        markerBubbleInfoWindow.setContent(markerBubbleMarkup(place));
+        markerBubbleInfoWindow.open({
+          map: mapInstance,
+          anchor: googleMarker,
+          shouldFocus: false
+        });
+        window.google.maps.event.addListenerOnce(markerBubbleInfoWindow, 'domready', () => {
+          const node = document.querySelector('.marker-action-bubble-inner');
+          bindMarkerBubbleNode(node);
+        });
+        return true;
+      }
+
+      function openMarkerActionBubble(place, anchorMode) {
+        if (!place) return;
+        closeMarkerActionBubble();
+        if (isCalendarVisible()) {
+          closeCalendarPanel();
+        }
+        currentFocusPlaceId = place.id;
+        currentDetailPlaceId = place.id;
+        setMarkerActive(place.id);
+        markerBubbleState.placeId = place.id;
+        markerBubbleState.mode = anchorMode === 'fallback' ? 'fallback' : 'google';
+
+        const handle = markerHandles.get(place.id);
+        markerBubbleState.anchor = handle || null;
+        if (handle && handle.marker && openGoogleMarkerBubble(place, handle.marker)) {
+          return;
+        }
+        openFallbackMarkerBubble(place, handle && handle.element ? handle.element : null);
+      }
+
+      function rerenderMarkerActionBubble() {
+        const place = findPlaceById(markerBubbleState.placeId);
+        if (!place) return;
+        if (markerBubbleState.mode === 'google' && markerBubbleState.anchor && markerBubbleState.anchor.marker) {
+          openGoogleMarkerBubble(place, markerBubbleState.anchor.marker);
+          return;
+        }
+        if (markerBubbleState.anchor && markerBubbleState.anchor.element) {
+          openFallbackMarkerBubble(place, markerBubbleState.anchor.element);
+        }
       }
 
       function openQuickCard(place, source) {
+        closeMarkerActionBubble();
+        if (isCalendarVisible()) {
+          closeCalendarPanel();
+        }
         currentDetailPlaceId = place.id;
         const status = resolveEventStatus(place);
         quickTitle.textContent = place.name;
-        quickMeta.textContent = quickMetaText(place);
+        quickDuration.textContent = quickDurationText(status);
+        quickMeta.textContent = quickMetaText(place, status);
         quickHint.textContent = place.hint;
+        applyPlaceStateIcons(quickStateIcons, place.id, 'quick');
         applyQuickProgress(status);
         quickCard.style.transform = '';
         quickCard.classList.remove('is-dragging');
@@ -549,6 +928,7 @@
         resetQuickCardSwipe();
         quickCard.classList.remove('is-visible');
         quickCard.setAttribute('aria-hidden', 'true');
+        closeMarkerActionBubble();
         currentFocusPlaceId = '';
         currentDetailPlaceId = '';
         setMarkerActive('');
@@ -685,6 +1065,7 @@
         detailDescription.textContent = place.description || place.hint || '';
         detailHeroBadge.textContent = place.imageTag || 'イベント';
         detailHeroHint.textContent = place.imageHint || '';
+        applyPlaceStateIcons(detailStateIcons, place.id, 'detail');
         detailHero.style.setProperty('--hero-from', from);
         detailHero.style.setProperty('--hero-to', to);
         applyDetailStats(place.heat, place.surprise);
@@ -692,6 +1073,10 @@
       }
 
       function openDetailPanel(place, source) {
+        if (Date.now() < suppressDetailUntil) return;
+        if (isCalendarVisible()) return;
+        closeMarkerActionBubble();
+        closeCalendarPanel();
         closeSideDrawerPanel();
         updateDetailPanel(place);
         currentDetailPlaceId = place.id;
@@ -710,22 +1095,30 @@
         syncBottomPanels();
       }
 
-      function closeDetailPanel(restoreQuickCard) {
-        if (!isDetailVisible()) return;
+      function forceHideDetailPanel() {
         resetDetailSwipe();
         detailPanel.classList.remove('is-visible');
         detailPanel.classList.remove('is-dragging');
         detailPanel.setAttribute('aria-hidden', 'true');
         detailPanel.style.transform = '';
         phoneFrame.classList.remove('is-detail-open');
+      }
+
+      function closeDetailPanel(restoreQuickCard) {
+        const wasVisible =
+          isDetailVisible() || detailPanel.getAttribute('aria-hidden') === 'false' || phoneFrame.classList.contains('is-detail-open');
+        forceHideDetailPanel();
         syncBottomPanels();
+
+        if (!wasVisible) return;
 
         if (restoreQuickCard && currentFocusPlaceId) {
           const place = findPlaceById(currentFocusPlaceId);
           if (place) {
             const status = resolveEventStatus(place);
             quickTitle.textContent = place.name;
-            quickMeta.textContent = quickMetaText(place);
+            quickDuration.textContent = quickDurationText(status);
+            quickMeta.textContent = quickMetaText(place, status);
             quickHint.textContent = place.hint;
             applyQuickProgress(status);
             quickCard.classList.add('is-visible');
@@ -767,7 +1160,7 @@
           '<span class="marker-core" aria-hidden="true">へ</span>',
           `<span class="marker-label">${place.name}</span>`
         ].join('');
-        button.addEventListener('click', () => openQuickCard(place, 'tap'));
+        button.addEventListener('click', () => openMarkerActionBubble(place, 'fallback'));
         return button;
       }
 
@@ -793,15 +1186,90 @@
         setThemePaletteOpen(!themePalettePanel.classList.contains('is-open'));
       }
 
+      function loadPersistedColorScheme() {
+        try {
+          const value = window.localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+          return value || '';
+        } catch (error) {
+          return '';
+        }
+      }
+
+      function persistColorScheme(schemeId) {
+        try {
+          window.localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, String(schemeId || 'fresh'));
+        } catch (error) {
+          // Ignore storage failures in private mode.
+        }
+      }
+
+      function loadPersistedThemeRatio(key, fallback) {
+        try {
+          const raw = Number(window.localStorage.getItem(key));
+          if (!Number.isFinite(raw)) return fallback;
+          return clampNumber(raw, 0.7, 1.5);
+        } catch (error) {
+          return fallback;
+        }
+      }
+
+      function persistThemeRatios() {
+        try {
+          window.localStorage.setItem(THEME_ALPHA_RATIO_STORAGE_KEY, String(activeThemeAlphaRatio));
+          window.localStorage.setItem(THEME_SATURATION_STORAGE_KEY, String(activeThemeSaturation));
+        } catch (error) {
+          // Ignore storage failures.
+        }
+      }
+
+      function setThemeRatioLabels() {
+        if (themeAlphaRatioRange) {
+          themeAlphaRatioRange.value = `${Math.round(activeThemeAlphaRatio * 100)}`;
+        }
+        if (themeSaturationRange) {
+          themeSaturationRange.value = `${Math.round(activeThemeSaturation * 100)}`;
+        }
+        if (themeAlphaRatioValue) {
+          themeAlphaRatioValue.textContent = `${Math.round(activeThemeAlphaRatio * 100)}%`;
+        }
+        if (themeSaturationValue) {
+          themeSaturationValue.textContent = `${Math.round(activeThemeSaturation * 100)}%`;
+        }
+      }
+
+      function applyThemeRatios() {
+        const styles = window.getComputedStyle(phoneFrame);
+        THEME_TOKEN_KEYS.forEach((tokenKey) => {
+          const baseValue = styles.getPropertyValue(tokenKey).trim();
+          const liveValue = adjustColorTone(baseValue, activeThemeSaturation, activeThemeAlphaRatio);
+          const liveKey = tokenKey.replace('--theme-', '--theme-live-');
+          phoneFrame.style.setProperty(liveKey, liveValue);
+        });
+      }
+
+      function setThemeRatios(nextAlphaRatio, nextSaturationRatio, persist) {
+        const alpha = clampNumber(nextAlphaRatio, 0.7, 1.3);
+        const saturation = clampNumber(nextSaturationRatio, 0.7, 1.5);
+        activeThemeAlphaRatio = alpha;
+        activeThemeSaturation = saturation;
+        setThemeRatioLabels();
+        applyThemeRatios();
+        if (persist !== false) {
+          persistThemeRatios();
+        }
+      }
+
       function applyColorScheme(schemeId) {
         const safe = ['fresh', 'ocean', 'sunset', 'sakura', 'night'].includes(String(schemeId))
           ? String(schemeId)
           : 'fresh';
         activeColorScheme = safe;
         phoneFrame.setAttribute('data-color-scheme', safe);
+        persistColorScheme(safe);
         themeChips.forEach((chip) => {
           chip.classList.toggle('is-active', chip.dataset.themeScheme === safe);
         });
+        applyThemeRatios();
       }
 
       function escapeHtml(text) {
@@ -811,6 +1279,464 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function normalizePlaceState(rawState) {
+        const raw = rawState && typeof rawState === 'object' ? rawState : {};
+        return {
+          favorite: Boolean(raw.favorite),
+          checkedIn: Boolean(raw.checkedIn)
+        };
+      }
+
+      function loadPersistedPlaceStates() {
+        try {
+          const raw = window.localStorage.getItem(PLACE_STATE_STORAGE_KEY);
+          if (!raw) return {};
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function persistPlaceStates() {
+        try {
+          const payload = {};
+          placeStateMap.forEach((state, placeId) => {
+            payload[placeId] = normalizePlaceState(state);
+          });
+          window.localStorage.setItem(PLACE_STATE_STORAGE_KEY, JSON.stringify(payload));
+        } catch (error) {
+          // Ignore storage failures.
+        }
+      }
+
+      function initPlaceStates() {
+        placeStateMap.clear();
+        const stored = loadPersistedPlaceStates();
+        places.forEach((place) => {
+          const fallback = defaultPlaceStates[place.id] || {};
+          const merged = Object.assign({}, fallback, stored[place.id] || {});
+          placeStateMap.set(place.id, normalizePlaceState(merged));
+        });
+      }
+
+      function placeStateOf(placeId) {
+        if (!placeStateMap.has(placeId)) {
+          placeStateMap.set(placeId, { favorite: false, checkedIn: false });
+        }
+        return normalizePlaceState(placeStateMap.get(placeId));
+      }
+
+      function setPlaceState(placeId, patch) {
+        const prev = placeStateOf(placeId);
+        const next = normalizePlaceState(Object.assign({}, prev, patch || {}));
+        placeStateMap.set(placeId, next);
+        persistPlaceStates();
+      }
+
+      function toggleFavoriteState(placeId) {
+        const prev = placeStateOf(placeId);
+        setPlaceState(placeId, { favorite: !prev.favorite });
+      }
+
+      function toggleCheckinState(placeId) {
+        const prev = placeStateOf(placeId);
+        const checkedIn = !prev.checkedIn;
+        setPlaceState(placeId, { checkedIn, favorite: checkedIn ? true : prev.favorite });
+      }
+
+      function favoritePlaces() {
+        return places.filter((place) => placeStateOf(place.id).favorite);
+      }
+
+      function placeStateIconsMarkup(placeId, variant) {
+        const state = placeStateOf(placeId);
+        const scope = variant || 'base';
+        return [
+          `<span class="place-state-icons place-state-icons-${scope}" data-place-state="${escapeHtml(placeId)}">`,
+          `  <span class="state-logo state-logo-favorite ${state.favorite ? 'is-on' : ''}" aria-hidden="true">${state.favorite ? '★' : '☆'}</span>`,
+          `  <span class="state-logo state-logo-checkin ${state.checkedIn ? 'is-on' : ''}" aria-hidden="true">${state.checkedIn ? '◉' : '◌'}</span>`,
+          '</span>'
+        ].join('');
+      }
+
+      function applyPlaceStateIcons(node, placeId, variant) {
+        if (!node || !placeId) return;
+        const shell = document.createElement('div');
+        shell.innerHTML = placeStateIconsMarkup(placeId, variant);
+        const rendered = shell.firstElementChild;
+        if (!rendered) return;
+        node.className = rendered.className;
+        node.setAttribute('data-place-state', rendered.getAttribute('data-place-state') || placeId);
+        node.setAttribute('aria-label', '地点ステータス');
+        node.innerHTML = rendered.innerHTML;
+      }
+
+      function isCalendarVisible() {
+        return Boolean(calendarPanel && calendarPanel.classList.contains('is-visible'));
+      }
+
+      function categoryForPlace(place) {
+        const name = String(place && place.name ? place.name : '');
+        const tag = String(place && place.imageTag ? place.imageTag : '');
+        if (name.includes('花火') || tag.includes('花火')) return 'hanabi';
+        if (name.includes('祭') || tag.includes('祭')) return 'matsuri';
+        if (name.includes('桜') || name.includes('並木') || tag.includes('桜') || tag.includes('並木')) return 'nature';
+        return 'other';
+      }
+
+      function categoryMeta(categoryKey) {
+        return calendarCategoryDefs.find((item) => item.key === categoryKey) || calendarCategoryDefs[0];
+      }
+
+      function dayKeyOf(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      function dayTitleOf(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '日付未定';
+        const week = ['日', '月', '火', '水', '木', '金', '土'];
+        const m = date.getMonth() + 1;
+        const d = date.getDate();
+        return `${m}/${d} (${week[date.getDay()]})`;
+      }
+
+      function monthTitleOf(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '月未定';
+        return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      }
+
+      function recommendationCompare(a, b) {
+        if (!a || !b) return 0;
+        const nowA = a.status && a.status.startDate instanceof Date ? a.status.startDate.getTime() : Number.MAX_SAFE_INTEGER;
+        const nowB = b.status && b.status.startDate instanceof Date ? b.status.startDate.getTime() : Number.MAX_SAFE_INTEGER;
+        const distDiff = (a.distanceKm || 9999) - (b.distanceKm || 9999);
+        if (Math.abs(distDiff) > 0.01) return distDiff;
+        if (nowA !== nowB) return nowA - nowB;
+        return (b.place.heat || 0) - (a.place.heat || 0);
+      }
+
+      function scoredPlaces(sourcePlaces) {
+        const origin = currentLocationPosition || fallbackCurrentLocation;
+        return sourcePlaces.map((place) => {
+          const status = resolveEventStatus(place);
+          return {
+            place,
+            status,
+            distanceKm: distanceKm(origin.lat, origin.lng, place.lat, place.lng),
+            category: categoryForPlace(place),
+            dayKey: dayKeyOf(status.startDate)
+          };
+        });
+      }
+
+      function buildCalendarBuckets() {
+        const scored = scoredPlaces(places).filter((item) => item.dayKey);
+        const bucketMap = new Map();
+        scored.forEach((item) => {
+          if (!bucketMap.has(item.dayKey)) {
+            bucketMap.set(item.dayKey, {
+              dayKey: item.dayKey,
+              dayDate: item.status.startDate,
+              items: [],
+              counts: new Map()
+            });
+          }
+          const bucket = bucketMap.get(item.dayKey);
+          bucket.items.push(item);
+          const prev = bucket.counts.get(item.category) || 0;
+          bucket.counts.set(item.category, prev + 1);
+        });
+
+        const buckets = Array.from(bucketMap.values());
+        buckets.forEach((bucket) => {
+          bucket.items.sort(recommendationCompare);
+          bucket.topTwo = bucket.items.slice(0, 2);
+        });
+        buckets.sort((a, b) => a.dayDate.getTime() - b.dayDate.getTime());
+        return buckets;
+      }
+
+      function buildCalendarMonths(buckets) {
+        if (!buckets.length) return [];
+        const bucketMap = new Map(buckets.map((bucket) => [bucket.dayKey, bucket]));
+        const firstDate = buckets[0].dayDate;
+        const lastDate = buckets[buckets.length - 1].dayDate;
+        const now = new Date();
+        const todayMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const firstMonthStart = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+        const lastMonthStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+        const baselineStart = new Date(now.getFullYear(), now.getMonth() - CALENDAR_MONTHS_BEFORE, 1);
+        const baselineEnd = new Date(now.getFullYear(), now.getMonth() + CALENDAR_MONTHS_AFTER, 1);
+        const rangeStart = new Date(
+          Math.min(firstMonthStart.getTime(), todayMonthStart.getTime(), baselineStart.getTime())
+        );
+        const rangeEnd = new Date(
+          Math.max(lastMonthStart.getTime(), todayMonthStart.getTime(), baselineEnd.getTime())
+        );
+        const months = [];
+        let cursor = new Date(rangeStart);
+        const end = new Date(rangeEnd);
+
+        while (cursor.getTime() <= end.getTime()) {
+          const year = cursor.getFullYear();
+          const month = cursor.getMonth();
+          const firstWeekday = new Date(year, month, 1).getDay();
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+          const cells = [];
+
+          for (let i = 0; i < firstWeekday; i += 1) {
+            cells.push({ type: 'blank' });
+          }
+
+          for (let day = 1; day <= daysInMonth; day += 1) {
+            const date = new Date(year, month, day);
+            const dayKey = dayKeyOf(date);
+            cells.push({
+              type: 'day',
+              day,
+              dayKey,
+              date,
+              bucket: bucketMap.get(dayKey) || null
+            });
+          }
+
+          months.push({
+            key: `${year}-${String(month + 1).padStart(2, '0')}`,
+            title: monthTitleOf(cursor),
+            cells
+          });
+          cursor = new Date(year, month + 1, 1);
+        }
+        return months;
+      }
+
+      function bucketByDayKey(dayKey) {
+        return buildCalendarBuckets().find((bucket) => bucket.dayKey === dayKey) || null;
+      }
+
+      function isCalendarDayDrawerOpen() {
+        return Boolean(calendarDayDrawerLayer && calendarDayDrawerLayer.classList.contains('is-open'));
+      }
+
+      function setCalendarDayDrawerOpen(nextOpen) {
+        if (!calendarDayDrawerLayer) return;
+        const open = Boolean(nextOpen);
+        calendarDayDrawerLayer.classList.toggle('is-open', open);
+        calendarDayDrawerLayer.setAttribute('aria-hidden', open ? 'false' : 'true');
+      }
+
+      function closeCalendarDayDrawer(resetSelection) {
+        if (resetSelection) {
+          calendarDayKey = '';
+          calendarDayFilter = 'all';
+        }
+        setCalendarDayDrawerOpen(false);
+      }
+
+      function renderCalendarDayDrawerContent() {
+        if (!calendarDayDrawerContent || !calendarDayDrawerTitle) return;
+        const bucket = bucketByDayKey(calendarDayKey);
+        if (!bucket) {
+          calendarDayDrawerTitle.textContent = '日付のへ';
+          calendarDayDrawerContent.innerHTML = '<p class="drawer-muted">選択した日のへはありません。</p>';
+          return;
+        }
+
+        calendarDayDrawerTitle.textContent = `${dayTitleOf(bucket.dayDate)} のへ`;
+        const categoryKeys = ['all']
+          .concat(Array.from(bucket.counts.keys()))
+          .filter((key, index, arr) => arr.indexOf(key) === index);
+        const chips = categoryKeys
+          .map((key) => {
+            const meta = categoryMeta(key);
+            const active = key === calendarDayFilter;
+            const count = key === 'all' ? bucket.items.length : bucket.counts.get(key) || 0;
+            return [
+              `<button class="drawer-day-filter ${active ? 'is-active' : ''}" type="button" data-day-filter="${key}">`,
+              `  <span class="drawer-day-filter-logo">${meta.logo}</span>`,
+              `  <span>${meta.label}</span>`,
+              `  <span class="drawer-day-filter-count">${count}</span>`,
+              '</button>'
+            ].join('');
+          })
+          .join('');
+
+        const filtered = bucket.items.filter((item) => {
+          if (calendarDayFilter === 'all') return true;
+          return item.category === calendarDayFilter;
+        });
+
+        const rows = filtered
+          .map((item) => {
+            const meta = categoryMeta(item.category);
+            const progress = miniProgressMarkup(item.status, 'day');
+            const stateIcons = placeStateIconsMarkup(item.place.id, 'day');
+            return [
+              `<button class="drawer-day-item" type="button" data-day-place-id="${escapeHtml(item.place.id)}">`,
+              '  <span class="drawer-day-item-main">',
+              `    <span class="drawer-day-item-logo">${meta.logo}</span>`,
+              '    <span class="drawer-day-item-copy">',
+              `      <span class="drawer-day-item-name">${escapeHtml(item.place.name)}</span>`,
+              `      <span class="drawer-day-item-meta">${formatDistanceLabel(item.distanceKm)} ・ ${item.status.startLabel} - ${item.status.endLabel}</span>`,
+              '      <span class="drawer-day-item-countdown">',
+              `        <span class="drawer-day-item-countdown-left">${item.status.leftLabel}</span>`,
+              '      </span>',
+              '    </span>',
+              '    <span class="drawer-day-item-right">',
+              `      <span class="drawer-day-item-tag">${meta.label}</span>`,
+              `      ${stateIcons}`,
+              '    </span>',
+              '  </span>',
+              `  ${progress}`,
+              '</button>'
+            ].join('');
+          })
+          .join('');
+
+        calendarDayDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-muted">時間軸から抽出。並び順は近さと開始の早さを優先。</p>',
+          `  <div class="drawer-day-filters">${chips}</div>`,
+          `  <div class="drawer-day-list">${rows || '<p class="drawer-muted">該当なし</p>'}</div>`,
+          '</div>'
+        ].join('');
+
+        calendarDayDrawerContent.querySelectorAll('[data-day-filter]').forEach((button) => {
+          button.addEventListener('click', () => {
+            calendarDayFilter = button.getAttribute('data-day-filter') || 'all';
+            renderCalendarDayDrawerContent();
+          });
+        });
+
+        calendarDayDrawerContent.querySelectorAll('[data-day-place-id]').forEach((button) => {
+          const place = findPlaceById(button.getAttribute('data-day-place-id') || '');
+          if (place) {
+            applyMiniProgressNode(button.querySelector('.mini-progress'), resolveEventStatus(place));
+          }
+          button.addEventListener('click', () => {
+            const place = findPlaceById(button.getAttribute('data-day-place-id') || '');
+            if (!place) return;
+            closeCalendarDayDrawer(true);
+            closeCalendarPanel();
+            openQuickCard(place, 'calendar-day');
+          });
+        });
+      }
+
+      function openCalendarDayDrawer(dayKey) {
+        if (!dayKey) return;
+        calendarDayKey = dayKey;
+        calendarDayFilter = 'all';
+        renderCalendarDayDrawerContent();
+        setCalendarDayDrawerOpen(true);
+      }
+
+      function renderCalendarPanel() {
+        if (!calendarList) return;
+        const buckets = buildCalendarBuckets();
+        if (!buckets.length) {
+          calendarList.innerHTML = '<p class="calendar-empty">この期間のへはありません。</p>';
+          return;
+        }
+
+        const months = buildCalendarMonths(buckets);
+        const today = new Date();
+        const todayKey = dayKeyOf(today);
+        const weekdayHead = ['日', '月', '火', '水', '木', '金', '土']
+          .map((label, index) => `<span class="calendar-weekday ${index === 0 ? 'is-sun' : ''} ${index === 6 ? 'is-sat' : ''}">${label}</span>`)
+          .join('');
+        const monthBlocks = months
+          .map((month) => {
+            const cells = month.cells
+              .map((cell) => {
+                if (cell.type === 'blank') {
+                  return '<span class="calendar-date-cell is-blank" aria-hidden="true"></span>';
+                }
+
+                const weekendClass = cell.date.getDay() === 0 ? 'is-sun' : cell.date.getDay() === 6 ? 'is-sat' : '';
+                const todayClass = cell.dayKey === todayKey ? 'is-today' : '';
+                const todayAttr = cell.dayKey === todayKey ? 'true' : 'false';
+                if (!cell.bucket) {
+                  return [
+                    `<span class="calendar-date-cell ${weekendClass} ${todayClass}" data-is-today="${todayAttr}">`,
+                    `  <span class="calendar-date-number">${cell.day}</span>`,
+                    '</span>'
+                  ].join('');
+                }
+
+                const lines = calendarCategoryDefs
+                  .filter((meta) => meta.key !== 'all')
+                  .map((meta) => {
+                    const count = cell.bucket.counts.get(meta.key) || 0;
+                    if (!count) return '';
+                    return `<span class="calendar-date-item"><span class="calendar-date-item-logo">${escapeHtml(meta.logo)}</span><em>${count}</em></span>`;
+                  })
+                  .filter(Boolean)
+                  .join('');
+
+                return [
+                  `<button class="calendar-date-cell is-event ${weekendClass} ${todayClass}" type="button" data-calendar-day="${escapeHtml(cell.dayKey)}" data-is-today="${todayAttr}">`,
+                  '  <span class="calendar-date-head">',
+                  `    <span class="calendar-date-number">${cell.day}</span>`,
+                  '  </span>',
+                  `  <span class="calendar-date-items">${lines}</span>`,
+                  '</button>'
+                ].join('');
+              })
+              .join('');
+            return [
+              '<section class="calendar-month">',
+              `  <header class="calendar-month-header">${escapeHtml(month.title)}</header>`,
+              `  <div class="calendar-weekdays">${weekdayHead}</div>`,
+              `  <div class="calendar-grid">${cells}</div>`,
+              '</section>'
+            ].join('');
+          })
+          .join('');
+
+        calendarList.innerHTML = monthBlocks;
+        calendarList.querySelectorAll('[data-calendar-day]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const dayKey = button.getAttribute('data-calendar-day') || '';
+            openCalendarDayDrawer(dayKey);
+          });
+        });
+
+        const todayNode = calendarList.querySelector('[data-is-today="true"]');
+        if (todayNode) {
+          window.requestAnimationFrame(() => {
+            todayNode.scrollIntoView({ block: 'center', inline: 'nearest' });
+          });
+        }
+      }
+
+      function openCalendarPanel() {
+        if (!calendarPanel) return;
+        resetAutoOpen();
+        closeMarkerActionBubble();
+        closeCalendarDayDrawer(true);
+        calendarPanel.classList.add('is-visible');
+        calendarPanel.setAttribute('aria-hidden', 'false');
+        phoneFrame.classList.add('is-calendar-open');
+        phoneFrame.classList.add('is-calendar-page');
+        renderCalendarPanel();
+      }
+
+      function closeCalendarPanel() {
+        if (!calendarPanel) return;
+        closeCalendarDayDrawer(true);
+        calendarPanel.classList.remove('is-visible');
+        calendarPanel.setAttribute('aria-hidden', 'true');
+        phoneFrame.classList.remove('is-calendar-open');
+        phoneFrame.classList.remove('is-calendar-page');
+        syncBottomPanels();
       }
 
       function sideStatusText(status) {
@@ -829,57 +1755,186 @@
         return 'is-unknown';
       }
 
+      function miniProgressMode(status) {
+        if (!status) return 'unknown';
+        if (status.mode === 'ongoing') return 'ongoing';
+        if (status.mode === 'upcoming') return 'upcoming';
+        if (status.mode === 'ended') return 'ended';
+        return 'unknown';
+      }
+
+      function miniProgressPercent(status) {
+        if (!status) return 8;
+        if (status.mode === 'ongoing') {
+          return Math.round(Math.max(0, Math.min(1, Number(status.progress) || 0)) * 100);
+        }
+        if (status.mode === 'upcoming') {
+          return Math.round(Math.max(0, Math.min(1, Number(status.waitProgress) || 0)) * 100);
+        }
+        if (status.mode === 'ended') {
+          return 100;
+        }
+        return 8;
+      }
+
+      function shouldShowMiniProgress(status) {
+        if (!status) return false;
+        if (status.mode === 'upcoming') {
+          const sec = Number(status.countdownSec) || 0;
+          if (sec > 24 * 60 * 60) return false;
+        }
+        return true;
+      }
+
+      function miniProgressMarkup(status, variant) {
+        if (!shouldShowMiniProgress(status)) return '';
+        const mode = miniProgressMode(status);
+        const scope = variant || 'base';
+        const visualClass = mode === 'ongoing' ? 'detail-progress-ongoing' : 'detail-progress-upcoming';
+        return [
+          `<span class="mini-progress ${visualClass} mini-progress-${scope} mini-progress-mode-${mode}" aria-hidden="true">`,
+          '  <div class="mini-progress-track status-track">',
+          '    <span class="mini-progress-fill status-fill"></span>',
+          '    <span class="mini-progress-endpoint status-endpoint">',
+          '      <span class="mini-progress-he status-he">へ</span>',
+          '    </span>',
+          '  </div>',
+          '</span>'
+        ].join('');
+      }
+
+      function applyMiniProgressNode(rootNode, status) {
+        if (!rootNode) return;
+        const track = rootNode.querySelector('.mini-progress-track');
+        const fill = rootNode.querySelector('.mini-progress-fill');
+        const endpoint = rootNode.querySelector('.mini-progress-endpoint');
+        const pct = miniProgressPercent(status);
+        setProgressPosition(track, fill, null, endpoint, pct);
+      }
+
       function applyWorldMode() {
         phoneFrame.classList.toggle('is-other-world-mode', sideDrawerState.worldMode);
       }
 
-      function renderFavoritesContent() {
-        const favorites = favoritePlaceIds.map((id) => findPlaceById(id)).filter(Boolean);
-        if (!favorites.length) {
-          sideDrawerContent.innerHTML = [
-            '<div class="drawer-section">',
-            '  <p class="drawer-section-title">お気に入りスポット</p>',
-            '  <p class="drawer-muted">まだ登録されていません。</p>',
-            '</div>'
-          ].join('');
-          return;
-        }
+      function favoriteFilterDefs() {
+        return [
+          { key: 'all', label: 'すべて' },
+          { key: 'planned', label: 'まだ訪れず' },
+          { key: 'checked', label: '足あと済み' }
+        ];
+      }
 
-        const cards = favorites
-          .map((place) => {
-            const status = resolveEventStatus(place);
-            const range = `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
+      function isFavoriteDrawerOpen() {
+        return Boolean(sideDrawerLayer && sideDrawerLayer.classList.contains('is-favorite-open'));
+      }
+
+      function setFavoriteDrawerOpen(nextOpen) {
+        if (!sideDrawerLayer || !favoriteDrawer) return;
+        const open = Boolean(nextOpen);
+        sideDrawerLayer.classList.toggle('is-favorite-open', open);
+        favoriteDrawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+      }
+
+      function filteredFavoritePlaces() {
+        const favorites = favoritePlaces();
+        if (favoriteDrawerFilter === 'checked') {
+          return favorites.filter((place) => placeStateOf(place.id).checkedIn);
+        }
+        if (favoriteDrawerFilter === 'planned') {
+          return favorites.filter((place) => !placeStateOf(place.id).checkedIn);
+        }
+        return favorites;
+      }
+
+      function renderFavoriteDrawerContent() {
+        if (!favoriteDrawerContent) return;
+        const favorites = filteredFavoritePlaces();
+        const allFavorites = favoritePlaces();
+        const counts = {
+          all: allFavorites.length,
+          planned: allFavorites.filter((place) => !placeStateOf(place.id).checkedIn).length,
+          checked: allFavorites.filter((place) => placeStateOf(place.id).checkedIn).length
+        };
+
+        const filters = favoriteFilterDefs()
+          .map((item) => {
+            const active = item.key === favoriteDrawerFilter;
             return [
-              `<button class="drawer-favorite-item" type="button" data-favorite-place="${escapeHtml(place.id)}">`,
-              '  <span class="drawer-favorite-head">',
-              `    <span class="drawer-favorite-name">${escapeHtml(place.name)}</span>`,
-              `    <span class="drawer-favorite-distance">${escapeHtml(resolvedDistanceText(place))}</span>`,
-              '  </span>',
-              '  <span class="drawer-favorite-foot">',
-              `    <span class="drawer-favorite-status ${sideStatusClass(status)}">${escapeHtml(sideStatusText(status))}</span>`,
-              `    <span class="drawer-favorite-time">${escapeHtml(range)}</span>`,
-              '  </span>',
+              `<button class="favorite-filter ${active ? 'is-active' : ''}" type="button" data-favorite-filter="${item.key}">`,
+              `  <span>${item.label}</span>`,
+              `  <span class="favorite-filter-count">${counts[item.key] || 0}</span>`,
               '</button>'
             ].join('');
           })
           .join('');
 
-        sideDrawerContent.innerHTML = [
-          '<div class="drawer-section">',
-          '  <p class="drawer-section-title">お気に入りスポット</p>',
-          '  <p class="drawer-muted">タップするとクイック表示を開きます。</p>',
-          `  <div class="drawer-favorite-list">${cards}</div>`,
+        const cards = favorites
+          .map((place) => {
+            const status = resolveEventStatus(place);
+            const range = `${status.startLabel || '--:--'} - ${status.endLabel || '--:--'}`;
+            const progress = status.mode === 'ongoing' ? miniProgressMarkup(status, 'favorite') : '';
+            const stateIcons = placeStateIconsMarkup(place.id, 'favorite');
+            return [
+              `<button class="favorite-drawer-item" type="button" data-favorite-place="${escapeHtml(place.id)}">`,
+              '  <span class="favorite-drawer-item-head">',
+              `    <span class="favorite-drawer-item-name">${escapeHtml(place.name)}</span>`,
+              `    <span class="favorite-drawer-item-distance">${escapeHtml(resolvedDistanceText(place))}</span>`,
+              '  </span>',
+              '  <span class="favorite-drawer-item-foot">',
+              `    <span class="favorite-drawer-item-time">${escapeHtml(range)}</span>`,
+              `    ${stateIcons}`,
+              '  </span>',
+              progress ? `  ${progress}` : '',
+              '</button>'
+            ].join('');
+          })
+          .join('');
+
+        favoriteDrawerContent.innerHTML = [
+          '<div class="favorite-drawer-section">',
+          '  <p class="favorite-drawer-muted">行きたい余韻と、歩いた足あとをここに。</p>',
+          `  <div class="favorite-filters">${filters}</div>`,
+          `  <div class="favorite-drawer-list">${cards || '<p class="favorite-drawer-muted">まだ栞は白紙です。</p>'}</div>`,
           '</div>'
         ].join('');
 
-        sideDrawerContent.querySelectorAll('[data-favorite-place]').forEach((button) => {
+        favoriteDrawerContent.querySelectorAll('[data-favorite-filter]').forEach((button) => {
           button.addEventListener('click', () => {
-            const place = findPlaceById(button.getAttribute('data-favorite-place'));
-            if (!place) return;
-            openQuickCard(place, 'favorite');
-            closeSideDrawerPanel();
+            favoriteDrawerFilter = button.getAttribute('data-favorite-filter') || 'all';
+            renderFavoriteDrawerContent();
           });
         });
+
+        favoriteDrawerContent.querySelectorAll('[data-favorite-place]').forEach((button) => {
+          const place = findPlaceById(button.getAttribute('data-favorite-place'));
+          if (place) {
+            applyMiniProgressNode(button.querySelector('.mini-progress'), resolveEventStatus(place));
+          }
+          button.addEventListener('click', () => {
+            const target = findPlaceById(button.getAttribute('data-favorite-place') || '');
+            if (!target) return;
+            closeSideDrawerPanel();
+            openQuickCard(target, 'favorite-drawer');
+          });
+        });
+      }
+
+      function renderFavoritesContent() {
+        sideDrawerContent.innerHTML = [
+          '<div class="drawer-section">',
+          '  <p class="drawer-section-title">行きたい栞</p>',
+          '  <p class="drawer-muted">左から、いまの栞をそっと開けます。</p>',
+          '  <button id="openFavoriteDrawerAction" class="drawer-secondary-action" type="button">栞ドロワーをひらく</button>',
+          '</div>'
+        ].join('');
+        const openButton = document.getElementById('openFavoriteDrawerAction');
+        if (openButton) {
+          openButton.addEventListener('click', () => {
+            favoriteDrawerFilter = 'all';
+            renderFavoriteDrawerContent();
+            setFavoriteDrawerOpen(true);
+          });
+        }
       }
 
       function renderOtherWorldContent() {
@@ -984,7 +2039,16 @@
 
       function renderSideDrawerContent(menuId) {
         if (!sideDrawerContent) return;
-        const nextMenu = menuId || activeMenuId || 'favorites';
+        const nextMenu = String(menuId || activeMenuId || '').trim();
+        if (!nextMenu) {
+          activeMenuId = '';
+          sideDrawerContent.innerHTML = [
+            '<div class="drawer-section">',
+            '  <p class="drawer-muted">項目をひとつ選ぶと、ここに静かにひらきます。</p>',
+            '</div>'
+          ].join('');
+          return;
+        }
         activeMenuId = nextMenu;
         if (nextMenu === 'other-world') {
           renderOtherWorldContent();
@@ -1014,17 +2078,20 @@
         phoneFrame.classList.toggle('is-side-open', open);
         if (!open) {
           setThemePaletteOpen(false);
+          setFavoriteDrawerOpen(false);
         }
       }
 
       function closeSideDrawerPanel() {
+        setFavoriteDrawerOpen(false);
         setSideDrawerOpen(false);
       }
 
       function openSideDrawerPanel() {
         if (isDetailVisible()) return;
+        closeMarkerActionBubble();
         setSideDrawerOpen(true);
-        renderSideDrawerContent(activeMenuId);
+        setActiveSideItem('');
       }
 
       function toggleSideDrawerPanel() {
@@ -1036,12 +2103,19 @@
       }
 
       function setActiveSideItem(menuId) {
-        const nextMenu = menuId || activeMenuId || 'favorites';
+        const nextMenu = String(menuId || '').trim();
         activeMenuId = nextMenu;
         if (!sideDrawerItems.length) return;
         sideDrawerItems.forEach((item) => {
-          item.classList.toggle('is-active', item.dataset.menuId === nextMenu);
+          item.classList.toggle('is-active', Boolean(nextMenu) && item.dataset.menuId === nextMenu);
         });
+        if (nextMenu === 'favorites' && isSideDrawerOpen()) {
+          favoriteDrawerFilter = 'all';
+          renderFavoriteDrawerContent();
+          setFavoriteDrawerOpen(true);
+        } else {
+          setFavoriteDrawerOpen(false);
+        }
         renderSideDrawerContent(nextMenu);
       }
 
@@ -1158,23 +2232,6 @@
         return `${km.toFixed(1)}km`;
       }
 
-      function resolveNextStart(startTime) {
-        const now = new Date();
-        const safe = String(startTime || '19:30');
-        const parts = safe.split(':');
-        const hour = Number(parts[0]);
-        const minute = Number(parts[1]);
-
-        if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-
-        const start = new Date(now);
-        start.setHours(hour, minute, 0, 0);
-        if (start.getTime() < now.getTime() - 60000) {
-          start.setDate(start.getDate() + 1);
-        }
-        return start;
-      }
-
       function parseTimeParts(timeText) {
         const safe = String(timeText || '');
         const pieces = safe.split(':');
@@ -1192,26 +2249,16 @@
         const seconds = safe % 60;
 
         if (safe >= 86400) {
-          return `${days}日${hours % 24}时`;
+          return `${days}日${hours % 24}時間`;
         }
         if (safe >= 3600) {
-          return `${hours}时${minutes}分${seconds}秒`;
+          return `${hours}時間${minutes}分${seconds}秒`;
         }
         if (safe >= 300) {
           const mm = Math.floor(safe / 60);
           return `${mm}分${seconds}秒`;
         }
         return `${safe}秒`;
-      }
-
-      function etaLabelFromMinutes(totalMinutes) {
-        const safe = Math.max(1, Math.ceil(totalMinutes));
-        const days = Math.floor(safe / (24 * 60));
-        const hours = Math.floor((safe % (24 * 60)) / 60);
-        const minutes = safe % 60;
-        if (days > 0) return `${days}日${hours}時間`;
-        if (hours > 0) return `${hours}時間${minutes}分`;
-        return `${minutes}分`;
       }
 
       function dateFromParts(baseDate, hour, minute, dayOffset) {
@@ -1376,19 +2423,6 @@
         return resolveStatusByAbsoluteWindow(nextStart, nextEnd, now);
       }
 
-      function formatStartCountdown(startTime) {
-        const start = resolveNextStart(startTime);
-        if (!start) return { startLabel: '時刻未定', etaLabel: '' };
-
-        const nowMs = Date.now();
-        const diffMs = Math.max(0, start.getTime() - nowMs);
-        const totalMinutes = Math.max(1, Math.ceil(diffMs / 60000));
-        const hh = String(start.getHours()).padStart(2, '0');
-        const mm = String(start.getMinutes()).padStart(2, '0');
-        const startLabel = `${hh}:${mm}`;
-        return { startLabel, etaLabel: `${etaLabelFromMinutes(totalMinutes)}後` };
-      }
-
       function distanceKm(fromLat, fromLng, toLat, toLng) {
         const earthRadius = 6371;
         const toRad = (deg) => (deg * Math.PI) / 180;
@@ -1408,9 +2442,10 @@
       function syncBottomPanels() {
         const quickVisible = quickCard.classList.contains('is-visible');
         const detailVisible = detailPanel.classList.contains('is-visible');
+        const calendarVisible = isCalendarVisible();
         if (!nearbyCarousel) return;
-        nearbyCarousel.classList.toggle('is-visible', !quickVisible && !detailVisible);
-        nearbyCarousel.setAttribute('aria-hidden', quickVisible || detailVisible ? 'true' : 'false');
+        nearbyCarousel.classList.toggle('is-visible', !quickVisible && !detailVisible && !calendarVisible);
+        nearbyCarousel.setAttribute('aria-hidden', quickVisible || detailVisible || calendarVisible ? 'true' : 'false');
       }
 
       function collectNearbyPlaces() {
@@ -1475,7 +2510,9 @@
           const from = normalizeHex(colors[0]);
           const to = normalizeHex(colors[1]);
           const distance = formatDistanceLabel(place.distanceFromCenter);
-          const countdown = formatStartCountdown(place.startTime);
+          const status = resolveEventStatus(place);
+          const progress = miniProgressMarkup(status, 'nearby');
+          const stateIcons = placeStateIconsMarkup(place.id, 'nearby');
 
           const button = document.createElement('button');
           button.type = 'button';
@@ -1486,14 +2523,17 @@
             '<span class="nearby-top">',
             `  <span class="nearby-name">${place.name}</span>`,
             `  <span class="nearby-distance">${distance}</span>`,
+            `  ${stateIcons}`,
             '</span>',
             '<span class="nearby-time">',
-            `  <span class="nearby-eta">${countdown.etaLabel}</span>`,
-            `  <span class="nearby-start">${countdown.startLabel}</span>`,
-            '</span>'
+            `  <span class="nearby-eta">${status.leftLabel}</span>`,
+            `  <span class="nearby-start">${status.rightLabel}</span>`,
+            '</span>',
+            progress
           ].join('');
           button.addEventListener('click', () => openQuickCard(place, 'nearby'));
           nearbyTrack.appendChild(button);
+          applyMiniProgressNode(button.querySelector('.mini-progress'), status);
         });
       }
 
@@ -1501,7 +2541,10 @@
         if (autoOpenScheduled) return;
         autoOpenScheduled = true;
         const target = recommendedPlace();
-        autoOpenTimer = window.setTimeout(() => openQuickCard(target, 'auto'), 2200);
+        autoOpenTimer = window.setTimeout(() => {
+          if (isCalendarVisible() || isDetailVisible() || quickCard.classList.contains('is-visible')) return;
+          openQuickCard(target, 'auto');
+        }, 2200);
       }
 
       function resetAutoOpen() {
@@ -1516,7 +2559,9 @@
           const place = findPlaceById(activeQuickId);
           if (place) {
             const status = resolveEventStatus(place);
-            quickMeta.textContent = quickMetaText(place);
+            quickDuration.textContent = quickDurationText(status);
+            quickMeta.textContent = quickMetaText(place, status);
+            applyPlaceStateIcons(quickStateIcons, place.id, 'quick');
             applyQuickProgress(status);
           }
         }
@@ -1529,8 +2574,20 @@
         }
 
         if (isSideDrawerOpen() && activeMenuId === 'favorites') {
-          renderFavoritesContent();
+          renderSideDrawerContent(activeMenuId);
+          if (isFavoriteDrawerOpen()) {
+            renderFavoriteDrawerContent();
+          }
         }
+
+        if (isCalendarDayDrawerOpen()) {
+          renderCalendarDayDrawerContent();
+        }
+      }
+
+      function refreshAfterPlaceStateChange() {
+        refreshActiveStatusUI();
+        renderNearbyCarousel();
       }
 
       function startStatusTicker() {
@@ -1544,17 +2601,28 @@
         fallbackLayer.hidden = false;
         fallbackLayer.classList.toggle('is-blocking', Boolean(blockMapDrag));
         fallbackLayer.innerHTML = '';
+        closeMarkerActionBubble();
         markerHandles.clear();
 
         places.forEach((place) => {
           const markerEl = createMarkerElement(place);
           fallbackLayer.appendChild(markerEl);
           markerHandles.set(place.id, {
+            element: markerEl,
             setActive(active) {
               markerEl.classList.toggle('is-active', active);
+            },
+            focus() {
+              markerEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             }
           });
         });
+
+        fallbackLayer.onclick = (event) => {
+          if (event.target === fallbackLayer) {
+            closeMarkerActionBubble();
+          }
+        };
 
         fallbackLayer.appendChild(createCurrentLocationFallbackElement());
         pulseFallbackCurrentLocation();
@@ -1643,8 +2711,9 @@
           }
         });
 
-        marker.addListener('click', () => openQuickCard(place, 'tap'));
+        marker.addListener('click', () => openMarkerActionBubble(place, 'google'));
         markerHandles.set(place.id, {
+          marker,
           setActive(active) {
             if (!active) {
               if (pulseTimer) {
@@ -1698,6 +2767,7 @@
         mapRoot.innerHTML = '';
         clearCurrentLocationMarker();
         markerHandles.clear();
+        closeMarkerActionBubble();
         fallbackLayer.hidden = true;
         fallbackLayer.classList.remove('is-blocking');
         fallbackLayer.innerHTML = '';
@@ -1716,6 +2786,8 @@
         });
         renderCurrentLocationOnGoogleMap(location);
         focusCurrentLocation(false);
+        mapInstance.addListener('click', () => closeMarkerActionBubble());
+        mapInstance.addListener('dragstart', () => closeMarkerActionBubble());
 
         window.google.maps.event.addListener(mapInstance, 'idle', () => {
           if (!quickCard.classList.contains('is-visible')) {
@@ -1740,6 +2812,7 @@
       function renderEmbedMap(apiKey) {
         mapRoot.innerHTML = '';
         clearCurrentLocationMarker();
+        closeMarkerActionBubble();
         mapInstance = null;
         if (!apiKey) return;
 
@@ -1763,7 +2836,10 @@
       }
 
       function canStartDetailSwipe(target) {
-        return Boolean(target.closest('.detail-grabber') || target.closest('.detail-header'));
+        const hitHandle = Boolean(target.closest('.detail-grabber') || target.closest('.detail-header'));
+        if (hitHandle) return true;
+        if (detailContent && detailContent.scrollTop > 4) return false;
+        return true;
       }
 
       function shouldExpandDetailBySwipe(delta, startAt) {
@@ -1860,7 +2936,7 @@
         const delta = detailSwipeState.deltaY;
         resetDetailSwipe();
         if (delta >= 120) {
-          closeDetailPanel(true);
+          closeDetailPanel(false);
         }
       }
 
@@ -1940,14 +3016,23 @@
         const delta = detailSwipeState.deltaY;
         resetDetailSwipe();
         if (delta >= 110) {
-          closeDetailPanel(true);
+          closeDetailPanel(false);
         }
       }
 
       async function init() {
         setRandomKaomoji();
+        initPlaceStates();
+        const persistedScheme = loadPersistedColorScheme();
+        if (persistedScheme) {
+          activeColorScheme = persistedScheme;
+        }
         applyColorScheme(activeColorScheme);
+        const persistedAlphaRatio = loadPersistedThemeRatio(THEME_ALPHA_RATIO_STORAGE_KEY, 1);
+        const persistedSaturation = loadPersistedThemeRatio(THEME_SATURATION_STORAGE_KEY, 1);
+        setThemeRatios(persistedAlphaRatio, persistedSaturation, false);
         setThemePaletteOpen(false);
+        setFavoriteDrawerOpen(false);
         applyWorldMode();
         setActiveSideItem(activeMenuId);
         startStatusTicker();
@@ -1983,22 +3068,51 @@
 
       closeQuickCard.addEventListener('click', closeQuickCardPanel);
       topKaomoji.addEventListener('click', toggleSideDrawerPanel);
-      sideDrawerBackdrop.addEventListener('click', closeSideDrawerPanel);
+      openCalendarButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openCalendarPanel();
+      });
+      closeCalendarButton.addEventListener('click', closeCalendarPanel);
+      calendarDayDrawerBackdrop.addEventListener('click', () => closeCalendarDayDrawer(true));
+      closeCalendarDayDrawerButton.addEventListener('click', () => closeCalendarDayDrawer(true));
+      sideDrawerBackdrop.addEventListener('click', () => {
+        if (isFavoriteDrawerOpen()) {
+          setFavoriteDrawerOpen(false);
+          return;
+        }
+        closeSideDrawerPanel();
+      });
       closeSideDrawer.addEventListener('click', closeSideDrawerPanel);
+      closeFavoriteDrawer.addEventListener('click', () => setFavoriteDrawerOpen(false));
       toggleThemePalette.addEventListener('click', toggleThemePalettePanel);
       themeChips.forEach((chip) => {
         chip.addEventListener('click', () => {
           applyColorScheme(chip.dataset.themeScheme || 'fresh');
-          setThemePaletteOpen(false);
         });
       });
+      if (themeAlphaRatioRange) {
+        themeAlphaRatioRange.addEventListener('input', () => {
+          setThemeRatios(Number(themeAlphaRatioRange.value) / 100, activeThemeSaturation, true);
+        });
+      }
+      if (themeSaturationRange) {
+        themeSaturationRange.addEventListener('input', () => {
+          setThemeRatios(activeThemeAlphaRatio, Number(themeSaturationRange.value) / 100, true);
+        });
+      }
       sideDrawerItems.forEach((item) => {
         item.addEventListener('click', () => {
           setActiveSideItem(item.dataset.menuId || '');
         });
       });
       openDetailButton.addEventListener('click', openCurrentPlaceDetail);
-      closeDetailButton.addEventListener('click', () => closeDetailPanel(true));
+      closeDetailButton.addEventListener('click', () => closeDetailPanel(false));
+      closeDetailButton.addEventListener('pointerup', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeDetailPanel(false);
+      });
       detailFocusButton.addEventListener('click', () => {
         const target = findPlaceById(currentFocusPlaceId || currentDetailPlaceId);
         if (target) {
@@ -2026,8 +3140,32 @@
       }
       locateButton.addEventListener('click', () => focusCurrentLocation(true));
       document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && isMarkerActionBubbleOpen()) {
+          closeMarkerActionBubble();
+          return;
+        }
+        if (event.key === 'Escape' && isCalendarDayDrawerOpen()) {
+          closeCalendarDayDrawer(true);
+          return;
+        }
+        if (event.key === 'Escape' && isCalendarVisible()) {
+          closeCalendarPanel();
+          return;
+        }
+        if (event.key === 'Escape' && isSideDrawerOpen()) {
+          if (isFavoriteDrawerOpen()) {
+            setFavoriteDrawerOpen(false);
+            return;
+          }
           closeSideDrawerPanel();
+          return;
+        }
+        if (event.key === 'Escape' && isDetailVisible()) {
+          closeDetailPanel(true);
+          return;
+        }
+        if (event.key === 'Escape' && quickCard.classList.contains('is-visible')) {
+          closeQuickCardPanel();
         }
       });
       init();
