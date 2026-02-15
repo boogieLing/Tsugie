@@ -1,14 +1,30 @@
 import SwiftUI
 
+struct NearbyCarouselItemModel: Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let snapshot: EventStatusSnapshot
+    let distanceText: String
+    let placeState: PlaceState
+}
+
 struct NearbyCarouselView: View {
-    @ObservedObject var viewModel: HomeMapViewModel
+    let items: [NearbyCarouselItemModel]
+    let activeGradient: LinearGradient
+    let activeGlowColor: Color
     let onSelectPlace: (UUID) -> Void
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 12) {
-                ForEach(viewModel.nearbyPlaces()) { place in
-                    nearbyItem(place)
+                ForEach(items) { item in
+                    NearbyCarouselItemView(
+                        item: item,
+                        activeGradient: activeGradient,
+                        activeGlowColor: activeGlowColor,
+                        onSelectPlace: onSelectPlace
+                    )
+                    .equatable()
                 }
             }
             .padding(.horizontal, 28)
@@ -19,48 +35,57 @@ struct NearbyCarouselView: View {
         .background(Color.clear)
     }
 
-    private func nearbyItem(_ place: HePlace) -> some View {
-        let snapshot = viewModel.eventSnapshot(for: place)
-        let state = viewModel.placeState(for: place.id)
+}
 
-        return Button {
-            onSelectPlace(place.id)
+private struct NearbyCarouselItemView: View, Equatable {
+    let item: NearbyCarouselItemModel
+    let activeGradient: LinearGradient
+    let activeGlowColor: Color
+    let onSelectPlace: (UUID) -> Void
+
+    static func == (lhs: NearbyCarouselItemView, rhs: NearbyCarouselItemView) -> Bool {
+        lhs.item == rhs.item
+    }
+
+    var body: some View {
+        Button {
+            onSelectPlace(item.id)
         } label: {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .center, spacing: 8) {
-                    Text(place.name)
+                    Text(item.name)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                         .lineLimit(1)
 
                     Spacer(minLength: 4)
 
-                    Text(viewModel.distanceText(for: place))
+                    Text(item.distanceText)
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
 
                     PlaceStateIconsView(
-                        placeState: state,
+                        placeState: item.placeState,
                         size: 16,
-                        activeGradient: viewModel.activePillGradient,
-                        activeGlowColor: viewModel.activeMapGlowColor,
+                        activeGradient: activeGradient,
+                        activeGlowColor: activeGlowColor,
                         activeGlowBoost: 2.5
                     )
                 }
 
                 HStack(spacing: 10) {
-                    Text(etaLabel(snapshot))
+                    Text(etaLabel(item.snapshot))
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
 
                     Spacer(minLength: 4)
 
-                    Text(startLabel(snapshot))
+                    Text(startLabel(item.snapshot))
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
                 }
 
-                TsugieMiniProgressView(snapshot: snapshot, glowBoost: 1.7)
+                TsugieMiniProgressView(snapshot: item.snapshot, glowBoost: 1.7)
                     .padding(.top, 1)
             }
             .padding(.horizontal, 12)

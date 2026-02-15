@@ -1,6 +1,6 @@
 import Foundation
 
-struct EventStatusSnapshot {
+struct EventStatusSnapshot: Equatable {
     let status: EventStatus
     let leftLabel: String
     let rightLabel: String

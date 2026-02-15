@@ -8,31 +8,15 @@ struct MarkerBubbleView: View {
     let activeGlowColor: Color
     let onTap: () -> Void
 
-    @State private var isPulseAnimating = false
-    @State private var isBreathing = false
-
     var body: some View {
         let palette = TsugieVisuals.palette(for: heType)
-        let markerScale = isSelected ? (isBreathing ? 1.12 : 1.06) : 1
 
         Button(action: onTap) {
             ZStack {
-                if isSelected {
-                    radarRing(
-                        color: activeGlowColor.opacity(0.34),
-                        lineWidth: 1.3,
-                        maxScale: 1.88,
-                        initialOpacity: 0.36,
-                        delay: 0
-                    )
-                    radarRing(
-                        color: palette.markerHalo.opacity(0.48),
-                        lineWidth: 1.0,
-                        maxScale: 1.58,
-                        initialOpacity: 0.26,
-                        delay: 0.56
-                    )
-                }
+                Circle()
+                    .fill(activeGlowColor.opacity(isSelected ? 0.34 : 0))
+                    .frame(width: 48, height: 48)
+                    .blur(radius: isSelected ? 12 : 0)
 
                 Circle()
                     .fill(palette.markerHalo.opacity(isSelected ? 0.34 : 0.14))
@@ -54,36 +38,32 @@ struct MarkerBubbleView: View {
                         glowGradient: activeGradient,
                         glowColor: activeGlowColor,
                         cornerRadius: 12,
-                        blurRadius: 8,
-                        glowOpacity: 0.74,
-                        scale: 1.07,
-                        primaryOpacity: 0.80,
-                        primaryRadius: 12,
+                        blurRadius: 11,
+                        glowOpacity: 0.94,
+                        scale: 1.12,
+                        primaryOpacity: 0.92,
+                        primaryRadius: 16,
                         primaryYOffset: 3,
-                        secondaryOpacity: 0.42,
-                        secondaryRadius: 18,
+                        secondaryOpacity: 0.58,
+                        secondaryRadius: 24,
                         secondaryYOffset: 6
                     )
-                    .scaleEffect(markerScale, anchor: .bottom)
             }
             .frame(width: 28, height: 28)
             .overlay(alignment: .trailing) {
                 placeNamePill
                     .offset(x: -38)
-                    .scaleEffect(x: isSelected ? 1 : 0.22, y: 1, anchor: .trailing)
+                    .offset(x: isSelected ? 0 : 26)
+                    .scaleEffect(x: isSelected ? 1 : 0.82, y: 1, anchor: .trailing)
                     .opacity(isSelected ? 1 : 0)
                     .allowsHitTesting(false)
-                    .animation(.easeOut(duration: isSelected ? 0.32 : 0.22), value: isSelected)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
             }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.Marker.placeActionA11y)
-        .onAppear {
-            updateMarkerState(isSelected: isSelected)
-        }
-        .onChange(of: isSelected) { _, _ in
-            updateMarkerState(isSelected: isSelected)
-        }
     }
 
     private var placeNamePill: some View {
@@ -100,47 +80,5 @@ struct MarkerBubbleView: View {
 
     private var markerGradient: LinearGradient {
         TsugieVisuals.markerGradient(for: heType)
-    }
-
-    private func radarRing(
-        color: Color,
-        lineWidth: CGFloat,
-        maxScale: CGFloat,
-        initialOpacity: Double,
-        delay: Double
-    ) -> some View {
-        Circle()
-            .stroke(color, lineWidth: lineWidth)
-            .frame(width: 28, height: 28)
-            .scaleEffect(isPulseAnimating ? maxScale : 1)
-            .opacity(isPulseAnimating ? 0 : initialOpacity)
-            .animation(
-                .easeOut(duration: 1.6)
-                    .repeatForever(autoreverses: false)
-                    .delay(delay),
-                value: isPulseAnimating
-            )
-    }
-
-    private func updateMarkerState(isSelected: Bool) {
-        guard isSelected else {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isPulseAnimating = false
-                isBreathing = false
-            }
-            return
-        }
-
-        isPulseAnimating = false
-        isBreathing = false
-
-        DispatchQueue.main.async {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                isBreathing = true
-            }
-            isPulseAnimating = true
-        }
     }
 }

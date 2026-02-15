@@ -25,13 +25,21 @@ enum MapPlaceCategoryFilter: String, CaseIterable {
 
 @MainActor
 final class HomeMapViewModel: ObservableObject {
-    @Published var mapPosition: MapCameraPosition
+    private struct MarkerEntriesCacheKey: Equatable {
+        let placesRevision: UInt64
+        let filter: MapPlaceCategoryFilter
+        let selectedPlaceID: UUID?
+        let markerActionPlaceID: UUID?
+        let isDetailVisible: Bool
+        let visibleMenuState: PlaceState?
+    }
+
+    private var mapCameraPosition: MapCameraPosition
     @Published private(set) var places: [HePlace]
-    @Published private(set) var selectedPlaceID: UUID?
-    @Published private(set) var markerActionPlaceID: UUID?
-    @Published private(set) var quickCardPlaceID: UUID?
-    @Published private(set) var detailPlaceID: UUID?
-    @Published private(set) var now: Date = Date()
+    private var _selectedPlaceID: UUID?
+    private var _markerActionPlaceID: UUID?
+    private var _quickCardPlaceID: UUID?
+    private var _detailPlaceID: UUID?
     @Published private(set) var isCalendarPresented = false
     @Published private(set) var isSideDrawerOpen = false
     @Published private(set) var isFavoriteDrawerOpen = false
@@ -60,10 +68,17 @@ final class HomeMapViewModel: ObservableObject {
     private var shouldBootstrapFromBundled: Bool
     private var resolvedCenter: CLLocationCoordinate2D
     private var autoOpenTask: DispatchWorkItem?
-    private var tickerCancellable: AnyCancellable?
     private var bootstrapTask: Task<Void, Never>?
+    private var mapZoomRestoreTask: Task<Void, Never>?
+    private var quickCardPresentationTask: Task<Void, Never>?
+    private var placesRevision: UInt64 = 1
+    private var markerEntriesCacheKey: MarkerEntriesCacheKey?
+    private var markerEntriesCache: [MapMarkerEntry] = []
+    private var markerEntriesIndexByID: [UUID: Int] = [:]
     private var hasAutoOpened = false
     private var ignoreMapTapUntil: Date?
+    private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
+    private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
 
     init(
         places: [HePlace]? = nil,
@@ -80,30 +95,55 @@ final class HomeMapViewModel: ObservableObject {
         self.nearbyLimit = max(1, nearbyLimit)
         self.shouldBootstrapFromBundled = places == nil
         self.resolvedCenter = initialCenter
+        self.placesRevision = 1
 
         let region = MKCoordinateRegion(
             center: initialCenter,
             span: defaultMapSpan
         )
-        self.mapPosition = .region(region)
+        self.mapCameraPosition = .region(region)
+    }
+
+    var mapPosition: MapCameraPosition {
+        mapCameraPosition
+    }
+
+    var now: Date {
+        Date()
     }
 
     var quickCardPlace: HePlace? {
-        guard let quickCardPlaceID else {
+        guard let quickCardPlaceID = _quickCardPlaceID else {
             return nil
         }
         return places.first { $0.id == quickCardPlaceID }
     }
 
     var detailPlace: HePlace? {
-        guard let detailPlaceID else {
+        guard let detailPlaceID = _detailPlaceID else {
             return nil
         }
         return places.first { $0.id == detailPlaceID }
     }
 
+    var selectedPlaceID: UUID? {
+        _selectedPlaceID
+    }
+
+    var markerActionPlaceID: UUID? {
+        _markerActionPlaceID
+    }
+
+    var quickCardPlaceID: UUID? {
+        _quickCardPlaceID
+    }
+
+    var detailPlaceID: UUID? {
+        _detailPlaceID
+    }
+
     var isDetailVisible: Bool {
-        detailPlaceID != nil
+        _detailPlaceID != nil
     }
 
     var activePillGradient: LinearGradient {
@@ -159,51 +199,61 @@ final class HomeMapViewModel: ObservableObject {
 
     func onViewAppear() {
         debugLog("onViewAppear places=\(self.places.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
-        startStatusTicker()
         bootstrapNearbyPlacesIfNeeded()
         scheduleAutoOpenIfNeeded()
     }
 
     func onViewDisappear() {
-        tickerCancellable?.cancel()
-        tickerCancellable = nil
         bootstrapTask?.cancel()
         bootstrapTask = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
+        guard isCalendarPresented != presented else {
+            return
+        }
         isCalendarPresented = presented
         if presented {
+            cancelPendingQuickCardPresentation()
+            cancelPendingMapZoomRestore()
             closeSideDrawerPanel()
             closeMarkerActionBubble()
         }
     }
 
     func tapMarker(placeID: UUID) {
-        guard detailPlaceID == nil else { return }
+        guard _detailPlaceID == nil else { return }
         markAnnotationTapCooldown()
+        cancelPendingQuickCardPresentation()
+        cancelPendingMapZoomRestore()
+        cancelPendingMapFocus()
 
-        if selectedPlaceID == placeID {
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                closeQuickCard()
+        if _selectedPlaceID == placeID {
+            withAnimation(quickCardDismissAnimation) {
+                closeQuickCard(restoreMapZoom: false)
             }
             return
         }
 
-        if let place = place(for: placeID) {
-            focusForBottomCard(on: place)
+        let targetPlace = place(for: placeID)
+        let focusPlace = targetPlace.flatMap { place in
+            isMapAlreadyFocusedForQuickCard(on: place) ? nil : place
         }
-
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            openQuickCard(placeID: placeID, keepMarkerActions: true)
+        withAnimation(quickCardPresentationAnimation) {
+            openQuickCard(
+                placeID: placeID,
+                keepMarkerActions: true,
+                showPanel: true,
+                focusPlace: focusPlace
+            )
         }
     }
 
     func closeMarkerActionBubble() {
-        dismissMarkerSelection()
+        dismissMarkerSelection(restoreMapZoom: false)
     }
 
-    func markAnnotationTapCooldown(_ duration: TimeInterval = 0.22) {
+    func markAnnotationTapCooldown(_ duration: TimeInterval = 0.08) {
         ignoreMapTapUntil = Date().addingTimeInterval(duration)
     }
 
@@ -211,45 +261,109 @@ final class HomeMapViewModel: ObservableObject {
         if let until = ignoreMapTapUntil, Date() < until {
             return
         }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            dismissMarkerSelection()
+        if _quickCardPlaceID != nil {
+            withAnimation(quickCardDismissAnimation) {
+                closeQuickCard(restoreMapZoom: true)
+            }
+            return
+        }
+        dismissMarkerSelection(restoreMapZoom: true)
+    }
+
+    private func dismissMarkerSelection(restoreMapZoom: Bool) {
+        guard _markerActionPlaceID != nil || _selectedPlaceID != nil else {
+            return
+        }
+        cancelPendingQuickCardPresentation()
+        cancelPendingMapFocus()
+        let focusedPlaceID = _selectedPlaceID
+        mutateInteractionState {
+            _markerActionPlaceID = nil
+            _selectedPlaceID = nil
+        }
+        if restoreMapZoom, _detailPlaceID == nil {
+            scheduleMapZoomRestoreAfterSelectionDismiss(focusedPlaceID: focusedPlaceID)
         }
     }
 
-    private func dismissMarkerSelection() {
-        let focusedPlaceID = selectedPlaceID
-        markerActionPlaceID = nil
-        selectedPlaceID = nil
-        if detailPlaceID == nil {
-            restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: focusedPlaceID)
+    func openQuickCard(
+        placeID: UUID,
+        keepMarkerActions: Bool = false,
+        showPanel: Bool = true,
+        focusPlace: HePlace? = nil
+    ) {
+        cancelPendingMapZoomRestore()
+        mutateInteractionState {
+            _selectedPlaceID = placeID
+            _markerActionPlaceID = keepMarkerActions ? placeID : nil
+            _detailPlaceID = nil
+            _quickCardPlaceID = showPanel ? placeID : nil
+            if let focusPlace {
+                mapCameraPosition = .region(
+                    MKCoordinateRegion(
+                        center: focusedCenter(for: focusPlace),
+                        span: focusedMapSpan
+                    )
+                )
+            }
         }
     }
 
-    func openQuickCard(placeID: UUID, keepMarkerActions: Bool = false) {
-        selectedPlaceID = placeID
-        markerActionPlaceID = keepMarkerActions ? placeID : nil
-        detailPlaceID = nil
-        quickCardPlaceID = placeID
+    func closeQuickCard(restoreMapZoom: Bool = true) {
+        cancelPendingQuickCardPresentation()
+        let focusedPlaceID = _selectedPlaceID
+        let shouldDismissMarkerSelection = _detailPlaceID == nil
+
+        if shouldDismissMarkerSelection {
+            cancelPendingMapFocus()
+        }
+        mutateInteractionState {
+            _quickCardPlaceID = nil
+            if shouldDismissMarkerSelection {
+                _markerActionPlaceID = nil
+                _selectedPlaceID = nil
+            }
+        }
+
+        if shouldDismissMarkerSelection, restoreMapZoom {
+            scheduleMapZoomRestoreAfterQuickDismiss(focusedPlaceID: focusedPlaceID)
+        }
     }
 
-    func closeQuickCard() {
-        quickCardPlaceID = nil
-        if detailPlaceID == nil {
-            dismissMarkerSelection()
+    func selectPlaceFromCarousel(placeID: UUID) {
+        guard _detailPlaceID == nil else { return }
+        cancelPendingQuickCardPresentation()
+        cancelPendingMapZoomRestore()
+        cancelPendingMapFocus()
+        let targetPlace = place(for: placeID)
+        let focusPlace = targetPlace.flatMap { place in
+            isMapAlreadyFocusedForQuickCard(on: place) ? nil : place
+        }
+        withAnimation(quickCardPresentationAnimation) {
+            openQuickCard(
+                placeID: placeID,
+                keepMarkerActions: true,
+                showPanel: true,
+                focusPlace: focusPlace
+            )
         }
     }
 
     func openDetailForCurrentQuickCard() {
-        guard let quickCardPlaceID else {
+        guard let quickCardPlaceID = _quickCardPlaceID else {
             return
         }
-        detailPlaceID = quickCardPlaceID
-        selectedPlaceID = quickCardPlaceID
-        markerActionPlaceID = nil
+        mutateInteractionState {
+            _detailPlaceID = quickCardPlaceID
+            _selectedPlaceID = quickCardPlaceID
+            _markerActionPlaceID = nil
+        }
     }
 
     func closeDetail() {
-        detailPlaceID = nil
+        mutateInteractionState {
+            _detailPlaceID = nil
+        }
     }
 
     func toggleSideDrawerPanel() {
@@ -257,17 +371,32 @@ final class HomeMapViewModel: ObservableObject {
             closeSideDrawerPanel()
             return
         }
-        isSideDrawerOpen = true
-        sideDrawerMenu = .none
-        isThemePaletteOpen = false
+        cancelPendingMapZoomRestore()
+        if !isSideDrawerOpen {
+            isSideDrawerOpen = true
+        }
+        if sideDrawerMenu != .none {
+            sideDrawerMenu = .none
+        }
+        if isThemePaletteOpen {
+            isThemePaletteOpen = false
+        }
         closeMarkerActionBubble()
     }
 
     func closeSideDrawerPanel() {
-        isSideDrawerOpen = false
-        isFavoriteDrawerOpen = false
-        sideDrawerMenu = .none
-        isThemePaletteOpen = false
+        if isSideDrawerOpen {
+            isSideDrawerOpen = false
+        }
+        if isFavoriteDrawerOpen {
+            isFavoriteDrawerOpen = false
+        }
+        if sideDrawerMenu != .none {
+            sideDrawerMenu = .none
+        }
+        if isThemePaletteOpen {
+            isThemePaletteOpen = false
+        }
     }
 
     func closeSideDrawerBackdrop() {
@@ -279,13 +408,23 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func setSideDrawerMenu(_ menu: SideDrawerMenu) {
-        isSideDrawerOpen = true
-        sideDrawerMenu = menu
+        if !isSideDrawerOpen {
+            isSideDrawerOpen = true
+        }
+        if sideDrawerMenu != menu {
+            sideDrawerMenu = menu
+        }
         if menu == .favorites {
-            favoriteFilter = .all
-            isFavoriteDrawerOpen = true
+            if favoriteFilter != .all {
+                favoriteFilter = .all
+            }
+            if !isFavoriteDrawerOpen {
+                isFavoriteDrawerOpen = true
+            }
         } else {
-            isFavoriteDrawerOpen = false
+            if isFavoriteDrawerOpen {
+                isFavoriteDrawerOpen = false
+            }
         }
     }
 
@@ -334,6 +473,110 @@ final class HomeMapViewModel: ObservableObject {
         reconcileSelectionForMapFilter()
     }
 
+    func mapMarkerEntries() -> [MapMarkerEntry] {
+        let isDetailVisible = _detailPlaceID != nil
+        let visibleMenuState: PlaceState? = {
+            guard !isDetailVisible, let placeID = _markerActionPlaceID else {
+                return nil
+            }
+            return placeStateStore.state(for: placeID)
+        }()
+
+        let cacheKey = MarkerEntriesCacheKey(
+            placesRevision: placesRevision,
+            filter: mapCategoryFilter,
+            selectedPlaceID: _selectedPlaceID,
+            markerActionPlaceID: _markerActionPlaceID,
+            isDetailVisible: isDetailVisible,
+            visibleMenuState: visibleMenuState
+        )
+
+        if markerEntriesCacheKey == cacheKey {
+            return markerEntriesCache
+        }
+
+        if let previousKey = markerEntriesCacheKey,
+           let incrementallyUpdated = incrementallyUpdatedMarkerEntries(from: previousKey, to: cacheKey) {
+            markerEntriesCacheKey = cacheKey
+            markerEntriesCache = incrementallyUpdated
+            return incrementallyUpdated
+        }
+
+        let entries = mapPlaces().map { place in
+            let isMenuVisible = _markerActionPlaceID == place.id && !isDetailVisible
+            return MapMarkerEntry(
+                id: place.id,
+                name: place.name,
+                coordinate: place.coordinate,
+                heType: place.heType,
+                isSelected: _selectedPlaceID == place.id,
+                isMenuVisible: isMenuVisible,
+                menuPlaceState: isMenuVisible ? placeState(for: place.id) : nil
+            )
+        }
+
+        markerEntriesCacheKey = cacheKey
+        markerEntriesCache = entries
+        markerEntriesIndexByID = Dictionary(
+            uniqueKeysWithValues: entries.enumerated().map { ($1.id, $0) }
+        )
+        return entries
+    }
+
+    private func incrementallyUpdatedMarkerEntries(
+        from previousKey: MarkerEntriesCacheKey,
+        to nextKey: MarkerEntriesCacheKey
+    ) -> [MapMarkerEntry]? {
+        guard previousKey.placesRevision == nextKey.placesRevision,
+              previousKey.filter == nextKey.filter,
+              !markerEntriesCache.isEmpty,
+              !markerEntriesIndexByID.isEmpty else {
+            return nil
+        }
+
+        let currentMenuPlaceID = nextKey.isDetailVisible ? nil : nextKey.markerActionPlaceID
+        let affectedPlaceIDs = Set([
+            previousKey.selectedPlaceID,
+            nextKey.selectedPlaceID,
+            previousKey.markerActionPlaceID,
+            nextKey.markerActionPlaceID
+        ].compactMap { $0 })
+
+        guard !affectedPlaceIDs.isEmpty else {
+            return markerEntriesCache
+        }
+
+        var updated = markerEntriesCache
+        for placeID in affectedPlaceIDs {
+            guard let index = markerEntriesIndexByID[placeID] else {
+                continue
+            }
+            let previousEntry = updated[index]
+            let nextIsSelected = (nextKey.selectedPlaceID == placeID)
+            let nextIsMenuVisible = (currentMenuPlaceID == placeID)
+            let nextMenuState: PlaceState? = nextIsMenuVisible
+                ? (nextKey.visibleMenuState ?? placeStateStore.state(for: placeID))
+                : nil
+
+            if previousEntry.isSelected == nextIsSelected &&
+                previousEntry.isMenuVisible == nextIsMenuVisible &&
+                previousEntry.menuPlaceState == nextMenuState {
+                continue
+            }
+
+            updated[index] = MapMarkerEntry(
+                id: previousEntry.id,
+                name: previousEntry.name,
+                coordinate: previousEntry.coordinate,
+                heType: previousEntry.heType,
+                isSelected: nextIsSelected,
+                isMenuVisible: nextIsMenuVisible,
+                menuPlaceState: nextMenuState
+            )
+        }
+        return updated
+    }
+
     func filteredFavoritePlaces() -> [HePlace] {
         let favorites = favoritePlaces()
         return filteredFavoritePlacesByStatus(from: favorites)
@@ -378,24 +621,24 @@ final class HomeMapViewModel: ObservableObject {
 
     func resetToCurrentLocation() {
         withAnimation(.easeInOut(duration: 0.25)) {
-            mapPosition = .region(
+            setProgrammaticMapPosition(.region(
                 MKCoordinateRegion(
                     center: resolvedCenter,
                     span: defaultMapSpan
                 )
-            )
+            ))
         }
         reloadNearbyPlacesAroundCurrentLocation(userInitiated: true)
     }
 
     func focus(on place: HePlace) {
         withAnimation(.easeInOut(duration: 0.25)) {
-            mapPosition = .region(
+            setProgrammaticMapPosition(.region(
                 MKCoordinateRegion(
                     center: place.coordinate,
                     span: focusedMapSpan
                 )
-            )
+            ))
         }
     }
 
@@ -404,7 +647,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func eventSnapshot(for place: HePlace, now: Date? = nil) -> EventStatusSnapshot {
-        EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now ?? self.now)
+        EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now ?? Date())
     }
 
     func quickProgress(for place: HePlace, now: Date? = nil) -> Double? {
@@ -480,18 +723,30 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func focusForBottomCard(on place: HePlace) {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            mapPosition = .region(
+        withAnimation(.easeOut(duration: 0.24)) {
+            setProgrammaticMapPosition(.region(
                 MKCoordinateRegion(
                     center: focusedCenter(for: place),
                     span: focusedMapSpan
                 )
-            )
+            ))
         }
     }
 
     func nearbyPlaces(limit: Int = 10) -> [HePlace] {
         Array(mapPlaces().sorted(by: isCloserAndEarlier).prefix(limit))
+    }
+
+    func nearbyCarouselItems(now: Date, limit: Int = 10) -> [NearbyCarouselItemModel] {
+        nearbyPlaces(limit: limit).map { place in
+            NearbyCarouselItemModel(
+                id: place.id,
+                name: place.name,
+                snapshot: eventSnapshot(for: place, now: now),
+                distanceText: distanceText(for: place),
+                placeState: placeState(for: place.id)
+            )
+        }
     }
 
     func mapPlaces() -> [HePlace] {
@@ -518,21 +773,26 @@ final class HomeMapViewModel: ObservableObject {
 
     private func reconcileSelectionForMapFilter() {
         let visiblePlaceIDs = Set(mapPlaces().map(\.id))
+        let nextDetailPlaceID = _detailPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
+        let nextQuickCardPlaceID = _quickCardPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
+        let nextMarkerActionPlaceID = _markerActionPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
+        let nextSelectedPlaceID = _selectedPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
 
-        if let detailPlaceID, !visiblePlaceIDs.contains(detailPlaceID) {
-            self.detailPlaceID = nil
+        let changed =
+            nextDetailPlaceID != _detailPlaceID ||
+            nextQuickCardPlaceID != _quickCardPlaceID ||
+            nextMarkerActionPlaceID != _markerActionPlaceID ||
+            nextSelectedPlaceID != _selectedPlaceID
+
+        guard changed else {
+            return
         }
 
-        if let quickCardPlaceID, !visiblePlaceIDs.contains(quickCardPlaceID) {
-            self.quickCardPlaceID = nil
-        }
-
-        if let markerActionPlaceID, !visiblePlaceIDs.contains(markerActionPlaceID) {
-            self.markerActionPlaceID = nil
-        }
-
-        if let selectedPlaceID, !visiblePlaceIDs.contains(selectedPlaceID) {
-            self.selectedPlaceID = nil
+        mutateInteractionState {
+            _detailPlaceID = nextDetailPlaceID
+            _quickCardPlaceID = nextQuickCardPlaceID
+            _markerActionPlaceID = nextMarkerActionPlaceID
+            _selectedPlaceID = nextSelectedPlaceID
         }
     }
 
@@ -562,8 +822,8 @@ final class HomeMapViewModel: ObservableObject {
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.autoOpenTask = nil
-            guard self.quickCardPlaceID == nil,
-                  self.detailPlaceID == nil,
+            guard self._quickCardPlaceID == nil,
+                  self._detailPlaceID == nil,
                   !self.isCalendarPresented,
                   let target = self.recommendedPlace() else {
                 return
@@ -610,17 +870,6 @@ final class HomeMapViewModel: ObservableObject {
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
 
-    private func startStatusTicker() {
-        guard tickerCancellable == nil else {
-            return
-        }
-        tickerCancellable = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] date in
-                self?.now = date
-            }
-    }
-
     private func bootstrapNearbyPlacesIfNeeded() {
         guard shouldBootstrapFromBundled else {
             return
@@ -661,7 +910,7 @@ final class HomeMapViewModel: ObservableObject {
                 "reloadNearby done center=(\(center.latitude),\(center.longitude)) loaded=\(loaded.count) normalized=\(normalized.count) usingMockFallback=\(usingMockFallback)"
             )
             if !normalized.isEmpty {
-                self.places = normalized
+                self.replacePlaces(normalized)
                 self.shouldBootstrapFromBundled = false
                 self.scheduleAutoOpenIfNeeded()
             }
@@ -680,19 +929,85 @@ final class HomeMapViewModel: ObservableObject {
         return source.filter { $0.heType != .nature }
     }
 
+    private func replacePlaces(_ newPlaces: [HePlace]) {
+        places = newPlaces
+        placesRevision &+= 1
+        markerEntriesCacheKey = nil
+        markerEntriesCache = []
+        markerEntriesIndexByID = [:]
+    }
+
     private func restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: UUID?) {
         guard let focusedPlaceID,
               let place = place(for: focusedPlaceID) else {
             return
         }
         withAnimation(.easeInOut(duration: 0.25)) {
-            mapPosition = .region(
+            setProgrammaticMapPosition(.region(
                 MKCoordinateRegion(
                     center: focusedCenter(for: place),
                     span: defaultMapSpan
                 )
-            )
+            ))
         }
+    }
+
+    private func scheduleMapZoomRestoreAfterQuickDismiss(focusedPlaceID: UUID?) {
+        scheduleMapZoomRestoreAfterSelectionDismiss(focusedPlaceID: focusedPlaceID)
+    }
+
+    private func scheduleMapZoomRestoreAfterSelectionDismiss(focusedPlaceID: UUID?) {
+        guard let focusedPlaceID else {
+            return
+        }
+        mapZoomRestoreTask?.cancel()
+        mapZoomRestoreTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else {
+                return
+            }
+            guard !Task.isCancelled else {
+                return
+            }
+            guard self._selectedPlaceID == nil,
+                  self._markerActionPlaceID == nil,
+                  self._quickCardPlaceID == nil,
+                  self._detailPlaceID == nil else {
+                return
+            }
+            self.restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: focusedPlaceID)
+            self.mapZoomRestoreTask = nil
+        }
+    }
+
+    private func cancelPendingMapZoomRestore() {
+        mapZoomRestoreTask?.cancel()
+        mapZoomRestoreTask = nil
+    }
+
+    private func cancelPendingQuickCardPresentation() {
+        quickCardPresentationTask?.cancel()
+        quickCardPresentationTask = nil
+    }
+
+    private func cancelPendingMapFocus() {
+        // Map focus is now synchronous; nothing to cancel.
+    }
+
+    func updateMapPositionFromInteraction(_ position: MapCameraPosition) {
+        mapCameraPosition = position
+    }
+
+    private func setProgrammaticMapPosition(_ position: MapCameraPosition) {
+        objectWillChange.send()
+        mapCameraPosition = position
+    }
+
+    private func mutateInteractionState(_ block: () -> Void, notify: Bool = true) {
+        if notify {
+            objectWillChange.send()
+        }
+        block()
     }
 
     private func focusedCenter(for place: HePlace) -> CLLocationCoordinate2D {
@@ -702,9 +1017,24 @@ final class HomeMapViewModel: ObservableObject {
         )
     }
 
+    private func isMapAlreadyFocusedForQuickCard(on place: HePlace) -> Bool {
+        guard let region = mapCameraPosition.region else {
+            return false
+        }
+        let target = focusedCenter(for: place)
+        let centerTolerance: CLLocationDegrees = 0.00028
+        let spanTolerance: CLLocationDegrees = 0.0012
+
+        return abs(region.center.latitude - target.latitude) <= centerTolerance &&
+            abs(region.center.longitude - target.longitude) <= centerTolerance &&
+            abs(region.span.latitudeDelta - focusedMapSpan.latitudeDelta) <= spanTolerance &&
+            abs(region.span.longitudeDelta - focusedMapSpan.longitudeDelta) <= spanTolerance
+    }
+
     deinit {
         autoOpenTask?.cancel()
-        tickerCancellable?.cancel()
         bootstrapTask?.cancel()
+        mapZoomRestoreTask?.cancel()
+        quickCardPresentationTask?.cancel()
     }
 }

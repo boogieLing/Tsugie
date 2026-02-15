@@ -7,20 +7,19 @@ struct MarkerActionBubbleView: View {
     let activeGlowColor: Color
     let onFavoriteTap: () -> Void
     let onCheckedInTap: () -> Void
-    private let collapsedBubbleScale: CGFloat = 0.32
-    private let menuClockwiseDegrees: CGFloat = 33
-    private let menuHorizontalShift: CGFloat = 12
+    private let menuClockwiseDegrees: Double = 33
+    private let menuRadius: CGFloat = 52
+    private let hiddenScale: CGFloat = 0.36
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             actionButton(
                 title: placeState.isFavorite ? "★" : "☆",
                 active: placeState.isFavorite,
                 label: L10n.Marker.favoriteA11y,
                 action: onFavoriteTap,
-                targetOffset: CGSize(width: -48, height: 10),
-                arcDegrees: -205,
-                delay: 0.03
+                radius: menuRadius,
+                angleDegrees: -150
             )
 
             actionButton(
@@ -28,13 +27,14 @@ struct MarkerActionBubbleView: View {
                 active: placeState.isCheckedIn,
                 label: L10n.Marker.checkedInA11y,
                 action: onCheckedInTap,
-                targetOffset: CGSize(width: 48, height: 10),
-                arcDegrees: -132,
-                delay: 0.06
+                radius: menuRadius,
+                angleDegrees: -45
             )
         }
-        .frame(width: 186, height: 108, alignment: .bottom)
-        .offset(x: menuHorizontalShift)
+        .frame(width: 1, height: 1)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     private func actionButton(
@@ -42,18 +42,11 @@ struct MarkerActionBubbleView: View {
         active: Bool,
         label: String,
         action: @escaping () -> Void,
-        targetOffset: CGSize,
-        arcDegrees: Double,
-        delay: Double
+        radius: CGFloat,
+        angleDegrees: Double
     ) -> some View {
-        let progress: CGFloat = isVisible ? 1 : 0
-        let easedProgress = progress * (2 - progress)
-        let rotatedTargetOffset = rotateClockwise(targetOffset, by: menuClockwiseDegrees)
-        let animatedOffset = orbitOffset(
-            targetOffset: rotatedTargetOffset,
-            progress: easedProgress,
-            arcDegrees: arcDegrees
-        )
+        let finalAngle = angleDegrees + menuClockwiseDegrees
+        let orbit = polarOffset(radius: isVisible ? radius : 0, angleDegrees: finalAngle)
 
         return Button(action: action) {
             Text(title)
@@ -84,47 +77,18 @@ struct MarkerActionBubbleView: View {
                     secondaryYOffset: 6
                 )
         }
-        .offset(animatedOffset)
-        .scaleEffect(collapsedBubbleScale + (1 - collapsedBubbleScale) * easedProgress)
-        .rotationEffect(.degrees((1 - Double(easedProgress)) * -18))
-        .opacity(Double(easedProgress))
-        .animation(
-            isVisible
-            ? .spring(response: 0.24, dampingFraction: 0.76).delay(delay)
-            : .easeOut(duration: 0.15).delay(delay * 0.35),
-            value: isVisible
-        )
+        .offset(orbit)
+        .scaleEffect(isVisible ? 1 : hiddenScale)
+        .opacity(isVisible ? 1 : 0)
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
 
-    private func orbitOffset(
-        targetOffset: CGSize,
-        progress: CGFloat,
-        arcDegrees: Double
-    ) -> CGSize {
-        let clampedProgress = min(max(progress, 0), 1)
-        let targetRadius = hypot(targetOffset.width, targetOffset.height)
-        guard targetRadius > 0.01 else { return .zero }
-
-        let targetAngle = atan2(targetOffset.height, targetOffset.width)
-        let arcRadians = CGFloat(arcDegrees * .pi / 180)
-        let currentAngle = targetAngle + arcRadians * (1 - clampedProgress)
-        let currentRadius = targetRadius * clampedProgress
-
+    private func polarOffset(radius: CGFloat, angleDegrees: Double) -> CGSize {
+        let radians = CGFloat(angleDegrees * .pi / 180)
         return CGSize(
-            width: cos(currentAngle) * currentRadius,
-            height: sin(currentAngle) * currentRadius
-        )
-    }
-
-    private func rotateClockwise(_ offset: CGSize, by degrees: CGFloat) -> CGSize {
-        let radians = degrees * .pi / 180
-        let cosValue = cos(radians)
-        let sinValue = sin(radians)
-        return CGSize(
-            width: offset.width * cosValue - offset.height * sinValue,
-            height: offset.width * sinValue + offset.height * cosValue
+            width: cos(radians) * radius,
+            height: sin(radians) * radius
         )
     }
 }

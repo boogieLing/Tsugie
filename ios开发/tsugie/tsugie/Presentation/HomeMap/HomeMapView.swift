@@ -6,128 +6,142 @@ struct HomeMapView: View {
     let onOpenCalendar: () -> Void
 
     var body: some View {
+        let markerThemeSignature = MarkerThemeSignature(
+            scheme: viewModel.selectedThemeScheme,
+            alphaRatio: viewModel.themeAlphaRatio,
+            saturationRatio: viewModel.themeSaturationRatio,
+            glowRatio: viewModel.themeGlowRatio
+        )
+        let markerActiveGradient = viewModel.activePillGradient
+        let markerActiveGlowColor = viewModel.activeMapGlowColor
+        let markerActionStyleHanabi = MarkerActionStyle(
+            gradient: TsugieVisuals.markerGradient(for: .hanabi),
+            glowColor: TsugieVisuals.markerGlowColor(for: .hanabi)
+        )
+        let markerActionStyleMatsuri = MarkerActionStyle(
+            gradient: TsugieVisuals.markerGradient(for: .matsuri),
+            glowColor: TsugieVisuals.markerGlowColor(for: .matsuri)
+        )
+        let markerActionStyleFallback = MarkerActionStyle(
+            gradient: TsugieVisuals.markerGradient(for: .other),
+            glowColor: TsugieVisuals.markerGlowColor(for: .other)
+        )
+        let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
+
         ZStack(alignment: .bottom) {
-                Map(position: $viewModel.mapPosition) {
-                    ForEach(viewModel.mapPlaces()) { place in
-                        Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
-                            let isMenuVisible = viewModel.markerActionPlaceID == place.id && !viewModel.isDetailVisible
-
-                            ZStack(alignment: .bottom) {
-                                MarkerActionBubbleView(
-                                    isVisible: isMenuVisible,
-                                    placeState: viewModel.placeState(for: place.id),
-                                    activeGradient: TsugieVisuals.markerGradient(for: place.heType),
-                                    activeGlowColor: TsugieVisuals.markerGlowColor(for: place.heType),
-                                    onFavoriteTap: {
-                                        viewModel.markAnnotationTapCooldown()
-                                        viewModel.toggleFavorite(for: place.id)
-                                    },
-                                    onCheckedInTap: {
-                                        viewModel.markAnnotationTapCooldown()
-                                        viewModel.toggleCheckedIn(for: place.id)
-                                    }
-                                )
-                                .offset(y: -24)
-                                .allowsHitTesting(isMenuVisible)
-
-                                MarkerBubbleView(
-                                    placeName: place.name,
-                                    heType: place.heType,
-                                    isSelected: viewModel.selectedPlaceID == place.id,
-                                    activeGradient: viewModel.activePillGradient,
-                                    activeGlowColor: viewModel.activeMapGlowColor,
-                                    onTap: {
-                                        viewModel.tapMarker(placeID: place.id)
-                                    }
-                                )
-                            }
-                            .frame(width: 220, height: 170, alignment: .bottom)
+                Map(position: mapPositionBinding) {
+                    ForEach(viewModel.mapMarkerEntries()) { entry in
+                        Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
+                            MapMarkerAnnotationView(
+                                entry: entry,
+                                themeSignature: markerThemeSignature,
+                                activeGradient: markerActiveGradient,
+                                activeGlowColor: markerActiveGlowColor,
+                                markerActionStyle: markerActionStyle(
+                                    for: entry.heType,
+                                    hanabi: markerActionStyleHanabi,
+                                    matsuri: markerActionStyleMatsuri,
+                                    fallback: markerActionStyleFallback
+                                ),
+                                onFavoriteTap: {
+                                    viewModel.markAnnotationTapCooldown()
+                                    viewModel.toggleFavorite(for: entry.id)
+                                },
+                                onCheckedInTap: {
+                                    viewModel.markAnnotationTapCooldown()
+                                    viewModel.toggleCheckedIn(for: entry.id)
+                                },
+                                onTap: {
+                                    viewModel.tapMarker(placeID: entry.id)
+                                }
+                            )
+                            .equatable()
                         }
                         .annotationTitles(.hidden)
                     }
                 }
                 .ignoresSafeArea()
-                .onTapGesture {
+                .simultaneousGesture(TapGesture().onEnded {
                     viewModel.handleMapBackgroundTap()
-                }
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        viewModel.handleMapBackgroundTap()
-                    }
-                )
+                })
 
                 mapAmbientGlowLayer
 
                 if let detailPlace = viewModel.detailPlace {
-                    DetailPanelView(
-                        place: detailPlace,
-                        snapshot: viewModel.eventSnapshot(for: detailPlace),
-                        placeState: viewModel.placeState(for: detailPlace.id),
-                        distanceText: viewModel.distanceText(for: detailPlace),
-                        openHoursText: viewModel.detailOpenHoursText(for: detailPlace),
-                        activeGradient: viewModel.activePillGradient,
-                        activeGlowColor: viewModel.activeMapGlowColor,
-                        onFocusTap: {
-                            viewModel.focus(on: detailPlace)
-                        },
-                        onClose: {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
-                                viewModel.closeDetail()
-                            }
-                        },
-                    )
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        DetailPanelView(
+                            place: detailPlace,
+                            snapshot: viewModel.eventSnapshot(for: detailPlace, now: context.date),
+                            placeState: viewModel.placeState(for: detailPlace.id),
+                            distanceText: viewModel.distanceText(for: detailPlace),
+                            openHoursText: viewModel.detailOpenHoursText(for: detailPlace, now: context.date),
+                            activeGradient: viewModel.activePillGradient,
+                            activeGlowColor: viewModel.activeMapGlowColor,
+                            onFocusTap: {
+                                viewModel.focus(on: detailPlace)
+                            },
+                            onClose: {
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                                    viewModel.closeDetail()
+                                }
+                            },
+                        )
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(15)
                 } else if let place = viewModel.quickCardPlace {
-                    QuickCardView(
-                        place: place,
-                        snapshot: viewModel.eventSnapshot(for: place),
-                        progress: viewModel.quickProgress(for: place),
-                        metaText: viewModel.quickMetaText(for: place),
-                        hintText: viewModel.quickHintText(for: place),
-                        placeState: viewModel.placeState(for: place.id),
-                        activeGradient: viewModel.activePillGradient,
-                        activeGlowColor: viewModel.activeMapGlowColor,
-                        onClose: {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
-                                viewModel.closeQuickCard()
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        QuickCardView(
+                            place: place,
+                            snapshot: viewModel.eventSnapshot(for: place, now: context.date),
+                            progress: viewModel.quickProgress(for: place, now: context.date),
+                            metaText: viewModel.quickMetaText(for: place, now: context.date),
+                            hintText: viewModel.quickHintText(for: place),
+                            placeState: viewModel.placeState(for: place.id),
+                            activeGradient: viewModel.activePillGradient,
+                            activeGlowColor: viewModel.activeMapGlowColor,
+                            onClose: {
+                                withAnimation(quickCardDismissAnimation) {
+                                    viewModel.closeQuickCard()
+                                }
+                            },
+                            onOpenDetail: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                                    viewModel.openDetailForCurrentQuickCard()
+                                }
+                            },
+                            onExpandDetailBySwipe: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                                    viewModel.openDetailForCurrentQuickCard()
+                                }
+                            },
+                            onDismissBySwipe: {
+                                withAnimation(quickCardDismissAnimation) {
+                                    viewModel.closeQuickCard()
+                                }
                             }
-                        },
-                        onOpenDetail: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                                viewModel.openDetailForCurrentQuickCard()
-                            }
-                        },
-                        onExpandDetailBySwipe: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                                viewModel.openDetailForCurrentQuickCard()
-                            }
-                        },
-                        onDismissBySwipe: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                                viewModel.closeQuickCard()
-                            }
-                        }
-                    )
+                        )
+                    }
                     .padding(.horizontal, 14)
                     .padding(.bottom, 14)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(14)
                 } else if !viewModel.isSideDrawerOpen {
-                    NearbyCarouselView(
-                        viewModel: viewModel,
-                        onSelectPlace: { placeID in
-                            if let place = viewModel.place(for: placeID) {
-                                viewModel.focusForBottomCard(on: place)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        NearbyCarouselView(
+                            items: viewModel.nearbyCarouselItems(now: context.date),
+                            activeGradient: viewModel.activePillGradient,
+                            activeGlowColor: viewModel.activeMapGlowColor,
+                            onSelectPlace: { placeID in
+                                viewModel.selectPlaceFromCarousel(placeID: placeID)
                             }
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                viewModel.openQuickCard(placeID: placeID, keepMarkerActions: true)
-                            }
-                        }
-                    )
+                        )
+                    }
                     .padding(.horizontal, -14)
                     .padding(.bottom, 16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(13)
                 }
 
                 SideDrawerLayerView(viewModel: viewModel)
@@ -190,6 +204,7 @@ struct HomeMapView: View {
         .onDisappear {
             viewModel.onViewDisappear()
         }
+        .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
     }
 
     private var mapAmbientGlowLayer: some View {
@@ -231,4 +246,101 @@ struct HomeMapView: View {
         .ignoresSafeArea()
         .allowsHitTesting(false)
     }
+
+    private var mapPositionBinding: Binding<MapCameraPosition> {
+        Binding(
+            get: { viewModel.mapPosition },
+            set: { viewModel.updateMapPositionFromInteraction($0) }
+        )
+    }
+
+    private func markerActionStyle(
+        for type: HeType,
+        hanabi: MarkerActionStyle,
+        matsuri: MarkerActionStyle,
+        fallback: MarkerActionStyle
+    ) -> MarkerActionStyle {
+        switch type {
+        case .hanabi:
+            return hanabi
+        case .matsuri:
+            return matsuri
+        default:
+            return fallback
+        }
+    }
+}
+
+struct MapMarkerEntry: Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+    let heType: HeType
+    let isSelected: Bool
+    let isMenuVisible: Bool
+    let menuPlaceState: PlaceState?
+
+    static func == (lhs: MapMarkerEntry, rhs: MapMarkerEntry) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.name == rhs.name &&
+        lhs.heType == rhs.heType &&
+        lhs.isSelected == rhs.isSelected &&
+        lhs.isMenuVisible == rhs.isMenuVisible &&
+        lhs.menuPlaceState == rhs.menuPlaceState &&
+        lhs.coordinate.latitude == rhs.coordinate.latitude &&
+        lhs.coordinate.longitude == rhs.coordinate.longitude
+    }
+}
+
+private struct MapMarkerAnnotationView: View, Equatable {
+    let entry: MapMarkerEntry
+    let themeSignature: MarkerThemeSignature
+    let activeGradient: LinearGradient
+    let activeGlowColor: Color
+    let markerActionStyle: MarkerActionStyle
+    let onFavoriteTap: () -> Void
+    let onCheckedInTap: () -> Void
+    let onTap: () -> Void
+
+    static func == (lhs: MapMarkerAnnotationView, rhs: MapMarkerAnnotationView) -> Bool {
+        lhs.entry == rhs.entry &&
+        lhs.themeSignature == rhs.themeSignature
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            MarkerActionBubbleView(
+                isVisible: entry.isMenuVisible,
+                placeState: entry.menuPlaceState ?? PlaceState(),
+                activeGradient: markerActionStyle.gradient,
+                activeGlowColor: markerActionStyle.glowColor,
+                onFavoriteTap: onFavoriteTap,
+                onCheckedInTap: onCheckedInTap
+            )
+            .offset(y: -14)
+            .allowsHitTesting(entry.isMenuVisible)
+
+            MarkerBubbleView(
+                placeName: entry.name,
+                heType: entry.heType,
+                isSelected: entry.isSelected,
+                activeGradient: activeGradient,
+                activeGlowColor: activeGlowColor,
+                onTap: onTap
+            )
+        }
+        .frame(width: 220, height: 170, alignment: .bottom)
+    }
+}
+
+private struct MarkerThemeSignature: Equatable {
+    let scheme: String
+    let alphaRatio: Double
+    let saturationRatio: Double
+    let glowRatio: Double
+}
+
+private struct MarkerActionStyle {
+    let gradient: LinearGradient
+    let glowColor: Color
 }
