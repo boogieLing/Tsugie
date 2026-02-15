@@ -6,7 +6,6 @@ struct MarkerActionBubbleView: View {
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onFavoriteTap: () -> Void
-    let onQuickTap: () -> Void
     let onCheckedInTap: () -> Void
     private let collapsedBubbleScale: CGFloat = 0.32
     private let menuClockwiseDegrees: CGFloat = 33
@@ -22,16 +21,6 @@ struct MarkerActionBubbleView: View {
                 targetOffset: CGSize(width: -48, height: 10),
                 arcDegrees: -205,
                 delay: 0.03
-            )
-
-            actionButton(
-                title: "↗",
-                active: false,
-                label: L10n.Marker.quickA11y,
-                action: onQuickTap,
-                targetOffset: CGSize(width: 0, height: -20),
-                arcDegrees: -168,
-                delay: 0
             )
 
             actionButton(

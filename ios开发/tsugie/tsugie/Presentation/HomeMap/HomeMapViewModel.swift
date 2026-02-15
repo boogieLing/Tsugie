@@ -42,6 +42,9 @@ final class HomeMapViewModel: ObservableObject {
 
     private let placeStateStore: PlaceStateStore
     private let initialCenter = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+    private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+    private let focusedMapSpan = MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+    private let focusedCenterLatitudeOffset: CLLocationDegrees = 0.0023
     private var autoOpenTask: DispatchWorkItem?
     private var tickerCancellable: AnyCancellable?
     private var hasAutoOpened = false
@@ -57,7 +60,7 @@ final class HomeMapViewModel: ObservableObject {
 
         let region = MKCoordinateRegion(
             center: initialCenter,
-            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+            span: defaultMapSpan
         )
         self.mapPosition = .region(region)
     }
@@ -153,9 +156,9 @@ final class HomeMapViewModel: ObservableObject {
         guard detailPlaceID == nil else { return }
         markAnnotationTapCooldown()
 
-        if markerActionPlaceID == placeID {
+        if selectedPlaceID == placeID {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                dismissMarkerSelection()
+                closeQuickCard()
             }
             return
         }
@@ -164,9 +167,8 @@ final class HomeMapViewModel: ObservableObject {
             focusForBottomCard(on: place)
         }
 
-        selectedPlaceID = placeID
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            markerActionPlaceID = placeID
+            openQuickCard(placeID: placeID, keepMarkerActions: true)
         }
     }
 
@@ -188,8 +190,12 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func dismissMarkerSelection() {
+        let focusedPlaceID = selectedPlaceID
         markerActionPlaceID = nil
         selectedPlaceID = nil
+        if detailPlaceID == nil {
+            restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: focusedPlaceID)
+        }
     }
 
     func openQuickCard(placeID: UUID, keepMarkerActions: Bool = false) {
@@ -202,7 +208,7 @@ final class HomeMapViewModel: ObservableObject {
     func closeQuickCard() {
         quickCardPlaceID = nil
         if detailPlaceID == nil {
-            selectedPlaceID = nil
+            dismissMarkerSelection()
         }
     }
 
@@ -322,7 +328,7 @@ final class HomeMapViewModel: ObservableObject {
 
     func openQuickFromDrawer(placeID: UUID) {
         closeSideDrawerPanel()
-        openQuickCard(placeID: placeID)
+        openQuickCard(placeID: placeID, keepMarkerActions: true)
     }
 
     func toggleStartNotification() {
@@ -338,7 +344,7 @@ final class HomeMapViewModel: ObservableObject {
             mapPosition = .region(
                 MKCoordinateRegion(
                     center: initialCenter,
-                    span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+                    span: defaultMapSpan
                 )
             )
         }
@@ -349,7 +355,7 @@ final class HomeMapViewModel: ObservableObject {
             mapPosition = .region(
                 MKCoordinateRegion(
                     center: place.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                    span: focusedMapSpan
                 )
             )
         }
@@ -439,11 +445,8 @@ final class HomeMapViewModel: ObservableObject {
         withAnimation(.easeInOut(duration: 0.25)) {
             mapPosition = .region(
                 MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(
-                        latitude: place.coordinate.latitude + 0.0023,
-                        longitude: place.coordinate.longitude
-                    ),
-                    span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                    center: focusedCenter(for: place),
+                    span: focusedMapSpan
                 )
             )
         }
@@ -536,6 +539,28 @@ final class HomeMapViewModel: ObservableObject {
             .sink { [weak self] date in
                 self?.now = date
             }
+    }
+
+    private func restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: UUID?) {
+        guard let focusedPlaceID,
+              let place = place(for: focusedPlaceID) else {
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            mapPosition = .region(
+                MKCoordinateRegion(
+                    center: focusedCenter(for: place),
+                    span: defaultMapSpan
+                )
+            )
+        }
+    }
+
+    private func focusedCenter(for place: HePlace) -> CLLocationCoordinate2D {
+        CLLocationCoordinate2D(
+            latitude: place.coordinate.latitude + focusedCenterLatitudeOffset,
+            longitude: place.coordinate.longitude
+        )
     }
 
     deinit {

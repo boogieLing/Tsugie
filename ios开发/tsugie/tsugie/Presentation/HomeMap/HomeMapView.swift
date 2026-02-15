@@ -22,12 +22,6 @@ struct HomeMapView: View {
                                         viewModel.markAnnotationTapCooldown()
                                         viewModel.toggleFavorite(for: place.id)
                                     },
-                                    onQuickTap: {
-                                        viewModel.markAnnotationTapCooldown()
-                                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                            viewModel.openQuickCard(placeID: place.id)
-                                        }
-                                    },
                                     onCheckedInTap: {
                                         viewModel.markAnnotationTapCooldown()
                                         viewModel.toggleCheckedIn(for: place.id)
@@ -127,7 +121,7 @@ struct HomeMapView: View {
                                 viewModel.focusForBottomCard(on: place)
                             }
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                viewModel.openQuickCard(placeID: placeID)
+                                viewModel.openQuickCard(placeID: placeID, keepMarkerActions: true)
                             }
                         }
                     )
