@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		62BD0A702F40CCC700C82F4D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 52BD0A452F40CCC600C82F4D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 52BD0A4C2F40CCC600C82F4D;
+			remoteInfo = tsugie;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		52BD0A4D2F40CCC600C82F4D /* tsugie.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tsugie.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		62BD0A6D2F40CCC700C82F4D /* tsugieTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = tsugieTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = tsugie;
 			sourceTree = "<group>";
 		};
+		62BD0A6E2F40CCC700C82F4D /* tsugieTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = tsugieTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		52BD0A4A2F40CCC600C82F4D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		62BD0A6A2F40CCC700C82F4D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				52BD0A4F2F40CCC600C82F4D /* tsugie */,
+				62BD0A6E2F40CCC700C82F4D /* tsugieTests */,
 				52BD0A4E2F40CCC600C82F4D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				52BD0A4D2F40CCC600C82F4D /* tsugie.app */,
+				62BD0A6D2F40CCC700C82F4D /* tsugieTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 52BD0A4D2F40CCC600C82F4D /* tsugie.app */;
 			productType = "com.apple.product-type.application";
 		};
+		62BD0A6F2F40CCC700C82F4D /* tsugieTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 62BD0A742F40CCC700C82F4D /* Build configuration list for PBXNativeTarget "tsugieTests" */;
+			buildPhases = (
+				62BD0A6C2F40CCC700C82F4D /* Sources */,
+				62BD0A6A2F40CCC700C82F4D /* Frameworks */,
+				62BD0A6B2F40CCC700C82F4D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				62BD0A712F40CCC700C82F4D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				62BD0A6E2F40CCC700C82F4D /* tsugieTests */,
+			);
+			name = tsugieTests;
+			packageProductDependencies = (
+			);
+			productName = tsugieTests;
+			productReference = 62BD0A6D2F40CCC700C82F4D /* tsugieTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					52BD0A4C2F40CCC600C82F4D = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					62BD0A6F2F40CCC700C82F4D = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 52BD0A4C2F40CCC600C82F4D;
 					};
 				};
 			};
@@ -102,12 +154,20 @@
 			projectRoot = "";
 			targets = (
 				52BD0A4C2F40CCC600C82F4D /* tsugie */,
+				62BD0A6F2F40CCC700C82F4D /* tsugieTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		52BD0A4B2F40CCC600C82F4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		62BD0A6B2F40CCC700C82F4D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -124,7 +184,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		62BD0A6C2F40CCC700C82F4D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		62BD0A712F40CCC700C82F4D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 52BD0A4C2F40CCC600C82F4D /* tsugie */;
+			targetProxy = 62BD0A702F40CCC700C82F4D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		52BD0A562F40CCC700C82F4D /* Debug */ = {
@@ -312,6 +387,46 @@
 			};
 			name = Release;
 		};
+		62BD0A722F40CCC700C82F4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RSD4Q22Q8D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ushouldknowr0.tsugieTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/tsugie.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/tsugie";
+			};
+			name = Debug;
+		};
+		62BD0A732F40CCC700C82F4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RSD4Q22Q8D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ushouldknowr0.tsugieTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/tsugie.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/tsugie";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -329,6 +444,15 @@
 			buildConfigurations = (
 				52BD0A592F40CCC700C82F4D /* Debug */,
 				52BD0A5A2F40CCC700C82F4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		62BD0A742F40CCC700C82F4D /* Build configuration list for PBXNativeTarget "tsugieTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				62BD0A722F40CCC700C82F4D /* Debug */,
+				62BD0A732F40CCC700C82F4D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

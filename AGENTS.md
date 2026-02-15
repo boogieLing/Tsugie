@@ -206,3 +206,4 @@
 - 新增祭典抓取独立目录：`数据端/OMATSURI/`（与 `数据端/HANABI/` 同级）。
 - 祭典（お祭り）相关的站点清单、抓取配置、字段融合与后续实现，统一放在 `数据端/OMATSURI/`。
 - 花火（HANABI）与祭典（OMATSURI）保持目录与代码解耦，避免在同一子项目内混放不同垂类逻辑。
+- 数据端统一运维脚本入口固定为：`数据端/scripts/`（如 `start_ops_console.sh`、`ops_console.sh`）；`HANABI/` 与 `OMATSURI/` 内仅保留兼容转发入口，不再作为主入口维护。
