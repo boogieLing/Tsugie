@@ -22,7 +22,7 @@ struct DetailPanelView: View {
                 .padding(.bottom, 8)
 
             HStack {
-                Text("へ 詳細")
+                Text(L10n.Detail.title)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color(red: 0.42, green: 0.55, blue: 0.60))
 
@@ -37,7 +37,7 @@ struct DetailPanelView: View {
                         .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("詳細を閉じる")
+                .accessibilityLabel(L10n.Detail.closeA11y)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -161,11 +161,11 @@ struct DetailPanelView: View {
     private var miniMapBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("マップ上の位置")
+                Text(L10n.Detail.mapLocation)
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                 Spacer()
-                Button("フォーカス", action: onFocusTap)
+                Button(L10n.Detail.focus, action: onFocusTap)
                     .font(.system(size: 12, weight: .bold))
                     .padding(.horizontal, 12)
                     .frame(height: 30)
@@ -189,7 +189,7 @@ struct DetailPanelView: View {
 
     private var introBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("紹介")
+            Text(L10n.Detail.intro)
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
             Text(place.detailDescription)
@@ -207,11 +207,11 @@ struct DetailPanelView: View {
 
     private var statsBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("いまの空気感")
+            Text(L10n.Detail.atmosphere)
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-            statRow(title: "熱気", value: place.heatScore)
-            statRow(title: "驚き", value: place.surpriseScore)
+            statRow(title: L10n.Detail.heat, value: place.heatScore)
+            statRow(title: L10n.Detail.surprise, value: place.surpriseScore)
         }
         .padding(12)
         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -274,38 +274,41 @@ struct DetailPanelView: View {
 
     private var progressTitle: String {
         switch snapshot.status {
-        case .ongoing: "活動進行度"
-        case .upcoming: "開始までの時間軸"
-        case .ended: "活動ステータス"
-        case .unknown: "時間情報"
+        case .ongoing: L10n.Detail.progressTitleOngoing
+        case .upcoming: L10n.Detail.progressTitleUpcoming
+        case .ended: L10n.Detail.progressTitleEnded
+        case .unknown: L10n.Detail.progressTitleUnknown
         }
     }
 
     private var progressMeta: String {
         switch snapshot.status {
         case .ongoing:
-            "進行中 \(Int((snapshot.progress ?? 0) * 100))% ・ 残り\(snapshot.etaLabel)"
+            L10n.Detail.progressMetaOngoing(
+                percent: Int((snapshot.progress ?? 0) * 100),
+                eta: snapshot.etaLabel
+            )
         case .upcoming:
-            snapshot.etaLabel.isEmpty ? "開始時刻を確認中" : "あと\(snapshot.etaLabel)"
+            snapshot.etaLabel.isEmpty ? L10n.Detail.upcomingPending : L10n.Detail.progressMetaUpcoming(snapshot.etaLabel)
         case .ended:
-            "終了済み"
+            L10n.EventStatus.ended
         case .unknown:
-            "時刻未定"
+            L10n.Common.unknownTime
         }
     }
 
     private var progressLeft: String {
         switch snapshot.status {
-        case .ongoing, .ended: "開始 \(snapshot.startLabel)"
-        case .upcoming, .unknown: "いま"
+        case .ongoing, .ended: L10n.Detail.startAt(snapshot.startLabel)
+        case .upcoming, .unknown: L10n.Common.now
         }
     }
 
     private var progressRight: String {
         switch snapshot.status {
-        case .ongoing, .ended: "終了 \(snapshot.endLabel)"
-        case .upcoming: "開始 \(snapshot.startLabel)"
-        case .unknown: "開始 未定"
+        case .ongoing, .ended: L10n.Detail.endAt(snapshot.endLabel)
+        case .upcoming: L10n.Detail.startAt(snapshot.startLabel)
+        case .unknown: L10n.Common.startUnknown
         }
     }
 

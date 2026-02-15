@@ -12,6 +12,7 @@ struct RootView: View {
                 isCalendarPresented = true
             }
         )
+        .environment(\.locale, viewModel.selectedLanguageLocale)
         .fullScreenCover(
             isPresented: $isCalendarPresented,
             onDismiss: {
@@ -32,6 +33,7 @@ struct RootView: View {
                 },
                 now: viewModel.now
             )
+            .environment(\.locale, viewModel.selectedLanguageLocale)
         }
     }
 }

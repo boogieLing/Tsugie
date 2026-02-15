@@ -100,6 +100,6 @@ struct MarkerBubbleView: View {
             .animation(.easeInOut(duration: 0.2), value: isSelected)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("地点操作")
+        .accessibilityLabel(L10n.Marker.placeActionA11y)
     }
 }

@@ -19,7 +19,7 @@ struct MarkerActionBubbleView: View {
             actionButton(
                 title: placeState.isFavorite ? "★" : "☆",
                 active: placeState.isFavorite,
-                label: "行きたいに留める",
+                label: L10n.Marker.favoriteA11y,
                 action: onFavoriteTap
             )
             .offset(x: -44, y: 4)
@@ -27,7 +27,7 @@ struct MarkerActionBubbleView: View {
             actionButton(
                 title: "↗",
                 active: false,
-                label: "クイック表示を開く",
+                label: L10n.Marker.quickA11y,
                 action: onQuickTap
             )
             .offset(y: -16)
@@ -35,7 +35,7 @@ struct MarkerActionBubbleView: View {
             actionButton(
                 title: placeState.isCheckedIn ? "◉" : "◌",
                 active: placeState.isCheckedIn,
-                label: "訪問ずみとして記録",
+                label: L10n.Marker.checkedInA11y,
                 action: onCheckedInTap
             )
             .offset(x: 44, y: 4)

@@ -13,12 +13,13 @@ struct NearbyCarouselView: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 2)
+            .background(Color.clear)
         }
         .scrollIndicators(.hidden)
+        .background(Color.clear)
     }
 
     private func nearbyItem(_ place: HePlace) -> some View {
-        let palette = TsugieVisuals.palette(for: place.heType)
         let snapshot = viewModel.eventSnapshot(for: place)
         let state = viewModel.placeState(for: place.id)
 
@@ -67,25 +68,14 @@ struct NearbyCarouselView: View {
             .frame(width: 232, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.95),
-                                Color.white.opacity(0.84),
-                                palette.nearbyTo.opacity(0.30)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.white.opacity(0.64))
             )
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.9), lineWidth: 1)
+                    .stroke(Color(red: 0.89, green: 0.95, blue: 0.97, opacity: 0.94), lineWidth: 1)
             )
-            .shadow(color: Color(red: 0.15, green: 0.35, blue: 0.42, opacity: 0.13), radius: 10, x: 0, y: 5)
-            .shadow(color: palette.nearbyFrom.opacity(0.34), radius: 18, x: 0, y: 0)
-            .shadow(color: palette.nearbyTo.opacity(0.30), radius: 28, x: 0, y: 0)
+            .shadow(color: Color(red: 0.13, green: 0.31, blue: 0.38, opacity: 0.14), radius: 12, x: 0, y: 6)
         }
         .buttonStyle(.plain)
     }
@@ -93,24 +83,24 @@ struct NearbyCarouselView: View {
     private func etaLabel(_ snapshot: EventStatusSnapshot) -> String {
         switch snapshot.status {
         case .ongoing:
-            return "残り \(snapshot.etaLabel)"
+            return L10n.Nearby.remaining(snapshot.etaLabel)
         case .upcoming:
-            return snapshot.etaLabel.isEmpty ? "開催準備中" : "あと \(snapshot.etaLabel)"
+            return snapshot.etaLabel.isEmpty ? L10n.Nearby.preparing : L10n.Nearby.startsIn(snapshot.etaLabel)
         case .ended:
-            return "終了済み"
+            return L10n.EventStatus.ended
         case .unknown:
-            return "時刻未定"
+            return L10n.Common.unknownTime
         }
     }
 
     private func startLabel(_ snapshot: EventStatusSnapshot) -> String {
         switch snapshot.status {
         case .ongoing, .upcoming:
-            return "\(snapshot.startLabel) 開始"
+            return L10n.Nearby.startsAt(snapshot.startLabel)
         case .ended:
-            return "终了 \(snapshot.endLabel)"
+            return L10n.Nearby.endedAt(snapshot.endLabel)
         case .unknown:
-            return "開始 未定"
+            return L10n.Common.startUnknown
         }
     }
 }

@@ -34,6 +34,8 @@ final class HomeMapViewModel: ObservableObject {
     @Published var selectedThemeScheme = "fresh"
     @Published var themeAlphaRatio: Double = 1
     @Published var themeSaturationRatio: Double = 1
+    @Published var themeGlowRatio: Double = 1
+    @Published var selectedLanguageCode: String = L10n.languageCode
     @Published var worldMode = false
     @Published var startNotificationEnabled = true
     @Published var nearbyNotificationEnabled = false
@@ -93,11 +95,38 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     var activeMapGlowColor: Color {
-        TsugieVisuals.mapGlowColor(
+        let glow = min(max(themeGlowRatio, 0.6), 1.8)
+        return TsugieVisuals.mapGlowColor(
             scheme: selectedThemeScheme,
-            alphaRatio: themeAlphaRatio,
-            saturationRatio: themeSaturationRatio
+            alphaRatio: themeAlphaRatio * glow,
+            saturationRatio: themeSaturationRatio * (0.92 + glow * 0.08)
         )
+    }
+
+    var selectedLanguageLocale: Locale {
+        Locale(identifier: selectedLanguageCode)
+    }
+
+    var currentLanguageShortLabel: String {
+        switch selectedLanguageCode {
+        case "zh-Hans":
+            return "中"
+        case "en":
+            return "EN"
+        default:
+            return "日"
+        }
+    }
+
+    var currentLanguageDisplayName: String {
+        switch selectedLanguageCode {
+        case "zh-Hans":
+            return L10n.SideDrawer.languageNameZhHans
+        case "en":
+            return L10n.SideDrawer.languageNameEn
+        default:
+            return L10n.SideDrawer.languageNameJa
+        }
     }
 
     func onViewAppear() {
@@ -208,6 +237,23 @@ final class HomeMapViewModel: ObservableObject {
         selectedThemeScheme = scheme
     }
 
+    func setLanguage(_ code: String) {
+        let all = ["zh-Hans", "en", "ja"]
+        let resolved = all.contains(code) ? code : "ja"
+        selectedLanguageCode = resolved
+        L10n.setLanguageCode(resolved)
+    }
+
+    func cycleLanguage() {
+        let all = ["zh-Hans", "en", "ja"]
+        guard let index = all.firstIndex(of: selectedLanguageCode) else {
+            setLanguage(all[0])
+            return
+        }
+        let next = all[(index + 1) % all.count]
+        setLanguage(next)
+    }
+
     func openFavoriteDrawer() {
         isSideDrawerOpen = true
         sideDrawerMenu = .favorites
@@ -312,16 +358,16 @@ final class HomeMapViewModel: ObservableObject {
     func timeRangeText(for place: HePlace, now: Date? = nil) -> String {
         let snapshot = eventSnapshot(for: place, now: now)
         guard snapshot.status != .unknown else {
-            return "時刻未定"
+            return L10n.Common.unknownTime
         }
-        return "\(snapshot.startLabel) - \(snapshot.endLabel)"
+        return L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
     }
 
     func detailOpenHoursText(for place: HePlace, now: Date? = nil) -> String {
         if let openHours = place.openHours, !openHours.isEmpty {
             return openHours
         }
-        return "開放時間 \(timeRangeText(for: place, now: now))"
+        return L10n.Common.openHours(timeRangeText(for: place, now: now))
     }
 
     func distanceText(for place: HePlace) -> String {
@@ -331,7 +377,7 @@ final class HomeMapViewModel: ObservableObject {
         }
 
         let km = meters / 1_000
-        return "\(km.formatted(.number.precision(.fractionLength(1))))km"
+        return "\(km.formatted(.number.locale(selectedLanguageLocale).precision(.fractionLength(1))))km"
     }
 
     func quickHintText(for place: HePlace) -> String {
@@ -382,11 +428,11 @@ final class HomeMapViewModel: ObservableObject {
 
     private func quickStartDateText(for snapshot: EventStatusSnapshot) -> String {
         guard let startDate = snapshot.startDate else {
-            return "日付未定"
+            return L10n.Common.dateUnknown
         }
 
         if Calendar.current.isDateInToday(startDate) {
-            return "本日開催！まもなく！"
+            return L10n.Home.quickDateTodaySoon
         }
 
         return startDate.formatted(
@@ -394,6 +440,7 @@ final class HomeMapViewModel: ObservableObject {
                 .year(.defaultDigits)
                 .month(.twoDigits)
                 .day(.twoDigits)
+                .locale(selectedLanguageLocale)
         )
     }
 

@@ -42,8 +42,8 @@ enum EventStatusResolver {
         guard let startAt else {
             return EventStatusSnapshot( 
                 status: .unknown,
-                leftLabel: "時刻未定",
-                rightLabel: "開始 未定",
+                leftLabel: L10n.Common.unknownTime,
+                rightLabel: L10n.Common.startUnknown,
                 startLabel: "--:--",
                 endLabel: "--:--",
                 etaLabel: "",
@@ -68,8 +68,8 @@ enum EventStatusResolver {
             let remainSec = max(Int(ceil(endAt.timeIntervalSince(now))), 0)
             return EventStatusSnapshot(
                 status: .ongoing,
-                leftLabel: "残り\(formatCountdownByGranularity(remainSec))",
-                rightLabel: "終了 \(formatHm(endAt))",
+                leftLabel: L10n.EventStatus.leftRemaining(formatCountdownByGranularity(remainSec)),
+                rightLabel: L10n.EventStatus.rightEndAt(formatHm(endAt)),
                 startLabel: startLabel,
                 endLabel: endLabel,
                 etaLabel: formatCountdownByGranularity(remainSec),
@@ -86,8 +86,8 @@ enum EventStatusResolver {
             let diffMinutes = max(Int(ceil(Double(diffSec) / 60)), 1)
             return EventStatusSnapshot(
                 status: .upcoming,
-                leftLabel: "開始まで\(eta)",
-                rightLabel: "開始 \(startLabel)",
+                leftLabel: L10n.EventStatus.leftStartsIn(eta),
+                rightLabel: L10n.EventStatus.rightStartAt(startLabel),
                 startLabel: startLabel,
                 endLabel: endLabel,
                 etaLabel: eta,
@@ -100,8 +100,8 @@ enum EventStatusResolver {
 
         return EventStatusSnapshot(
             status: .ended,
-            leftLabel: "終了済み",
-            rightLabel: endAt.map { "終了 \(formatHm($0))" } ?? "終了",
+            leftLabel: L10n.EventStatus.ended,
+            rightLabel: endAt.map { L10n.EventStatus.rightEndAt(formatHm($0)) } ?? L10n.EventStatus.endOnly,
             startLabel: startLabel,
             endLabel: endLabel,
             etaLabel: "00:00:00",
@@ -127,14 +127,14 @@ enum EventStatusResolver {
         let seconds = safe % 60
 
         if safe >= 86_400 {
-            return "\(days)日\(hours % 24)時間"
+            return L10n.EventStatus.countdownDaysHours(days: days, hours: hours % 24)
         }
         if safe >= 3_600 {
-            return "\(hours)時間\(minutes)分\(seconds)秒"
+            return L10n.EventStatus.countdownHoursMinutesSeconds(hours: hours, minutes: minutes, seconds: seconds)
         }
         if safe >= 300 {
-            return "\(safe / 60)分\(seconds)秒"
+            return L10n.EventStatus.countdownMinutesSeconds(minutes: safe / 60, seconds: seconds)
         }
-        return "\(safe)秒"
+        return L10n.EventStatus.countdownSeconds(safe)
     }
 }

@@ -1,0 +1,126 @@
+"common.close" = "閉じる";
+"common.unknown_time" = "時刻未定";
+"common.start_unknown" = "開始 未定";
+"common.date_unknown" = "日付未定";
+"common.now" = "いま";
+"common.time_range" = "%@ - %@";
+"common.open_hours" = "開放時間 %@";
+
+"event.ended" = "終了済み";
+"event.end_only" = "終了";
+"event.left.remaining" = "残り%@";
+"event.right.end_at" = "終了 %@";
+"event.left.starts_in" = "開始まで%@";
+"event.right.start_at" = "開始 %@";
+"event.countdown.days_hours" = "%d日%d時間";
+"event.countdown.hours_minutes_seconds" = "%d時間%d分%d秒";
+"event.countdown.minutes_seconds" = "%d分%d秒";
+"event.countdown.seconds" = "%d秒";
+
+"home.calendar.button" = "時めぐり";
+"home.calendar.open_a11y" = "時めぐりカレンダーを開く";
+"home.location.reset_a11y" = "現在地へ戻る";
+"home.menu.open_a11y" = "メニューを開く";
+"home.quick.date_today_soon" = "本日開催！まもなく！";
+
+"quickcard.fast_plan" = "⚡ 最速攻略";
+"quickcard.close_a11y" = "クイック表示を閉じる";
+"quickcard.view_details" = "詳細を見る";
+"quickcard.start_route" = "ルートを開始";
+
+"nearby.preparing" = "開催準備中";
+"nearby.remaining" = "残り %@";
+"nearby.starts_in" = "あと %@";
+"nearby.starts_at" = "%@ 開始";
+"nearby.ended_at" = "終了 %@";
+
+"marker.favorite_a11y" = "行きたいに留める";
+"marker.quick_a11y" = "クイック表示を開く";
+"marker.checked_in_a11y" = "訪問ずみとして記録";
+"marker.place_action_a11y" = "地点操作";
+
+"place_state.favorite_a11y" = "想要访问";
+"place_state.checked_in_a11y" = "已经访问";
+
+"detail.title" = "へ 詳細";
+"detail.close_a11y" = "詳細を閉じる";
+"detail.map_location" = "マップ上の位置";
+"detail.focus" = "フォーカス";
+"detail.intro" = "紹介";
+"detail.atmosphere" = "いまの空気感";
+"detail.heat" = "熱気";
+"detail.surprise" = "驚き";
+"detail.progress_title.ongoing" = "活動進行度";
+"detail.progress_title.upcoming" = "開始までの時間軸";
+"detail.progress_title.ended" = "活動ステータス";
+"detail.progress_title.unknown" = "時間情報";
+"detail.upcoming_pending" = "開始時刻を確認中";
+"detail.progress_meta.ongoing" = "進行中 %d%% ・ 残り%@";
+"detail.progress_meta.upcoming" = "あと%@";
+"detail.start_at" = "開始 %@";
+"detail.end_at" = "終了 %@";
+
+"drawer.title" = "つぎへ ナビ";
+"drawer.menu.favorites" = "行きたい栞";
+"drawer.menu.notifications" = "知らせの灯";
+"drawer.menu.contact" = "ことづて";
+"drawer.favorites.subtitle" = "行きたい余韻と、歩いた足あとをここに。";
+"drawer.favorites.empty" = "まだ栞は白紙です。";
+"drawer.favorites.open" = "栞ドロワーをひらく";
+"drawer.notifications.title" = "通知設定";
+"drawer.notifications.start_reminder.title" = "開始前リマインド";
+"drawer.notifications.start_reminder.hint" = "開催直前にお知らせ";
+"drawer.notifications.nearby.title" = "周辺スポット通知";
+"drawer.notifications.nearby.hint" = "少し遠めの候補も通知";
+"drawer.contact.title" = "お問い合わせ";
+"drawer.contact.mail_action" = "メールで連絡する";
+"drawer.contact.copy_mail" = "メールアドレスをコピー";
+"drawer.contact.mail_subject" = "Tsugie 問い合わせ";
+"drawer.none_hint" = "項目をひとつ選ぶと、ここに静かにひらきます。";
+"drawer.filter.all" = "すべて";
+"drawer.filter.planned" = "まだ訪れず";
+"drawer.filter.checked" = "足あと済み";
+"drawer.slider.alpha" = "透過比率";
+"drawer.slider.saturation" = "彩度";
+"drawer.slider.glow" = "光彩";
+"drawer.language.zh_hans" = "中国語";
+"drawer.language.en" = "英語";
+"drawer.language.ja" = "日本語";
+"drawer.language.switch_a11y" = "言語を切り替える（現在: %@）";
+
+"calendar.title" = "時めぐりカレンダー";
+"calendar.subtitle" = "時間軸のへ統計（マップは位置軸）";
+"calendar.close_a11y" = "カレンダーを閉じる";
+"calendar.empty" = "この期間のへはありません。";
+"calendar.day_title" = "%@ のへ";
+"calendar.day_title.fallback" = "日付のへ";
+"calendar.drawer.summary" = "時間軸から抽出。並び順は近さと開始の早さを優先。";
+"calendar.drawer.no_match" = "該当なし";
+"calendar.selected_day.empty" = "選択した日のへはありません。";
+"calendar.category.all" = "全部";
+"calendar.category.hanabi" = "花火";
+"calendar.category.matsuri" = "祭典";
+"calendar.category.nature" = "景観";
+"calendar.category.other" = "その他";
+
+"placeholder.title" = "時めぐり";
+"placeholder.desc1" = "カレンダーページは時間軸の意味を持ち、マップページの位置軸とは独立しています。";
+"placeholder.desc2" = "第1段階では独立ページのプレースホルダーのみを保持し、後続段階で月間カレンダーと当日ドロワーを接続します。";
+
+"mock.sumida.hint" = "✨ (ง •̀_•́)ง いま出発が最適";
+"mock.sumida.map_spot" = "隅田川テラス側、南西エリア";
+"mock.sumida.desc" = "川沿いの視界が広く、写真映えしやすいエリア。混雑前に到着すると体験が安定します。";
+"mock.sumida.image_tag" = "花火";
+"mock.sumida.image_hint" = "川沿いの視界が広く、写真映えしやすいエリア";
+
+"mock.asakusa.hint" = "🏮 いま境内の熱気が高まっています";
+"mock.asakusa.map_spot" = "雷門側の境内中央エリア";
+"mock.asakusa.desc" = "祭りの導線が分散しているため、参道側から回遊すると混雑を避けやすいです。";
+"mock.asakusa.image_tag" = "祭り";
+"mock.asakusa.image_hint" = "提灯の明かりが濃く、夜の回遊が楽しい";
+
+"mock.oshiage.hint" = "🌙 余韻散歩に向いた静かな視点場";
+"mock.oshiage.map_spot" = "押上駅東側の見晴らしポイント";
+"mock.oshiage.desc" = "終演後の余韻を楽しむスポット。短時間滞在でも雰囲気を掴みやすい場所です。";
+"mock.oshiage.image_tag" = "夜景";
+"mock.oshiage.image_hint" = "高所から街明かりが一望できる穏やかな場所";

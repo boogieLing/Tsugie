@@ -6,12 +6,12 @@ struct CalendarPlaceholderView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("時めぐり")
+                Text(L10n.Placeholder.title)
                     .font(.largeTitle.weight(.bold))
-                Text("日历页是时间维度语义，与地图页的位置维度语义独立。")
+                Text(L10n.Placeholder.desc1)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                Text("第一阶段仅保留独立页面占位，后续阶段接入完整月历与当日抽屉。")
+                Text(L10n.Placeholder.desc2)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -20,7 +20,7 @@ struct CalendarPlaceholderView: View {
             .padding(20)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("閉じる") {
+                    Button(L10n.Common.close) {
                         onClose()
                     }
                 }

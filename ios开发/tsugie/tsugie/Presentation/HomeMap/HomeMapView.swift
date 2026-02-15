@@ -48,29 +48,14 @@ struct HomeMapView: View {
                     }
                 }
                 .ignoresSafeArea()
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.24),
-                            Color.white.opacity(0.00)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle()
-                            .fill(viewModel.activeMapGlowColor)
-                            .frame(width: 260, height: 260)
-                            .offset(x: 80, y: 120)
-                    }
-                    .allowsHitTesting(false)
-                }
                 .onTapGesture {
                     if viewModel.isSideDrawerOpen {
                         viewModel.closeSideDrawerPanel()
                     }
                     viewModel.closeMarkerActionBubble()
                 }
+
+                mapAmbientGlowLayer
 
                 if let detailPlace = viewModel.detailPlace {
                     DetailPanelView(
@@ -154,7 +139,7 @@ struct HomeMapView: View {
                         viewModel.closeMarkerActionBubble()
                         onOpenCalendar()
                     } label: {
-                        Text("時めぐり")
+                        Text(L10n.Home.calendarButton)
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(Color(red: 0.24, green: 0.40, blue: 0.46))
                             .padding(.horizontal, 12)
@@ -178,7 +163,7 @@ struct HomeMapView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("時めぐりカレンダーを開く")
+                    .accessibilityLabel(L10n.Home.openCalendarA11y)
 
                     Button {
                         viewModel.resetToCurrentLocation()
@@ -200,7 +185,7 @@ struct HomeMapView: View {
                             .shadow(color: viewModel.activeMapGlowColor.opacity(0.19), radius: 24, x: 0, y: 9)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("現在地へ戻る")
+                    .accessibilityLabel(L10n.Home.resetLocationA11y)
 
                     Button {
                         viewModel.toggleSideDrawerPanel()
@@ -229,7 +214,7 @@ struct HomeMapView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("メニューを開く")
+                    .accessibilityLabel(L10n.Home.openMenuA11y)
                 }
                 .padding(.top, 14)
                 .padding(.trailing, 14)
@@ -241,5 +226,44 @@ struct HomeMapView: View {
         .onDisappear {
             viewModel.onViewDisappear()
         }
+    }
+
+    private var mapAmbientGlowLayer: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let glowRatio = min(max(viewModel.themeGlowRatio, 0.6), 1.8)
+            let mainSize = min(max(width * (0.84 + glowRatio * 0.10), 300), 560)
+            let haloSize = min(max(width * (0.60 + glowRatio * 0.10), 230), 450)
+            let echoSize = min(max(width * (0.36 + glowRatio * 0.06), 150), 300)
+            let mainOpacity = min(0.56, 0.26 + glowRatio * 0.16)
+            let haloOpacity = min(0.66, 0.30 + glowRatio * 0.20)
+            let echoOpacity = min(0.42, 0.16 + glowRatio * 0.14)
+
+            ZStack(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(viewModel.activePillGradient)
+                    .frame(width: mainSize, height: mainSize)
+                    .blur(radius: 56)
+                    .opacity(mainOpacity)
+                    .offset(x: width * 0.30, y: 180)
+
+                Circle()
+                    .fill(viewModel.activeMapGlowColor)
+                    .frame(width: haloSize, height: haloSize)
+                    .blur(radius: 48)
+                    .opacity(haloOpacity)
+                    .offset(x: width * 0.28, y: 160)
+
+                Circle()
+                    .fill(viewModel.activeMapGlowColor)
+                    .frame(width: echoSize, height: echoSize)
+                    .blur(radius: 36)
+                    .opacity(echoOpacity)
+                    .offset(x: width * 0.20, y: -32)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
     }
 }

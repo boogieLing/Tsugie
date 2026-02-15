@@ -26,7 +26,7 @@ struct QuickCardView: View {
                 .padding(.bottom, 8)
 
             HStack(alignment: .center, spacing: 10) {
-                Text("⚡ 最速攻略")
+                Text(L10n.QuickCard.fastPlanTitle)
                     .font(.system(size: 17, weight: .heavy))
                     .foregroundStyle(Color(red: 0.06, green: 0.75, blue: 0.62))
 
@@ -49,7 +49,7 @@ struct QuickCardView: View {
                             .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("クイック表示を閉じる")
+                    .accessibilityLabel(L10n.QuickCard.closeA11y)
                 }
             }
 
@@ -86,7 +86,7 @@ struct QuickCardView: View {
 
             HStack(spacing: 10) {
                 Button(action: onOpenDetail) {
-                    Text("詳細を見る")
+                    Text(L10n.QuickCard.viewDetails)
                         .font(.system(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
@@ -96,7 +96,7 @@ struct QuickCardView: View {
                 .buttonStyle(.plain)
 
                 Button(action: onOpenDetail) {
-                    Text("ルートを開始")
+                    Text(L10n.QuickCard.startRoute)
                         .font(.system(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
@@ -158,7 +158,7 @@ struct QuickCardView: View {
     }
 
     private var timeRangeText: String {
-        guard snapshot.status != .unknown else { return "時刻未定" }
-        return "\(snapshot.startLabel) - \(snapshot.endLabel)"
+        guard snapshot.status != .unknown else { return L10n.Common.unknownTime }
+        return L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
     }
 }

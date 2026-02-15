@@ -46,13 +46,15 @@ struct CalendarPageView: View {
     @State private var selectedDayKey: String?
     @State private var dayFilterID = "all"
 
-    private let categories: [CalendarCategoryMeta] = [
-        .init(id: "all", label: "全部", logo: "◎"),
-        .init(id: "hanabi", label: "花火", logo: "花"),
-        .init(id: "matsuri", label: "祭典", logo: "祭"),
-        .init(id: "nature", label: "景観", logo: "景"),
-        .init(id: "other", label: "その他", logo: "他")
-    ]
+    private var categories: [CalendarCategoryMeta] {
+        [
+            .init(id: "all", label: L10n.Calendar.categoryAll, logo: "◎"),
+            .init(id: "hanabi", label: L10n.Calendar.categoryHanabi, logo: "花"),
+            .init(id: "matsuri", label: L10n.Calendar.categoryMatsuri, logo: "祭"),
+            .init(id: "nature", label: L10n.Calendar.categoryNature, logo: "景"),
+            .init(id: "other", label: L10n.Calendar.categoryOther, logo: "他")
+        ]
+    }
     private let activeGradient = TsugieVisuals.pillGradient
     private let activeGlowColor = TsugieVisuals.mapGlowColor(scheme: "fresh", alphaRatio: 1.0, saturationRatio: 1.2)
 
@@ -77,10 +79,10 @@ struct CalendarPageView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("時めぐりカレンダー")
+                Text(L10n.Calendar.title)
                     .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(Color(red: 0.19, green: 0.35, blue: 0.42))
-                Text("時間軸のへ統計（マップは位置軸）")
+                Text(L10n.Calendar.subtitle)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.55))
             }
@@ -96,7 +98,7 @@ struct CalendarPageView: View {
                     .foregroundStyle(Color(red: 0.36, green: 0.49, blue: 0.54))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("カレンダーを閉じる")
+            .accessibilityLabel(L10n.Calendar.closeA11y)
         }
         .padding(.top, 24)
         .padding(.horizontal, 16)
@@ -108,7 +110,7 @@ struct CalendarPageView: View {
             VStack(spacing: 8) {
                 let blocks = buildCalendarMonths()
                 if blocks.isEmpty {
-                    Text("この期間のへはありません。")
+                    Text(L10n.Calendar.empty)
                         .font(.system(size: 13))
                         .foregroundStyle(Color(red: 0.38, green: 0.50, blue: 0.54))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,7 +136,7 @@ struct CalendarPageView: View {
                 .padding(.horizontal, 4)
 
             HStack(spacing: 6) {
-                ForEach(Array(["日", "月", "火", "水", "木", "金", "土"].enumerated()), id: \.offset) { index, label in
+                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { index, label in
                     Text(label)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(
@@ -254,7 +256,7 @@ struct CalendarPageView: View {
 
         return VStack(spacing: 10) {
             HStack {
-                Text(bucket.map { "\(dayTitleOf($0.dayDate)) のへ" } ?? "日付のへ")
+                Text(bucket.map { L10n.Calendar.dayTitle(dayTitleOf($0.dayDate)) } ?? L10n.Calendar.dayTitleFallback)
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Color(red: 0.21, green: 0.37, blue: 0.43))
                 Spacer()
@@ -275,7 +277,7 @@ struct CalendarPageView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if let bucket {
-                        Text("時間軸から抽出。並び順は近さと開始の早さを優先。")
+                        Text(L10n.Calendar.drawerSummary)
                             .font(.system(size: 12))
                             .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
 
@@ -287,14 +289,14 @@ struct CalendarPageView: View {
                             }
 
                             if filteredDayItems(bucket).isEmpty {
-                                Text("該当なし")
+                                Text(L10n.Calendar.drawerNoMatch)
                                     .font(.system(size: 12))
                                     .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
                     } else {
-                        Text("選択した日のへはありません。")
+                        Text(L10n.Calendar.selectedDayEmpty)
                             .font(.system(size: 12))
                             .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
                     }
@@ -379,7 +381,7 @@ struct CalendarPageView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                             .lineLimit(1)
-                        Text("\(distanceLabel(item.distanceMeters)) ・ \(item.snapshot.startLabel) - \(item.snapshot.endLabel)")
+                        Text("\(distanceLabel(item.distanceMeters)) ・ \(L10n.Common.timeRange(item.snapshot.startLabel, item.snapshot.endLabel))")
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.38, green: 0.49, blue: 0.54))
                         Text(item.snapshot.leftLabel)
@@ -490,7 +492,12 @@ struct CalendarPageView: View {
             blocks.append(
                 CalendarMonthBlock(
                     id: "\(year)-\(String(format: "%02d", month))",
-                    title: "\(year)年\(month)月",
+                    title: cursor.formatted(
+                        Date.FormatStyle()
+                            .year(.defaultDigits)
+                            .month(.wide)
+                            .locale(L10n.locale)
+                    ),
                     cells: cells
                 )
             )
@@ -530,10 +537,9 @@ struct CalendarPageView: View {
     }
 
     private func dayTitleOf(_ date: Date) -> String {
-        let week = ["日", "月", "火", "水", "木", "金", "土"]
         let m = Calendar.current.component(.month, from: date)
         let d = Calendar.current.component(.day, from: date)
-        let w = week[(Calendar.current.component(.weekday, from: date) + 6) % 7]
+        let w = weekdaySymbols[(Calendar.current.component(.weekday, from: date) + 6) % 7]
         return "\(m)/\(d) (\(w))"
     }
 
@@ -542,7 +548,7 @@ struct CalendarPageView: View {
         if safe < 1_000 {
             return "\(Int(max(80, safe.rounded())))m"
         }
-        return "\((safe / 1_000).formatted(.number.precision(.fractionLength(1))))km"
+        return "\((safe / 1_000).formatted(.number.locale(L10n.locale).precision(.fractionLength(1))))km"
     }
 
     private var backgroundLayer: some View {
@@ -565,5 +571,16 @@ struct CalendarPageView: View {
                 .frame(width: 360, height: 360)
                 .offset(x: 170, y: -280)
         }
+    }
+
+    private var weekdaySymbols: [String] {
+        let formatter = DateFormatter()
+        formatter.locale = L10n.locale
+        formatter.calendar = Calendar.current
+        let symbols = formatter.shortWeekdaySymbols ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        if symbols.count == 7 {
+            return symbols.indices.map { symbols[($0 + 1) % 7] }
+        }
+        return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     }
 }

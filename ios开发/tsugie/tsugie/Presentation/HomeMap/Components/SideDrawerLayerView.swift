@@ -5,6 +5,11 @@ struct SideDrawerLayerView: View {
     @ObservedObject var viewModel: HomeMapViewModel
     private let drawerItemFillColor = Color.white
     private let drawerItemBorderColor = Color(red: 0.84, green: 0.92, blue: 0.95)
+    private let languageOptions: [(code: String, label: String)] = [
+        ("ja", "日"),
+        ("zh-Hans", "中"),
+        ("en", "EN")
+    ]
 
     var body: some View {
         GeometryReader { proxy in
@@ -54,13 +59,15 @@ struct SideDrawerLayerView: View {
     private func sideDrawer(width: CGFloat) -> some View {
         VStack(spacing: 14) {
             HStack {
-                Text("つぎへ ナビ")
+                Text(L10n.SideDrawer.title)
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.52))
 
                 Spacer()
 
                 HStack(spacing: 7) {
+                    languageSwitcher
+
                     Button(action: viewModel.toggleThemePalette) {
                         RoundedRectangle(cornerRadius: 999)
                             .fill(viewModel.activePillGradient)
@@ -88,9 +95,9 @@ struct SideDrawerLayerView: View {
             }
 
             VStack(spacing: 8) {
-                menuButton("行きたい栞", menu: .favorites)
-                menuButton("知らせの灯", menu: .notifications)
-                menuButton("ことづて", menu: .contact)
+                menuButton(L10n.SideDrawer.menuFavorites, menu: .favorites)
+                menuButton(L10n.SideDrawer.menuNotifications, menu: .notifications)
+                menuButton(L10n.SideDrawer.menuContact, menu: .contact)
             }
 
             ScrollView {
@@ -133,7 +140,7 @@ struct SideDrawerLayerView: View {
     private func favoriteDrawer(width: CGFloat) -> some View {
         VStack(spacing: 12) {
             HStack {
-                Text("行きたい栞")
+                Text(L10n.SideDrawer.menuFavorites)
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Color(red: 0.25, green: 0.41, blue: 0.47))
                 Spacer()
@@ -153,7 +160,7 @@ struct SideDrawerLayerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("行きたい余韻と、歩いた足あとをここに。")
+                    Text(L10n.SideDrawer.favoritesSubtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
 
@@ -161,7 +168,7 @@ struct SideDrawerLayerView: View {
 
                     VStack(spacing: 8) {
                         if viewModel.filteredFavoritePlaces().isEmpty {
-                            Text("まだ栞は白紙です。")
+                            Text(L10n.SideDrawer.favoritesEmpty)
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -203,6 +210,33 @@ struct SideDrawerLayerView: View {
         .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.16), radius: 16, x: 0, y: 10)
         .offset(x: viewModel.isFavoriteDrawerOpen ? 0 : -(width + 16))
         .animation(.spring(response: 0.42, dampingFraction: 0.88), value: viewModel.isFavoriteDrawerOpen)
+    }
+
+    private var languageSwitcher: some View {
+        Button(action: viewModel.cycleLanguage) {
+            HStack(spacing: 3) {
+                ForEach(Array(languageOptions.enumerated()), id: \.element.code) { index, option in
+                    Text(option.label)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(
+                            viewModel.selectedLanguageCode == option.code
+                            ? AnyShapeStyle(viewModel.activePillGradient)
+                            : AnyShapeStyle(Color(red: 0.31, green: 0.46, blue: 0.52))
+                        )
+                        .frame(width: option.code == "en" ? 24 : 18, height: 20)
+                    if index < languageOptions.count - 1 {
+                        Text("/")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.68, green: 0.77, blue: 0.82))
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.SideDrawer.languageSwitchA11y(viewModel.currentLanguageDisplayName))
+        .padding(.horizontal, 6)
+        .frame(height: 26)
+        .background(Color.white.opacity(0.86), in: Capsule())
     }
 
     private func menuButton(_ title: String, menu: SideDrawerMenu) -> some View {
@@ -261,10 +295,10 @@ struct SideDrawerLayerView: View {
             switch viewModel.sideDrawerMenu {
             case .favorites:
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("行きたい栞")
+                    Text(L10n.SideDrawer.menuFavorites)
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
-                    Button("栞ドロワーをひらく") {
+                    Button(L10n.SideDrawer.favoritesOpen) {
                         viewModel.openFavoriteDrawer()
                     }
                     .font(.system(size: 12, weight: .semibold))
@@ -280,22 +314,30 @@ struct SideDrawerLayerView: View {
                 }
             case .notifications:
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("通知設定")
+                    Text(L10n.SideDrawer.notificationsTitle)
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
-                    notificationRow("開始前リマインド", "開催直前にお知らせ", isOn: viewModel.startNotificationEnabled) {
+                    notificationRow(
+                        L10n.SideDrawer.startReminderTitle,
+                        L10n.SideDrawer.startReminderHint,
+                        isOn: viewModel.startNotificationEnabled
+                    ) {
                         viewModel.toggleStartNotification()
                     }
-                    notificationRow("周辺スポット通知", "少し遠めの候補も通知", isOn: viewModel.nearbyNotificationEnabled) {
+                    notificationRow(
+                        L10n.SideDrawer.nearbyNoticeTitle,
+                        L10n.SideDrawer.nearbyNoticeHint,
+                        isOn: viewModel.nearbyNotificationEnabled
+                    ) {
                         viewModel.toggleNearbyNotification()
                     }
                 }
             case .contact:
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("お問い合わせ")
+                    Text(L10n.SideDrawer.contactTitle)
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
-                    Link("メールで連絡する", destination: URL(string: "mailto:contact@tsugie.app?subject=Tsugie%20問い合わせ")!)
+                    Link(L10n.SideDrawer.contactMailAction, destination: L10n.SideDrawer.contactMailURL)
                         .font(.system(size: 13, weight: .bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)
@@ -306,7 +348,7 @@ struct SideDrawerLayerView: View {
                             borderOpacity: 0.88
                         )
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
-                    Button("メールアドレスをコピー") {
+                    Button(L10n.SideDrawer.contactCopyMail) {
                         UIPasteboard.general.string = "contact@tsugie.app"
                     }
                     .font(.system(size: 13, weight: .bold))
@@ -324,7 +366,7 @@ struct SideDrawerLayerView: View {
                         .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
                 }
             case .none:
-                Text("項目をひとつ選ぶと、ここに静かにひらきます。")
+                Text(L10n.SideDrawer.noneHint)
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
             }
@@ -333,7 +375,7 @@ struct SideDrawerLayerView: View {
 
     private func favoriteCard(_ place: HePlace) -> some View {
         let snapshot = viewModel.eventSnapshot(for: place)
-        let range = "\(snapshot.startLabel) - \(snapshot.endLabel)"
+        let range = L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
 
         return Button {
             viewModel.openQuickFromDrawer(placeID: place.id)
@@ -379,9 +421,9 @@ struct SideDrawerLayerView: View {
 
     private var favoriteFilters: some View {
         HStack(spacing: 6) {
-            filterButton(.all, "すべて")
-            filterButton(.planned, "まだ訪れず")
-            filterButton(.checked, "足あと済み")
+            filterButton(.all, L10n.SideDrawer.filterAll)
+            filterButton(.planned, L10n.SideDrawer.filterPlanned)
+            filterButton(.checked, L10n.SideDrawer.filterChecked)
         }
     }
 
@@ -444,19 +486,20 @@ struct SideDrawerLayerView: View {
                 }
             }
 
-            sliderRow(title: "透過比率", value: $viewModel.themeAlphaRatio)
-            sliderRow(title: "彩度", value: $viewModel.themeSaturationRatio)
+            sliderRow(title: L10n.SideDrawer.alpha, value: $viewModel.themeAlphaRatio)
+            sliderRow(title: L10n.SideDrawer.saturation, value: $viewModel.themeSaturationRatio)
+            sliderRow(title: L10n.SideDrawer.glow, value: $viewModel.themeGlowRatio, range: 0.6...1.8)
         }
     }
 
-    private func sliderRow(title: String, value: Binding<Double>) -> some View {
+    private func sliderRow(title: String, value: Binding<Double>, range: ClosedRange<Double> = 0.7...1.5) -> some View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(Color(red: 0.34, green: 0.46, blue: 0.52))
                 .frame(width: 48, alignment: .leading)
 
-            ThemeAdjusterSlider(value: value, range: 0.7...1.5)
+            ThemeAdjusterSlider(value: value, range: range)
 
             Text("\(Int((value.wrappedValue * 100).rounded()))%")
                 .font(.system(size: 10, weight: .bold))

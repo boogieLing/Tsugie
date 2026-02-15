@@ -1,0 +1,126 @@
+"common.close" = "Close";
+"common.unknown_time" = "Time TBD";
+"common.start_unknown" = "Start TBD";
+"common.date_unknown" = "Date TBD";
+"common.now" = "Now";
+"common.time_range" = "%@ - %@";
+"common.open_hours" = "Open hours %@";
+
+"event.ended" = "Ended";
+"event.end_only" = "End";
+"event.left.remaining" = "%@ left";
+"event.right.end_at" = "End %@";
+"event.left.starts_in" = "Starts in %@";
+"event.right.start_at" = "Start %@";
+"event.countdown.days_hours" = "%d d %d h";
+"event.countdown.hours_minutes_seconds" = "%d h %d m %d s";
+"event.countdown.minutes_seconds" = "%d m %d s";
+"event.countdown.seconds" = "%d s";
+
+"home.calendar.button" = "Tokimeguri";
+"home.calendar.open_a11y" = "Open tokimeguri calendar";
+"home.location.reset_a11y" = "Return to current location";
+"home.menu.open_a11y" = "Open menu";
+"home.quick.date_today_soon" = "Today, starting soon!";
+
+"quickcard.fast_plan" = "⚡ Fastest Plan";
+"quickcard.close_a11y" = "Close quick card";
+"quickcard.view_details" = "View details";
+"quickcard.start_route" = "Start route";
+
+"nearby.preparing" = "Preparing";
+"nearby.remaining" = "%@ left";
+"nearby.starts_in" = "In %@";
+"nearby.starts_at" = "%@ Start";
+"nearby.ended_at" = "End %@";
+
+"marker.favorite_a11y" = "Mark as want to visit";
+"marker.quick_a11y" = "Open quick card";
+"marker.checked_in_a11y" = "Mark as visited";
+"marker.place_action_a11y" = "Place actions";
+
+"place_state.favorite_a11y" = "Want to visit";
+"place_state.checked_in_a11y" = "Visited";
+
+"detail.title" = "へ Details";
+"detail.close_a11y" = "Close details";
+"detail.map_location" = "Map location";
+"detail.focus" = "Focus";
+"detail.intro" = "Intro";
+"detail.atmosphere" = "Current vibe";
+"detail.heat" = "Heat";
+"detail.surprise" = "Surprise";
+"detail.progress_title.ongoing" = "Progress";
+"detail.progress_title.upcoming" = "Timeline to start";
+"detail.progress_title.ended" = "Status";
+"detail.progress_title.unknown" = "Time info";
+"detail.upcoming_pending" = "Confirming start time";
+"detail.progress_meta.ongoing" = "Ongoing %d%% · %@ left";
+"detail.progress_meta.upcoming" = "In %@";
+"detail.start_at" = "Start %@";
+"detail.end_at" = "End %@";
+
+"drawer.title" = "Tsugie Nav";
+"drawer.menu.favorites" = "Wishmarks";
+"drawer.menu.notifications" = "Notifications";
+"drawer.menu.contact" = "Contact";
+"drawer.favorites.subtitle" = "Keep places you want to go and places you've visited.";
+"drawer.favorites.empty" = "No wishmarks yet.";
+"drawer.favorites.open" = "Open favorites drawer";
+"drawer.notifications.title" = "Notification settings";
+"drawer.notifications.start_reminder.title" = "Before-start reminder";
+"drawer.notifications.start_reminder.hint" = "Notify right before it starts";
+"drawer.notifications.nearby.title" = "Nearby spot alerts";
+"drawer.notifications.nearby.hint" = "Also notify slightly farther options";
+"drawer.contact.title" = "Contact";
+"drawer.contact.mail_action" = "Email us";
+"drawer.contact.copy_mail" = "Copy email address";
+"drawer.contact.mail_subject" = "Tsugie Inquiry";
+"drawer.none_hint" = "Pick one item and it will open here.";
+"drawer.filter.all" = "All";
+"drawer.filter.planned" = "Want to visit";
+"drawer.filter.checked" = "Visited";
+"drawer.slider.alpha" = "Opacity";
+"drawer.slider.saturation" = "Saturation";
+"drawer.slider.glow" = "Glow";
+"drawer.language.zh_hans" = "Chinese";
+"drawer.language.en" = "English";
+"drawer.language.ja" = "Japanese";
+"drawer.language.switch_a11y" = "Switch language, current %@";
+
+"calendar.title" = "Tokimeguri Calendar";
+"calendar.subtitle" = "Time-axis へ stats (map is location-axis)";
+"calendar.close_a11y" = "Close calendar";
+"calendar.empty" = "No へ in this period.";
+"calendar.day_title" = "%@ へ";
+"calendar.day_title.fallback" = "Day へ";
+"calendar.drawer.summary" = "Picked from the time axis. Order favors distance and earliest start.";
+"calendar.drawer.no_match" = "No matches";
+"calendar.selected_day.empty" = "No へ on the selected day.";
+"calendar.category.all" = "All";
+"calendar.category.hanabi" = "Hanabi";
+"calendar.category.matsuri" = "Festival";
+"calendar.category.nature" = "Scenery";
+"calendar.category.other" = "Other";
+
+"placeholder.title" = "Tokimeguri";
+"placeholder.desc1" = "Calendar is the time-axis view and independent from the map's location-axis view.";
+"placeholder.desc2" = "Phase 1 keeps this as a standalone placeholder page. Full month view and day drawer will follow.";
+
+"mock.sumida.hint" = "✨ (ง •̀_•́)ง Best time to leave now";
+"mock.sumida.map_spot" = "Southwest zone by the Sumida River terrace";
+"mock.sumida.desc" = "Wide riverside view with strong photo spots. Arrive before crowds for a steadier experience.";
+"mock.sumida.image_tag" = "Hanabi";
+"mock.sumida.image_hint" = "Wide riverside view with great photo framing";
+
+"mock.asakusa.hint" = "🏮 The temple grounds are heating up now";
+"mock.asakusa.map_spot" = "Central grounds area on the Kaminarimon side";
+"mock.asakusa.desc" = "Festival flow is spread out. Circling from the approach side helps avoid congestion.";
+"mock.asakusa.image_tag" = "Festival";
+"mock.asakusa.image_hint" = "Dense lantern glow makes night strolling enjoyable";
+
+"mock.oshiage.hint" = "🌙 A calm viewpoint for after-event strolling";
+"mock.oshiage.map_spot" = "Viewpoint east of Oshiage Station";
+"mock.oshiage.desc" = "A spot for post-event afterglow. Even short stays quickly capture the atmosphere.";
+"mock.oshiage.image_tag" = "Night view";
+"mock.oshiage.image_hint" = "A calm high point with a full city-lights panorama";

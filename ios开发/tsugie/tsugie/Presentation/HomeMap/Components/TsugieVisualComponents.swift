@@ -230,8 +230,8 @@ struct PlaceStateIconsView: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            stateIcon(text: placeState.isFavorite ? "★" : "☆", isOn: placeState.isFavorite, label: "想要访问")
-            stateIcon(text: placeState.isCheckedIn ? "◉" : "◌", isOn: placeState.isCheckedIn, label: "已经访问")
+            stateIcon(text: placeState.isFavorite ? "★" : "☆", isOn: placeState.isFavorite, label: L10n.PlaceState.favoriteA11y)
+            stateIcon(text: placeState.isCheckedIn ? "◉" : "◌", isOn: placeState.isCheckedIn, label: L10n.PlaceState.checkedInA11y)
         }
     }
 

@@ -1,0 +1,126 @@
+"common.close" = "关闭";
+"common.unknown_time" = "时刻未定";
+"common.start_unknown" = "开始 未定";
+"common.date_unknown" = "日期未定";
+"common.now" = "现在";
+"common.time_range" = "%@ - %@";
+"common.open_hours" = "开放时间 %@";
+
+"event.ended" = "已结束";
+"event.end_only" = "终了";
+"event.left.remaining" = "剩余%@";
+"event.right.end_at" = "终了 %@";
+"event.left.starts_in" = "开始前%@";
+"event.right.start_at" = "开始 %@";
+"event.countdown.days_hours" = "%d天%d小时";
+"event.countdown.hours_minutes_seconds" = "%d小时%d分%d秒";
+"event.countdown.minutes_seconds" = "%d分%d秒";
+"event.countdown.seconds" = "%d秒";
+
+"home.calendar.button" = "时めぐり";
+"home.calendar.open_a11y" = "打开时巡日历";
+"home.location.reset_a11y" = "回到当前位置";
+"home.menu.open_a11y" = "打开菜单";
+"home.quick.date_today_soon" = "今日開催！まもなく！";
+
+"quickcard.fast_plan" = "⚡ 最速攻略";
+"quickcard.close_a11y" = "关闭快速卡片";
+"quickcard.view_details" = "查看详情";
+"quickcard.start_route" = "开始导航";
+
+"nearby.preparing" = "准备中";
+"nearby.remaining" = "剩余 %@";
+"nearby.starts_in" = "还有 %@";
+"nearby.starts_at" = "%@ 开始";
+"nearby.ended_at" = "终了 %@";
+
+"marker.favorite_a11y" = "标记为想访问";
+"marker.quick_a11y" = "打开快速卡片";
+"marker.checked_in_a11y" = "标记为已访问";
+"marker.place_action_a11y" = "地点操作";
+
+"place_state.favorite_a11y" = "想访问";
+"place_state.checked_in_a11y" = "已访问";
+
+"detail.title" = "へ 详情";
+"detail.close_a11y" = "关闭详情";
+"detail.map_location" = "地图位置";
+"detail.focus" = "聚焦";
+"detail.intro" = "介绍";
+"detail.atmosphere" = "当前氛围";
+"detail.heat" = "热度";
+"detail.surprise" = "惊喜";
+"detail.progress_title.ongoing" = "活动进度";
+"detail.progress_title.upcoming" = "开始前时间轴";
+"detail.progress_title.ended" = "活动状态";
+"detail.progress_title.unknown" = "时间信息";
+"detail.upcoming_pending" = "开始时间确认中";
+"detail.progress_meta.ongoing" = "进行中 %d%% · 剩余%@";
+"detail.progress_meta.upcoming" = "还有%@";
+"detail.start_at" = "开始 %@";
+"detail.end_at" = "终了 %@";
+
+"drawer.title" = "Tsugie 导航";
+"drawer.menu.favorites" = "行きたい栞";
+"drawer.menu.notifications" = "知らせの灯";
+"drawer.menu.contact" = "ことづて";
+"drawer.favorites.subtitle" = "想去的余韵和已走过的足迹都在这里。";
+"drawer.favorites.empty" = "收藏夹还是空白。";
+"drawer.favorites.open" = "打开收藏抽屉";
+"drawer.notifications.title" = "通知设置";
+"drawer.notifications.start_reminder.title" = "开始前提醒";
+"drawer.notifications.start_reminder.hint" = "活动开始前提醒你";
+"drawer.notifications.nearby.title" = "附近地点提醒";
+"drawer.notifications.nearby.hint" = "稍远一点的候选也会提醒";
+"drawer.contact.title" = "联系我们";
+"drawer.contact.mail_action" = "邮件联系";
+"drawer.contact.copy_mail" = "复制邮箱地址";
+"drawer.contact.mail_subject" = "Tsugie 咨询";
+"drawer.none_hint" = "选择一个项目后，这里会安静展开。";
+"drawer.filter.all" = "全部";
+"drawer.filter.planned" = "想访问";
+"drawer.filter.checked" = "已访问";
+"drawer.slider.alpha" = "透明度";
+"drawer.slider.saturation" = "饱和度";
+"drawer.slider.glow" = "光晕";
+"drawer.language.zh_hans" = "中文";
+"drawer.language.en" = "英文";
+"drawer.language.ja" = "日文";
+"drawer.language.switch_a11y" = "切换语言，当前%@";
+
+"calendar.title" = "時めぐりカレンダー";
+"calendar.subtitle" = "时间维度的へ统计（地图是位置维度）";
+"calendar.close_a11y" = "关闭日历";
+"calendar.empty" = "这个期间没有可用的へ。";
+"calendar.day_title" = "%@ 的へ";
+"calendar.day_title.fallback" = "日程へ";
+"calendar.drawer.summary" = "按时间轴提取，排序优先距离与开始时间。";
+"calendar.drawer.no_match" = "无匹配项目";
+"calendar.selected_day.empty" = "所选日期没有可用的へ。";
+"calendar.category.all" = "全部";
+"calendar.category.hanabi" = "花火";
+"calendar.category.matsuri" = "祭典";
+"calendar.category.nature" = "景观";
+"calendar.category.other" = "其他";
+
+"placeholder.title" = "時めぐり";
+"placeholder.desc1" = "日历页是时间维度语义，与地图页的位置维度语义独立。";
+"placeholder.desc2" = "第一阶段仅保留独立页面占位，后续阶段接入完整月历与当日抽屉。";
+
+"mock.sumida.hint" = "✨ (ง •̀_•́)ง 现在出发最合适";
+"mock.sumida.map_spot" = "隅田川露台侧，西南区域";
+"mock.sumida.desc" = "沿河视野开阔，拍照非常出片。避开拥挤前到达，体验更稳定。";
+"mock.sumida.image_tag" = "花火";
+"mock.sumida.image_hint" = "沿河视野开阔、拍照效果出色";
+
+"mock.asakusa.hint" = "🏮 境内气氛正在升温";
+"mock.asakusa.map_spot" = "雷门一侧的境内中央区域";
+"mock.asakusa.desc" = "祭典动线比较分散，从参道一侧回游更容易避开拥堵。";
+"mock.asakusa.image_tag" = "祭典";
+"mock.asakusa.image_hint" = "灯笼光影浓郁，夜间回游体验更好";
+
+"mock.oshiage.hint" = "🌙 适合散步收尾的安静观景点";
+"mock.oshiage.map_spot" = "押上站东侧观景点";
+"mock.oshiage.desc" = "适合活动结束后的余韵散步，短暂停留也能快速进入氛围。";
+"mock.oshiage.image_tag" = "夜景";
+"mock.oshiage.image_hint" = "高处可一览城市灯火的平静地点";
