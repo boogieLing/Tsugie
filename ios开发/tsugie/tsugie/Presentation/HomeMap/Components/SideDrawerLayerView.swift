@@ -75,18 +75,7 @@ struct SideDrawerLayerView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: viewModel.closeSideDrawerPanel) {
-                        Text("×")
-                            .font(.system(size: 18))
-                            .frame(width: 28, height: 28)
-                            .drawerCircleSurface(
-                                fillColor: drawerItemFillColor,
-                                borderColor: Color(red: 0.83, green: 0.91, blue: 0.95),
-                                borderOpacity: 0.9
-                            )
-                            .foregroundStyle(Color(red: 0.37, green: 0.50, blue: 0.54))
-                    }
-                    .buttonStyle(.plain)
+                    TsugieClosePillButton(action: viewModel.closeSideDrawerPanel)
                 }
             }
 
@@ -144,18 +133,7 @@ struct SideDrawerLayerView: View {
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Color(red: 0.25, green: 0.41, blue: 0.47))
                 Spacer()
-                Button(action: viewModel.closeFavoriteDrawer) {
-                    Text("×")
-                        .font(.system(size: 18))
-                        .frame(width: 28, height: 28)
-                        .drawerCircleSurface(
-                            fillColor: drawerItemFillColor,
-                            borderColor: Color(red: 0.83, green: 0.91, blue: 0.95),
-                            borderOpacity: 0.9
-                        )
-                        .foregroundStyle(Color(red: 0.37, green: 0.50, blue: 0.54))
-                }
-                .buttonStyle(.plain)
+                TsugieClosePillButton(action: viewModel.closeFavoriteDrawer)
             }
 
             ScrollView {
@@ -550,15 +528,15 @@ struct SideDrawerLayerView: View {
     private func themeChipGradient(_ scheme: String) -> LinearGradient {
         switch scheme {
         case "ocean":
-            return LinearGradient(colors: [Color(red: 0.00, green: 0.66, blue: 1.00), Color(red: 0.36, green: 0.68, blue: 0.89), Color(red: 0.49, green: 0.89, blue: 0.99)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [Color(red: 0.00, green: 0.66, blue: 1.00), Color(red: 0.36, green: 0.68, blue: 0.89), Color(red: 0.49, green: 0.89, blue: 0.99)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case "sunset":
-            return LinearGradient(colors: [Color(red: 1.00, green: 0.62, blue: 0.26), Color(red: 1.00, green: 0.42, blue: 0.42), Color(red: 1.00, green: 0.84, blue: 0.44)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [Color(red: 1.00, green: 0.62, blue: 0.26), Color(red: 1.00, green: 0.42, blue: 0.42), Color(red: 1.00, green: 0.84, blue: 0.44)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case "sakura":
-            return LinearGradient(colors: [Color(red: 1.00, green: 0.49, blue: 0.70), Color(red: 0.65, green: 0.52, blue: 1.00), Color(red: 1.00, green: 0.82, blue: 0.92)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [Color(red: 1.00, green: 0.49, blue: 0.70), Color(red: 0.65, green: 0.52, blue: 1.00), Color(red: 1.00, green: 0.82, blue: 0.92)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case "night":
-            return LinearGradient(colors: [Color(red: 0.35, green: 0.66, blue: 1.00), Color(red: 0.50, green: 0.55, blue: 1.00), Color(red: 0.48, green: 0.96, blue: 0.95)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [Color(red: 0.35, green: 0.66, blue: 1.00), Color(red: 0.50, green: 0.55, blue: 1.00), Color(red: 0.48, green: 0.96, blue: 0.95)], startPoint: .topLeading, endPoint: .bottomTrailing)
         default:
-            return LinearGradient(colors: [Color(red: 0.13, green: 0.85, blue: 0.80), Color(red: 0.48, green: 0.75, blue: 1.00), Color(red: 1.00, green: 0.61, blue: 0.87)], startPoint: .leading, endPoint: .trailing)
+            return LinearGradient(colors: [Color(red: 0.13, green: 0.85, blue: 0.80), Color(red: 0.48, green: 0.75, blue: 1.00), Color(red: 1.00, green: 0.61, blue: 0.87)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 }
@@ -575,20 +553,6 @@ private extension View {
             .background(fillColor, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(borderColor.opacity(borderOpacity), lineWidth: lineWidth)
-            )
-    }
-
-    func drawerCircleSurface(
-        fillColor: Color,
-        borderColor: Color,
-        borderOpacity: Double = 0.9,
-        lineWidth: CGFloat = 1
-    ) -> some View {
-        self
-            .background(fillColor, in: Circle())
-            .overlay(
-                Circle()
                     .stroke(borderColor.opacity(borderOpacity), lineWidth: lineWidth)
             )
     }

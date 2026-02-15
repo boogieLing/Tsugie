@@ -9,33 +9,37 @@ struct HomeMapView: View {
         ZStack(alignment: .bottom) {
                 Map(position: $viewModel.mapPosition) {
                     ForEach(viewModel.places) { place in
-                        Annotation(place.name, coordinate: place.coordinate) {
-                            VStack(spacing: 6) {
-                                if viewModel.markerActionPlaceID == place.id, !viewModel.isDetailVisible {
-                                    MarkerActionBubbleView(
-                                        placeName: place.name,
-                                        placeState: viewModel.placeState(for: place.id),
-                                        activeGradient: viewModel.activePillGradient,
-                                        activeGlowColor: viewModel.activeMapGlowColor,
-                                        onFavoriteTap: {
-                                            viewModel.toggleFavorite(for: place.id)
-                                        },
-                                        onQuickTap: {
-                                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                                viewModel.openQuickCard(placeID: place.id)
-                                            }
-                                        },
-                                        onCheckedInTap: {
-                                            viewModel.toggleCheckedIn(for: place.id)
+                        Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
+                            let isMenuVisible = viewModel.markerActionPlaceID == place.id && !viewModel.isDetailVisible
+
+                            ZStack(alignment: .bottom) {
+                                MarkerActionBubbleView(
+                                    isVisible: isMenuVisible,
+                                    placeState: viewModel.placeState(for: place.id),
+                                    activeGradient: TsugieVisuals.markerGradient(for: place.heType),
+                                    activeGlowColor: TsugieVisuals.markerGlowColor(for: place.heType),
+                                    onFavoriteTap: {
+                                        viewModel.markAnnotationTapCooldown()
+                                        viewModel.toggleFavorite(for: place.id)
+                                    },
+                                    onQuickTap: {
+                                        viewModel.markAnnotationTapCooldown()
+                                        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                                            viewModel.openQuickCard(placeID: place.id)
                                         }
-                                    )
-                                }
+                                    },
+                                    onCheckedInTap: {
+                                        viewModel.markAnnotationTapCooldown()
+                                        viewModel.toggleCheckedIn(for: place.id)
+                                    }
+                                )
+                                .offset(y: -24)
+                                .allowsHitTesting(isMenuVisible)
 
                                 MarkerBubbleView(
                                     placeName: place.name,
                                     heType: place.heType,
                                     isSelected: viewModel.selectedPlaceID == place.id,
-                                    placeState: viewModel.placeState(for: place.id),
                                     activeGradient: viewModel.activePillGradient,
                                     activeGlowColor: viewModel.activeMapGlowColor,
                                     onTap: {
@@ -43,17 +47,20 @@ struct HomeMapView: View {
                                     }
                                 )
                             }
+                            .frame(width: 220, height: 170, alignment: .bottom)
                         }
                         .annotationTitles(.hidden)
                     }
                 }
                 .ignoresSafeArea()
                 .onTapGesture {
-                    if viewModel.isSideDrawerOpen {
-                        viewModel.closeSideDrawerPanel()
-                    }
-                    viewModel.closeMarkerActionBubble()
+                    viewModel.handleMapBackgroundTap()
                 }
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        viewModel.handleMapBackgroundTap()
+                    }
+                )
 
                 mapAmbientGlowLayer
 
@@ -232,12 +239,13 @@ struct HomeMapView: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let glowRatio = min(max(viewModel.themeGlowRatio, 0.6), 1.8)
-            let mainSize = min(max(width * (0.84 + glowRatio * 0.10), 300), 560)
-            let haloSize = min(max(width * (0.60 + glowRatio * 0.10), 230), 450)
-            let echoSize = min(max(width * (0.36 + glowRatio * 0.06), 150), 300)
-            let mainOpacity = min(0.56, 0.26 + glowRatio * 0.16)
-            let haloOpacity = min(0.66, 0.30 + glowRatio * 0.20)
-            let echoOpacity = min(0.42, 0.16 + glowRatio * 0.14)
+            let ambientGlowRatio = min(max(glowRatio - 0.18, 0.6), 1.8)
+            let mainSize = min(max(width * (0.84 + ambientGlowRatio * 0.10), 300), 560)
+            let haloSize = min(max(width * (0.60 + ambientGlowRatio * 0.10), 230), 450)
+            let echoSize = min(max(width * (0.36 + ambientGlowRatio * 0.06), 150), 300)
+            let mainOpacity = min(0.56, 0.26 + ambientGlowRatio * 0.16)
+            let haloOpacity = min(0.66, 0.30 + ambientGlowRatio * 0.20)
+            let echoOpacity = min(0.42, 0.16 + ambientGlowRatio * 0.14)
 
             ZStack(alignment: .bottomTrailing) {
                 Circle()

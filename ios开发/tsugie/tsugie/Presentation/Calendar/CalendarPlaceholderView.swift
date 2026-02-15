@@ -20,9 +20,7 @@ struct CalendarPlaceholderView: View {
             .padding(20)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.Common.close) {
-                        onClose()
-                    }
+                    TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.Common.close)
                 }
             }
         }

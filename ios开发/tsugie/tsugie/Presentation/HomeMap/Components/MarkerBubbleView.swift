@@ -4,102 +4,143 @@ struct MarkerBubbleView: View {
     let placeName: String
     let heType: HeType
     let isSelected: Bool
-    let placeState: PlaceState
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onTap: () -> Void
 
+    @State private var isPulseAnimating = false
+    @State private var isBreathing = false
+
     var body: some View {
         let palette = TsugieVisuals.palette(for: heType)
+        let markerScale = isSelected ? (isBreathing ? 1.12 : 1.06) : 1
 
         Button(action: onTap) {
-            ZStack(alignment: .topLeading) {
-                Circle()
-                    .fill(palette.markerHalo.opacity(isSelected ? 0.40 : 0.24))
-                    .frame(width: 40, height: 40)
-                    .offset(x: -8, y: -8)
-                    .scaleEffect(isSelected ? 1.10 : 1)
-                    .opacity(isSelected ? 1 : 0.72)
-                    .animation(isSelected ? .easeOut(duration: 0.24).repeatForever(autoreverses: false) : .default, value: isSelected)
-
-                HStack(spacing: 8) {
-                    Text("へ")
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            LinearGradient(
-                                colors: [palette.markerFrom, palette.markerTo],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: Circle()
-                        )
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
-                        .shadow(color: Color(red: 0.08, green: 0.28, blue: 0.34, opacity: isSelected ? 0.30 : 0.22), radius: isSelected ? 9 : 6, x: 0, y: 4)
-                        .tsugieActiveGlow(
-                            isActive: isSelected,
-                            glowGradient: activeGradient,
-                            glowColor: activeGlowColor,
-                            cornerRadius: 14,
-                            blurRadius: 9,
-                            glowOpacity: 0.78,
-                            scale: 1.06,
-                            primaryOpacity: 0.82,
-                            primaryRadius: 13,
-                            primaryYOffset: 4,
-                            secondaryOpacity: 0.46,
-                            secondaryRadius: 23,
-                            secondaryYOffset: 7
-                        )
-
-                    Text(placeName)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.17, green: 0.32, blue: 0.40))
-                        .lineLimit(1)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.86), in: Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    isSelected
-                                    ? Color(red: 0.58, green: 0.84, blue: 0.90, opacity: 0.95)
-                                    : Color(red: 0.84, green: 0.92, blue: 0.94),
-                                    lineWidth: 1
-                                )
-                        )
-                        .shadow(color: Color(red: 0.15, green: 0.38, blue: 0.46, opacity: isSelected ? 0.08 : 0), radius: 8, x: 0, y: 5)
-                        .tsugieActiveGlow(
-                            isActive: isSelected,
-                            glowGradient: activeGradient,
-                            glowColor: activeGlowColor,
-                            cornerRadius: 16,
-                            blurRadius: 10,
-                            glowOpacity: 0.62,
-                            scale: 1.02,
-                            primaryOpacity: 0.74,
-                            primaryRadius: 14,
-                            primaryYOffset: 4,
-                            secondaryOpacity: 0.40,
-                            secondaryRadius: 24,
-                            secondaryYOffset: 8
-                        )
-                }
-
-                if placeState.isFavorite || placeState.isCheckedIn {
-                    PlaceStateIconsView(
-                        placeState: placeState,
-                        size: 16,
-                        activeGradient: activeGradient,
-                        activeGlowColor: activeGlowColor
+            ZStack {
+                if isSelected {
+                    radarRing(
+                        color: activeGlowColor.opacity(0.34),
+                        lineWidth: 1.3,
+                        maxScale: 1.88,
+                        initialOpacity: 0.36,
+                        delay: 0
                     )
-                        .offset(x: 20, y: 23)
+                    radarRing(
+                        color: palette.markerHalo.opacity(0.48),
+                        lineWidth: 1.0,
+                        maxScale: 1.58,
+                        initialOpacity: 0.26,
+                        delay: 0.56
+                    )
                 }
+
+                Circle()
+                    .fill(palette.markerHalo.opacity(isSelected ? 0.34 : 0.14))
+                    .frame(width: 34, height: 34)
+
+                Text("へ")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        markerGradient,
+                            in: Circle()
+                    )
+                    .opacity(isSelected ? 1 : 0.64)
+                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                    .shadow(color: Color(red: 0.08, green: 0.28, blue: 0.34, opacity: isSelected ? 0.28 : 0.20), radius: isSelected ? 7 : 4, x: 0, y: 3)
+                    .tsugieActiveGlow(
+                        isActive: isSelected,
+                        glowGradient: activeGradient,
+                        glowColor: activeGlowColor,
+                        cornerRadius: 12,
+                        blurRadius: 8,
+                        glowOpacity: 0.74,
+                        scale: 1.07,
+                        primaryOpacity: 0.80,
+                        primaryRadius: 12,
+                        primaryYOffset: 3,
+                        secondaryOpacity: 0.42,
+                        secondaryRadius: 18,
+                        secondaryYOffset: 6
+                    )
+                    .scaleEffect(markerScale, anchor: .bottom)
             }
-            .animation(.easeInOut(duration: 0.2), value: isSelected)
+            .frame(width: 28, height: 28)
+            .overlay(alignment: .trailing) {
+                placeNamePill
+                    .offset(x: -38)
+                    .scaleEffect(x: isSelected ? 1 : 0.22, y: 1, anchor: .trailing)
+                    .opacity(isSelected ? 1 : 0)
+                    .allowsHitTesting(false)
+                    .animation(.easeOut(duration: isSelected ? 0.32 : 0.22), value: isSelected)
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.Marker.placeActionA11y)
+        .onAppear {
+            updateMarkerState(isSelected: isSelected)
+        }
+        .onChange(of: isSelected) { _, _ in
+            updateMarkerState(isSelected: isSelected)
+        }
+    }
+
+    private var placeNamePill: some View {
+        Text(placeName)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Color(red: 0.17, green: 0.32, blue: 0.40))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.white, in: Capsule())
+            .shadow(color: Color(red: 0.15, green: 0.38, blue: 0.46, opacity: 0.10), radius: 8, x: 0, y: 4)
+    }
+
+    private var markerGradient: LinearGradient {
+        TsugieVisuals.markerGradient(for: heType)
+    }
+
+    private func radarRing(
+        color: Color,
+        lineWidth: CGFloat,
+        maxScale: CGFloat,
+        initialOpacity: Double,
+        delay: Double
+    ) -> some View {
+        Circle()
+            .stroke(color, lineWidth: lineWidth)
+            .frame(width: 28, height: 28)
+            .scaleEffect(isPulseAnimating ? maxScale : 1)
+            .opacity(isPulseAnimating ? 0 : initialOpacity)
+            .animation(
+                .easeOut(duration: 1.6)
+                    .repeatForever(autoreverses: false)
+                    .delay(delay),
+                value: isPulseAnimating
+            )
+    }
+
+    private func updateMarkerState(isSelected: Bool) {
+        guard isSelected else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isPulseAnimating = false
+                isBreathing = false
+            }
+            return
+        }
+
+        isPulseAnimating = false
+        isBreathing = false
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                isBreathing = true
+            }
+            isPulseAnimating = true
+        }
     }
 }

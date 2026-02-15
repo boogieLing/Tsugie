@@ -89,16 +89,7 @@ struct CalendarPageView: View {
 
             Spacer()
 
-            Button(action: onClose) {
-                Text("⌄")
-                    .font(.system(size: 17))
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.82), in: Circle())
-                    .overlay(Circle().stroke(Color(red: 0.84, green: 0.92, blue: 0.94, opacity: 0.9), lineWidth: 1))
-                    .foregroundStyle(Color(red: 0.36, green: 0.49, blue: 0.54))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.Calendar.closeA11y)
+            TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.Calendar.closeA11y)
         }
         .padding(.top, 24)
         .padding(.horizontal, 16)
@@ -260,18 +251,10 @@ struct CalendarPageView: View {
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(Color(red: 0.21, green: 0.37, blue: 0.43))
                 Spacer()
-                Button {
+                TsugieClosePillButton(action: {
                     selectedDayKey = nil
                     dayFilterID = "all"
-                } label: {
-                    Text("×")
-                        .font(.system(size: 18))
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.72), in: Circle())
-                        .overlay(Circle().stroke(Color(red: 0.83, green: 0.91, blue: 0.95, opacity: 0.9), lineWidth: 1))
-                        .foregroundStyle(Color(red: 0.37, green: 0.50, blue: 0.54))
-                }
-                .buttonStyle(.plain)
+                }, accessibilityLabel: L10n.Common.close)
             }
 
             ScrollView {

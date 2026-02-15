@@ -45,12 +45,14 @@ final class HomeMapViewModel: ObservableObject {
     private var autoOpenTask: DispatchWorkItem?
     private var tickerCancellable: AnyCancellable?
     private var hasAutoOpened = false
+    private var ignoreMapTapUntil: Date?
 
     init(
         places: [HePlace]? = nil,
         placeStateStore: PlaceStateStore? = nil
     ) {
-        self.places = places ?? MockHePlaceRepository.load()
+        self.places = (places ?? MockHePlaceRepository.load())
+            .filter { $0.heType != .nature }
         self.placeStateStore = placeStateStore ?? PlaceStateStore()
 
         let region = MKCoordinateRegion(
@@ -149,25 +151,50 @@ final class HomeMapViewModel: ObservableObject {
 
     func tapMarker(placeID: UUID) {
         guard detailPlaceID == nil else { return }
+        markAnnotationTapCooldown()
 
-        selectedPlaceID = placeID
         if markerActionPlaceID == placeID {
-            closeMarkerActionBubble()
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                dismissMarkerSelection()
+            }
             return
         }
-        markerActionPlaceID = placeID
+
+        if let place = place(for: placeID) {
+            focusForBottomCard(on: place)
+        }
+
+        selectedPlaceID = placeID
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            markerActionPlaceID = placeID
+        }
     }
 
     func closeMarkerActionBubble() {
-        markerActionPlaceID = nil
-        if quickCardPlaceID == nil && detailPlaceID == nil {
-            selectedPlaceID = nil
+        dismissMarkerSelection()
+    }
+
+    func markAnnotationTapCooldown(_ duration: TimeInterval = 0.22) {
+        ignoreMapTapUntil = Date().addingTimeInterval(duration)
+    }
+
+    func handleMapBackgroundTap() {
+        if let until = ignoreMapTapUntil, Date() < until {
+            return
+        }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            dismissMarkerSelection()
         }
     }
 
-    func openQuickCard(placeID: UUID) {
-        selectedPlaceID = placeID
+    private func dismissMarkerSelection() {
         markerActionPlaceID = nil
+        selectedPlaceID = nil
+    }
+
+    func openQuickCard(placeID: UUID, keepMarkerActions: Bool = false) {
+        selectedPlaceID = placeID
+        markerActionPlaceID = keepMarkerActions ? placeID : nil
         detailPlaceID = nil
         quickCardPlaceID = placeID
     }
@@ -413,7 +440,7 @@ final class HomeMapViewModel: ObservableObject {
             mapPosition = .region(
                 MKCoordinateRegion(
                     center: CLLocationCoordinate2D(
-                        latitude: place.coordinate.latitude + 0.0058,
+                        latitude: place.coordinate.latitude + 0.0023,
                         longitude: place.coordinate.longitude
                     ),
                     span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
@@ -458,8 +485,9 @@ final class HomeMapViewModel: ObservableObject {
                   let target = self.recommendedPlace() else {
                 return
             }
+            self.focusForBottomCard(on: target)
             withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                self.openQuickCard(placeID: target.id)
+                self.openQuickCard(placeID: target.id, keepMarkerActions: true)
             }
             self.hasAutoOpened = true
         }

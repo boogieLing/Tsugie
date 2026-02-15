@@ -28,16 +28,7 @@ struct DetailPanelView: View {
 
                 Spacer()
 
-                Button(action: onClose) {
-                    Text("⌄")
-                        .font(.system(size: 18, weight: .regular))
-                        .frame(width: 30, height: 30)
-                        .background(Color.white.opacity(0.82), in: Circle())
-                        .overlay(Circle().stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.86), lineWidth: 1))
-                        .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L10n.Detail.closeA11y)
+                TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.Detail.closeA11y)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)

@@ -41,15 +41,7 @@ struct QuickCardView: View {
                         activeGlowBoost: 1.9
                     )
 
-                    Button(action: onClose) {
-                        Text("×")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(width: 40, height: 24)
-                            .background(Color.white.opacity(0.86), in: Capsule())
-                            .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.QuickCard.closeA11y)
+                    TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.QuickCard.closeA11y)
                 }
             }
 

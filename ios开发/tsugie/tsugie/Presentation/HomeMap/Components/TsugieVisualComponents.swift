@@ -51,6 +51,49 @@ enum TsugieVisuals {
         adjustedColor(schemeMapGlowColor(scheme), alphaRatio: alphaRatio, saturationRatio: saturationRatio)
     }
 
+    static func markerGradient(for type: HeType) -> LinearGradient {
+        switch type {
+        case .hanabi:
+            return LinearGradient(
+                gradient: Gradient(stops: [
+                    .init(color: Color(red: 0.72, green: 0.80, blue: 0.72), location: 0),
+                    .init(color: Color(red: 0.71, green: 0.40, blue: 0.85), location: 0.18),
+                    .init(color: Color(red: 0.81, green: 0.42, blue: 0.79), location: 0.46),
+                    .init(color: Color(red: 0.93, green: 0.38, blue: 0.61), location: 0.78),
+                    .init(color: Color(red: 0.93, green: 0.38, blue: 0.61), location: 1)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .matsuri:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.88, green: 0.76, blue: 0.99),
+                    Color(red: 0.56, green: 0.77, blue: 0.99)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        default:
+            return LinearGradient(
+                colors: [palette(for: type).markerFrom, palette(for: type).markerTo],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    static func markerGlowColor(for type: HeType) -> Color {
+        switch type {
+        case .hanabi:
+            return Color(red: 0.92, green: 0.45, blue: 0.74)
+        case .matsuri:
+            return Color(red: 0.62, green: 0.79, blue: 1.00)
+        default:
+            return palette(for: type).markerTo
+        }
+    }
+
     static let detailBackground = LinearGradient(
         colors: [
             Color(red: 0.97, green: 1.00, blue: 1.00, opacity: 0.97),
@@ -284,6 +327,23 @@ struct PlaceStateIconsView: View {
                 y: isOn ? 7 : 0
             )
             .accessibilityLabel(label)
+    }
+}
+
+struct TsugieClosePillButton: View {
+    let action: () -> Void
+    var accessibilityLabel: String = L10n.Common.close
+
+    var body: some View {
+        Button(action: action) {
+            Text("×")
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 40, height: 24)
+                .background(Color.white.opacity(0.86), in: Capsule())
+                .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
