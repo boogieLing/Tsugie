@@ -31,7 +31,9 @@ struct RootView: View {
                     isCalendarPresented = false
                     viewModel.openQuickCard(placeID: placeID)
                 },
-                now: viewModel.now
+                now: viewModel.now,
+                activeGradient: viewModel.activePillGradient,
+                activeGlowColor: viewModel.activeMapGlowColor
             )
             .environment(\.locale, viewModel.selectedLanguageLocale)
         }

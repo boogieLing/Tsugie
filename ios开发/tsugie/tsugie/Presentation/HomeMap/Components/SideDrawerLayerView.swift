@@ -16,6 +16,7 @@ struct SideDrawerLayerView: View {
             let sideWidth = min(proxy.size.width * 0.70, 266)
             let favoriteWidth = min(proxy.size.width * 0.80, 302)
             let isLayerOpen = viewModel.isSideDrawerOpen || viewModel.isFavoriteDrawerOpen
+            let topSafeInset = max(proxy.safeAreaInsets.top, 0)
 
             ZStack {
                 Button(action: viewModel.closeSideDrawerBackdrop) {
@@ -51,6 +52,10 @@ struct SideDrawerLayerView: View {
                     .padding(.bottom, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     .zIndex(viewModel.isFavoriteDrawerOpen ? 4 : 5)
+
+                homeCategoryFilterRail(sideWidth: sideWidth, topSafeInset: topSafeInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .zIndex(5)
             }
             .allowsHitTesting(isLayerOpen)
         }
@@ -59,10 +64,6 @@ struct SideDrawerLayerView: View {
     private func sideDrawer(width: CGFloat) -> some View {
         VStack(spacing: 14) {
             HStack {
-                Text(L10n.SideDrawer.title)
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Color(red: 0.29, green: 0.45, blue: 0.52))
-
                 Spacer()
 
                 HStack(spacing: 7) {
@@ -142,7 +143,7 @@ struct SideDrawerLayerView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
 
-                    favoriteFilters
+                    favoriteStatusFilters
 
                     VStack(spacing: 8) {
                         if viewModel.filteredFavoritePlaces().isEmpty {
@@ -276,6 +277,7 @@ struct SideDrawerLayerView: View {
                     Text(L10n.SideDrawer.menuFavorites)
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
+
                     Button(L10n.SideDrawer.favoritesOpen) {
                         viewModel.openFavoriteDrawer()
                     }
@@ -397,36 +399,55 @@ struct SideDrawerLayerView: View {
         .buttonStyle(.plain)
     }
 
-    private var favoriteFilters: some View {
+    private var favoriteStatusFilters: some View {
         HStack(spacing: 6) {
-            filterButton(.all, L10n.SideDrawer.filterAll)
-            filterButton(.planned, L10n.SideDrawer.filterPlanned)
-            filterButton(.checked, L10n.SideDrawer.filterChecked)
+            favoriteFilterPill(.all, L10n.SideDrawer.filterAll)
+            favoriteFilterPill(.planned, L10n.SideDrawer.filterPlanned)
+            favoriteFilterPill(.checked, L10n.SideDrawer.filterChecked)
         }
     }
 
-    private func filterButton(_ filter: FavoriteDrawerFilter, _ title: String) -> some View {
-        let isActive = viewModel.favoriteFilter == filter
-        return Button {
-            viewModel.setFavoriteFilter(filter)
-        } label: {
-            HStack(spacing: 6) {
-                Text(title)
-                Text("\(viewModel.favoriteFilterCount(filter))")
-                    .foregroundStyle(Color(red: 0.33, green: 0.46, blue: 0.52))
-            }
-            .font(.system(size: 11, weight: .bold))
-            .padding(.horizontal, 8)
-            .frame(height: 28)
-            .background(
-                isActive
-                ? AnyShapeStyle(drawerItemFillColor)
-                : AnyShapeStyle(drawerItemFillColor)
-            , in: Capsule())
-            .overlay(Capsule().stroke(drawerItemBorderColor.opacity(0.9), lineWidth: isActive ? 0 : 1))
-            .foregroundStyle(Color(red: 0.27, green: 0.41, blue: 0.47))
+    private func homeCategoryFilterRail(sideWidth: CGFloat, topSafeInset: CGFloat) -> some View {
+        let isVisible = viewModel.isSideDrawerOpen
+
+        return VStack(spacing: 8) {
+            mapCategoryFilterPill(.all, L10n.Calendar.categoryAll, fixedWidth: 82)
+            mapCategoryFilterPill(.hanabi, L10n.Calendar.categoryHanabi, fixedWidth: 82)
+            mapCategoryFilterPill(.matsuri, L10n.Calendar.categoryMatsuri, fixedWidth: 82)
         }
-        .buttonStyle(.plain)
+        .padding(.top, topSafeInset + 20)
+        .padding(.trailing, 12 + sideWidth + 12)
+        .opacity(isVisible ? 1 : 0)
+        .offset(x: isVisible ? 0 : sideWidth + 32)
+        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: isVisible)
+        .allowsHitTesting(isVisible)
+    }
+
+    private func favoriteFilterPill(_ filter: FavoriteDrawerFilter, _ title: String) -> some View {
+        let isActive = viewModel.favoriteFilter == filter
+        return TsugieFilterPill(
+            leadingText: title,
+            trailingText: "\(viewModel.favoriteFilterCount(filter))",
+            isActive: isActive,
+            activeGradient: viewModel.activePillGradient,
+            activeGlowColor: viewModel.activeMapGlowColor,
+            fixedHeight: 32,
+            onTap: { viewModel.setFavoriteFilter(filter) }
+        )
+    }
+
+    private func mapCategoryFilterPill(_ filter: MapPlaceCategoryFilter, _ title: String, fixedWidth: CGFloat? = nil) -> some View {
+        let isActive = viewModel.mapCategoryFilter == filter
+        return TsugieFilterPill(
+            leadingText: title,
+            trailingText: "\(viewModel.mapCategoryFilterCount(filter))",
+            isActive: isActive,
+            activeGradient: viewModel.activePillGradient,
+            activeGlowColor: viewModel.activeMapGlowColor,
+            fixedWidth: fixedWidth,
+            fixedHeight: 32,
+            onTap: { viewModel.setMapCategoryFilter(filter) }
+        )
     }
 
     private var themePalette: some View {

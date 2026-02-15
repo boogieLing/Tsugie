@@ -8,7 +8,7 @@ struct HomeMapView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
                 Map(position: $viewModel.mapPosition) {
-                    ForEach(viewModel.places) { place in
+                    ForEach(viewModel.mapPlaces()) { place in
                         Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
                             let isMenuVisible = viewModel.markerActionPlaceID == place.id && !viewModel.isDetailVisible
 
@@ -140,28 +140,13 @@ struct HomeMapView: View {
                         viewModel.closeMarkerActionBubble()
                         onOpenCalendar()
                     } label: {
-                        Text(L10n.Home.calendarButton)
-                            .font(.system(size: 12, weight: .bold))
+                        Image(systemName: "calendar")
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Color(red: 0.24, green: 0.40, blue: 0.46))
-                            .padding(.horizontal, 12)
-                            .frame(height: 34)
-                            .background(Color.white.opacity(0.58), in: Capsule())
-                            .overlay(Capsule().stroke(Color(red: 0.84, green: 0.92, blue: 0.94, opacity: 0.9), lineWidth: 1))
-                            .tsugieActiveGlow(
-                                isActive: true,
-                                glowGradient: viewModel.activePillGradient,
-                                glowColor: viewModel.activeMapGlowColor,
-                                cornerRadius: 999,
-                                blurRadius: 8,
-                                glowOpacity: 0.78,
-                                scale: 1.02,
-                                primaryOpacity: 0.66,
-                                primaryRadius: 12,
-                                primaryYOffset: 4,
-                                secondaryOpacity: 0.34,
-                                secondaryRadius: 20,
-                                secondaryYOffset: 8
-                            )
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.66), in: Circle())
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Home.openCalendarA11y)
@@ -169,21 +154,13 @@ struct HomeMapView: View {
                     Button {
                         viewModel.resetToCurrentLocation()
                     } label: {
-                        Text("⌖")
-                            .font(.system(size: 16, weight: .bold))
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.47))
                             .frame(width: 34, height: 34)
-                            .background(Color.white.opacity(0.52), in: Circle())
-                            .overlay(Circle().stroke(Color(red: 0.84, green: 0.92, blue: 0.94, opacity: 0.95), lineWidth: 1))
-                            .background(
-                                Circle()
-                                    .fill(viewModel.activePillGradient)
-                                    .blur(radius: 11)
-                                    .opacity(0.44)
-                                    .scaleEffect(1.03)
-                            )
-                            .shadow(color: viewModel.activeMapGlowColor.opacity(0.36), radius: 14, x: 0, y: 4)
-                            .shadow(color: viewModel.activeMapGlowColor.opacity(0.19), radius: 24, x: 0, y: 9)
+                            .background(Color.white.opacity(0.66), in: Circle())
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Home.resetLocationA11y)
@@ -196,23 +173,9 @@ struct HomeMapView: View {
                             .foregroundStyle(Color(red: 0.29, green: 0.40, blue: 0.44))
                             .padding(.horizontal, 10)
                             .frame(height: 34)
-                            .background(Color.white.opacity(0.52), in: Capsule())
-                            .overlay(Capsule().stroke(Color(red: 0.84, green: 0.92, blue: 0.94, opacity: 0.9), lineWidth: 1))
-                            .tsugieActiveGlow(
-                                isActive: true,
-                                glowGradient: viewModel.activePillGradient,
-                                glowColor: viewModel.activeMapGlowColor,
-                                cornerRadius: 999,
-                                blurRadius: 8,
-                                glowOpacity: 0.78,
-                                scale: 1.02,
-                                primaryOpacity: 0.66,
-                                primaryRadius: 12,
-                                primaryYOffset: 4,
-                                secondaryOpacity: 0.34,
-                                secondaryRadius: 20,
-                                secondaryYOffset: 8
-                            )
+                            .background(Color.white.opacity(0.66), in: Capsule())
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Home.openMenuA11y)

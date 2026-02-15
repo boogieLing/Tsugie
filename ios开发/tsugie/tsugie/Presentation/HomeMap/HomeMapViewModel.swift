@@ -16,6 +16,12 @@ enum FavoriteDrawerFilter: String, CaseIterable {
     case checked
 }
 
+enum MapPlaceCategoryFilter: String, CaseIterable {
+    case all
+    case hanabi
+    case matsuri
+}
+
 @MainActor
 final class HomeMapViewModel: ObservableObject {
     @Published var mapPosition: MapCameraPosition
@@ -30,6 +36,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var isFavoriteDrawerOpen = false
     @Published private(set) var sideDrawerMenu: SideDrawerMenu = .none
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
+    @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
     @Published var isThemePaletteOpen = false
     @Published var selectedThemeScheme = "fresh"
     @Published var themeAlphaRatio: Double = 1
@@ -302,16 +309,14 @@ final class HomeMapViewModel: ObservableObject {
         favoriteFilter = filter
     }
 
+    func setMapCategoryFilter(_ filter: MapPlaceCategoryFilter) {
+        mapCategoryFilter = filter
+        reconcileSelectionForMapFilter()
+    }
+
     func filteredFavoritePlaces() -> [HePlace] {
         let favorites = favoritePlaces()
-        switch favoriteFilter {
-        case .all:
-            return favorites
-        case .planned:
-            return favorites.filter { !placeState(for: $0.id).isCheckedIn }
-        case .checked:
-            return favorites.filter { placeState(for: $0.id).isCheckedIn }
-        }
+        return filteredFavoritePlacesByStatus(from: favorites)
     }
 
     func favoriteFilterCount(_ filter: FavoriteDrawerFilter) -> Int {
@@ -323,6 +328,18 @@ final class HomeMapViewModel: ObservableObject {
             return favorites.filter { !placeState(for: $0.id).isCheckedIn }.count
         case .checked:
             return favorites.filter { placeState(for: $0.id).isCheckedIn }.count
+        }
+    }
+
+    func mapCategoryFilterCount(_ filter: MapPlaceCategoryFilter) -> Int {
+        let rendered = mapPlaces()
+        switch filter {
+        case .all:
+            return rendered.count
+        case .hanabi:
+            return rendered.filter { $0.heType == .hanabi }.count
+        case .matsuri:
+            return rendered.filter { $0.heType == .matsuri }.count
         }
     }
 
@@ -453,7 +470,49 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func nearbyPlaces(limit: Int = 10) -> [HePlace] {
-        Array(places.sorted(by: isCloserAndEarlier).prefix(limit))
+        Array(mapPlaces().sorted(by: isCloserAndEarlier).prefix(limit))
+    }
+
+    func mapPlaces() -> [HePlace] {
+        switch mapCategoryFilter {
+        case .all:
+            return places
+        case .hanabi:
+            return places.filter { $0.heType == .hanabi }
+        case .matsuri:
+            return places.filter { $0.heType == .matsuri }
+        }
+    }
+
+    private func filteredFavoritePlacesByStatus(from places: [HePlace]) -> [HePlace] {
+        switch favoriteFilter {
+        case .all:
+            return places
+        case .planned:
+            return places.filter { !placeState(for: $0.id).isCheckedIn }
+        case .checked:
+            return places.filter { placeState(for: $0.id).isCheckedIn }
+        }
+    }
+
+    private func reconcileSelectionForMapFilter() {
+        let visiblePlaceIDs = Set(mapPlaces().map(\.id))
+
+        if let detailPlaceID, !visiblePlaceIDs.contains(detailPlaceID) {
+            self.detailPlaceID = nil
+        }
+
+        if let quickCardPlaceID, !visiblePlaceIDs.contains(quickCardPlaceID) {
+            self.quickCardPlaceID = nil
+        }
+
+        if let markerActionPlaceID, !visiblePlaceIDs.contains(markerActionPlaceID) {
+            self.markerActionPlaceID = nil
+        }
+
+        if let selectedPlaceID, !visiblePlaceIDs.contains(selectedPlaceID) {
+            self.selectedPlaceID = nil
+        }
     }
 
     private func quickStartDateText(for snapshot: EventStatusSnapshot) -> String {
@@ -500,7 +559,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func recommendedPlace() -> HePlace? {
-        places.sorted(by: isHigherPriority).first
+        mapPlaces().sorted(by: isHigherPriority).first
     }
 
     private func isCloserAndEarlier(_ lhs: HePlace, _ rhs: HePlace) -> Bool {

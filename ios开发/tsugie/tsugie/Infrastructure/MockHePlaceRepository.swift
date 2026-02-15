@@ -59,7 +59,7 @@ enum MockHePlaceRepository {
                 imageTag: L10n.MockPlace.oshiageImageTag,
                 imageHint: L10n.MockPlace.oshiageImageHint,
                 heatScore: 66,
-                surpriseScore: 70
+                surpriseScore: 70   
             )
         ]
     }

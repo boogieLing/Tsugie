@@ -26,3 +26,4 @@ struct HePlace: Identifiable {
     let heatScore: Int
     let surpriseScore: Int
 }
+    
