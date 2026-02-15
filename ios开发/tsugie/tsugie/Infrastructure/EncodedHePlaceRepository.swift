@@ -1,0 +1,802 @@
+import Compression
+import CoreLocation
+import CryptoKit
+import Foundation
+import os
+import zlib
+
+enum EncodedHePlaceRepository {
+    nonisolated private static let indexResourceName = "he_places.index"
+    nonisolated private static let indexResourceExtension = "json"
+    nonisolated private static let payloadResourceName = "he_places.payload"
+    nonisolated private static let payloadResourceExtension = "bin"
+    nonisolated private static let obfuscationKey = "tsugie-ios-seed-v1"
+    nonisolated private static let defaultStartupCenter = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+    nonisolated private static let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "EncodedHePlaceRepository")
+
+    nonisolated static func load() -> [HePlace] {
+        loadNearby(
+            center: defaultStartupCenter,
+            radiusKm: 30,
+            limit: 700
+        )
+    }
+
+    nonisolated static func loadNearby(
+        center: CLLocationCoordinate2D,
+        radiusKm: Double = 30,
+        limit: Int = 700
+    ) -> [HePlace] {
+        guard let indexURL = resolveResourceURL(resourceName: indexResourceName, resourceExtension: indexResourceExtension) else {
+            debugLog("loadNearby abort: index resource missing (\(indexResourceName).\(indexResourceExtension))")
+            return []
+        }
+        guard let indexData = try? Data(contentsOf: indexURL) else {
+            debugLog("loadNearby abort: cannot read index at \(indexURL.path)")
+            return []
+        }
+        guard let indexEnvelope = try? JSONDecoder().decode(HePlacesSpatialIndexEnvelope.self, from: indexData) else {
+            debugLog("loadNearby abort: cannot decode index json")
+            return []
+        }
+        guard let payloadURL = resolvePayloadURL(indexEnvelope: indexEnvelope) else {
+            debugLog("loadNearby abort: payload resource missing")
+            return []
+        }
+        guard let fileHandle = try? FileHandle(forReadingFrom: payloadURL) else {
+            debugLog("loadNearby abort: cannot open payload at \(payloadURL.path)")
+            return []
+        }
+
+        debugLog(
+            "loadNearby start center=(\(center.latitude),\(center.longitude)) radiusKm=\(radiusKm) limit=\(limit) buckets=\(indexEnvelope.payloadBuckets.count)"
+        )
+
+        defer {
+            try? fileHandle.close()
+        }
+
+        return loadNearby(
+            from: indexEnvelope,
+            center: center,
+            radiusKm: radiusKm,
+            limit: limit,
+            payloadReader: { bucket in
+                readChunk(
+                    with: fileHandle,
+                    offset: bucket.payloadOffset,
+                    length: bucket.payloadLength
+                )
+            }
+        )
+    }
+
+    nonisolated static func loadNearby(
+        from indexData: Data,
+        payloadData: Data,
+        center: CLLocationCoordinate2D,
+        radiusKm: Double,
+        limit: Int
+    ) -> [HePlace] {
+        guard let indexEnvelope = try? JSONDecoder().decode(HePlacesSpatialIndexEnvelope.self, from: indexData) else {
+            return []
+        }
+
+        return loadNearby(
+            from: indexEnvelope,
+            center: center,
+            radiusKm: radiusKm,
+            limit: limit,
+            payloadReader: { bucket in
+                readChunk(from: payloadData, offset: bucket.payloadOffset, length: bucket.payloadLength)
+            }
+        )
+    }
+
+    private nonisolated static func resolvePayloadURL(indexEnvelope: HePlacesSpatialIndexEnvelope) -> URL? {
+        if let payloadFile = indexEnvelope.payloadFile?.nonEmpty {
+            let filename = (payloadFile as NSString).deletingPathExtension
+            let ext = (payloadFile as NSString).pathExtension
+            if !filename.isEmpty,
+               let url = resolveResourceURL(resourceName: filename, resourceExtension: ext.isEmpty ? nil : ext) {
+                return url
+            }
+        }
+
+        return resolveResourceURL(resourceName: payloadResourceName, resourceExtension: payloadResourceExtension)
+    }
+
+    private nonisolated static func loadNearby(
+        from indexEnvelope: HePlacesSpatialIndexEnvelope,
+        center: CLLocationCoordinate2D,
+        radiusKm: Double,
+        limit: Int,
+        payloadReader: (EncodedPayloadBucketMeta) -> Data?
+    ) -> [HePlace] {
+        let candidateKeys = nearbyBucketKeys(
+            center: center,
+            precision: indexEnvelope.spatialIndex.precision,
+            radiusKm: radiusKm
+        )
+
+        var items: [EncodedHePlaceItem] = []
+        items.reserveCapacity(512)
+        var matchedBuckets = 0
+        var failedChunkRead = 0
+        var decodedFromCandidateBuckets = 0
+
+        for key in candidateKeys {
+            guard let bucket = indexEnvelope.payloadBuckets[key] else {
+                continue
+            }
+            matchedBuckets += 1
+            guard let payload = payloadReader(bucket) else {
+                failedChunkRead += 1
+                continue
+            }
+            let decoded = decodeItems(payloadChunk: payload)
+            decodedFromCandidateBuckets += decoded.count
+            items.append(contentsOf: decoded)
+        }
+
+        var decodedFromFullScan = 0
+        if items.isEmpty {
+            for bucket in indexEnvelope.payloadBuckets.values {
+                guard let payload = payloadReader(bucket) else {
+                    failedChunkRead += 1
+                    continue
+                }
+                let decoded = decodeItems(payloadChunk: payload)
+                decodedFromFullScan += decoded.count
+                items.append(contentsOf: decoded)
+            }
+        }
+
+        let radiusMeters = max(radiusKm, 0.5) * 1_000
+        let cappedLimit = max(1, limit)
+
+        var places = items.compactMap { mapToHePlace($0, center: center) }
+        places.sort(by: isCloserAndHigherPriority)
+
+        let filtered = places.filter { $0.distanceMeters <= radiusMeters * 1.2 }
+        debugLog(
+            "loadNearby stats candidateKeys=\(candidateKeys.count) matchedBuckets=\(matchedBuckets) failedChunkRead=\(failedChunkRead) decodedCandidate=\(decodedFromCandidateBuckets) decodedFullScan=\(decodedFromFullScan) mappedPlaces=\(places.count) filteredPlaces=\(filtered.count)"
+        )
+        if !filtered.isEmpty {
+            return Array(filtered.prefix(cappedLimit))
+        }
+        return Array(places.prefix(cappedLimit))
+    }
+
+    private nonisolated static func resolveResourceURL(resourceName: String, resourceExtension: String?) -> URL? {
+        var seen = Set<ObjectIdentifier>()
+        let candidates = [Bundle.main, Bundle(for: _BundleToken.self)] + Bundle.allBundles + Bundle.allFrameworks
+        for bundle in candidates {
+            let identifier = ObjectIdentifier(bundle)
+            if seen.contains(identifier) {
+                continue
+            }
+            seen.insert(identifier)
+            if let url = bundle.url(forResource: resourceName, withExtension: resourceExtension) {
+                return url
+            }
+            if let url = bundle.url(forResource: resourceName, withExtension: resourceExtension, subdirectory: "Resources") {
+                return url
+            }
+        }
+        return nil
+    }
+
+    private nonisolated static func debugLog(_ message: String) {
+#if DEBUG
+        print("[EncodedHePlaceRepository] \(message)")
+#endif
+        logger.info("\(message, privacy: .public)")
+    }
+
+    private nonisolated static func decodeItems(payloadChunk: Data) -> [EncodedHePlaceItem] {
+        let payloadCandidates = decodePayloadCandidates(payloadChunk)
+        for payloadData in payloadCandidates {
+            if let items = decodeItemsFromJSONPayload(payloadData) {
+                return items
+            }
+        }
+        return []
+    }
+
+    private nonisolated static func readChunk(with fileHandle: FileHandle, offset: UInt64, length: Int) -> Data? {
+        guard length > 0 else {
+            return nil
+        }
+        do {
+            try fileHandle.seek(toOffset: offset)
+            guard let data = try fileHandle.read(upToCount: length), data.count == length else {
+                return nil
+            }
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func readChunk(from payloadData: Data, offset: UInt64, length: Int) -> Data? {
+        guard length > 0,
+              offset <= UInt64(Int.max),
+              let start = Int(exactly: offset) else {
+            return nil
+        }
+
+        let end = start + length
+        guard start >= 0, end <= payloadData.count else {
+            return nil
+        }
+        return payloadData.subdata(in: start..<end)
+    }
+
+    private nonisolated static func nearbyBucketKeys(
+        center: CLLocationCoordinate2D,
+        precision: Int,
+        radiusKm: Double
+    ) -> Set<String> {
+        let normalizedPrecision = max(3, min(8, precision))
+        let centerHash = GeohashCodec.encode(center, precision: normalizedPrecision)
+        guard let bounds = GeohashCodec.boundingBox(of: centerHash) else {
+            return [centerHash]
+        }
+
+        let radiusMeters = max(radiusKm, 0.5) * 1_000
+        let latStep = max(bounds.maxLat - bounds.minLat, 0.00001)
+        let lngStep = max(bounds.maxLng - bounds.minLng, 0.00001)
+
+        let latMeters = max(latStep * 111_320, 10)
+        let lngMeters = max(lngStep * 111_320 * max(cos(center.latitude * .pi / 180), 0.1), 10)
+
+        let latCells = min(32, max(1, Int(ceil(radiusMeters / latMeters))))
+        let lngCells = min(32, max(1, Int(ceil(radiusMeters / lngMeters))))
+
+        var keys: Set<String> = [centerHash]
+        for latOffset in (-latCells...latCells) {
+            for lngOffset in (-lngCells...lngCells) {
+                let sampleLat = clampLatitude(center.latitude + (Double(latOffset) * latStep))
+                let sampleLng = wrapLongitude(center.longitude + (Double(lngOffset) * lngStep))
+                let sample = CLLocationCoordinate2D(latitude: sampleLat, longitude: sampleLng)
+                keys.insert(GeohashCodec.encode(sample, precision: normalizedPrecision))
+            }
+        }
+        return keys
+    }
+
+    private nonisolated static func clampLatitude(_ lat: Double) -> Double {
+        max(-89.999_999, min(89.999_999, lat))
+    }
+
+    private nonisolated static func wrapLongitude(_ lng: Double) -> Double {
+        var value = lng
+        while value > 180 { value -= 360 }
+        while value < -180 { value += 360 }
+        return value
+    }
+
+    private nonisolated static func decodePayloadCandidates(_ obfuscatedPayload: Data) -> [Data] {
+        let compressed = xorObfuscate(obfuscatedPayload, keySeed: obfuscationKey)
+        var candidates: [Data] = []
+
+        // 优先尝试标准 zlib 包裹流（与脚本默认压缩兼容）。
+        if let payload = try? zlibDecompressWrapped(compressed) {
+            candidates.append(payload)
+        }
+
+        // 兼容历史 raw deflate 形式。
+        if let payload = try? zlibDecompressRaw(compressed),
+           !candidates.contains(payload) {
+            candidates.append(payload)
+        }
+
+        return candidates
+    }
+
+    private nonisolated static func decodeItemsFromJSONPayload(_ payloadData: Data) -> [EncodedHePlaceItem]? {
+        if let items = try? JSONDecoder().decode([EncodedHePlaceItem].self, from: payloadData) {
+            return items
+        }
+
+        // 容错模式：单条坏数据不影响整个 bucket。
+        guard let array = try? JSONSerialization.jsonObject(with: payloadData) as? [Any] else {
+            return nil
+        }
+
+        var recovered: [EncodedHePlaceItem] = []
+        recovered.reserveCapacity(array.count)
+        for element in array {
+            guard JSONSerialization.isValidJSONObject(element),
+                  let elementData = try? JSONSerialization.data(withJSONObject: element),
+                  let item = try? JSONDecoder().decode(EncodedHePlaceItem.self, from: elementData) else {
+                continue
+            }
+            recovered.append(item)
+        }
+
+        return recovered.isEmpty ? nil : recovered
+    }
+
+    private nonisolated static func xorObfuscate(_ data: Data, keySeed: String) -> Data {
+        let key = Array(SHA256.hash(data: Data(keySeed.utf8)))
+        var output = Data(count: data.count)
+
+        output.withUnsafeMutableBytes { outputBytes in
+            data.withUnsafeBytes { inputBytes in
+                let inPtr = inputBytes.bindMemory(to: UInt8.self).baseAddress
+                let outPtr = outputBytes.bindMemory(to: UInt8.self).baseAddress
+                guard let inPtr, let outPtr else { return }
+
+                for index in 0..<data.count {
+                    let mix = UInt8((index * 131 + 17) & 0xFF)
+                    outPtr[index] = inPtr[index] ^ key[index % key.count] ^ mix
+                }
+            }
+        }
+        return output
+    }
+
+    private nonisolated static func zlibDecompressRaw(_ data: Data) throws -> Data {
+        var outputSize = max(data.count * 4, 1024)
+        let maxOutputSize = 64 * 1024 * 1024
+
+        while outputSize <= maxOutputSize {
+            var decompressed = [UInt8](repeating: 0, count: outputSize)
+            let decodedCount = decompressed.withUnsafeMutableBufferPointer { dstBuffer -> Int in
+                guard let dst = dstBuffer.baseAddress else {
+                    return 0
+                }
+                let dstCount = dstBuffer.count
+                return data.withUnsafeBytes { rawBuffer -> Int in
+                    guard let src = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                        return 0
+                    }
+                    return compression_decode_buffer(
+                        dst,
+                        dstCount,
+                        src,
+                        data.count,
+                        nil,
+                        COMPRESSION_ZLIB
+                    )
+                }
+            }
+
+            if decodedCount > 0 {
+                return Data(decompressed.prefix(decodedCount))
+            }
+            outputSize *= 2
+        }
+
+        throw SeedCodecError.decompressionFailed
+    }
+
+    private nonisolated static func zlibDecompressWrapped(_ data: Data) throws -> Data {
+        try data.withUnsafeBytes { rawBuffer -> Data in
+            guard let source = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                throw SeedCodecError.decompressionFailed
+            }
+
+            var stream = z_stream()
+            stream.next_in = UnsafeMutablePointer<Bytef>(mutating: source)
+            stream.avail_in = uInt(data.count)
+
+            let initStatus = inflateInit_(&stream, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
+            guard initStatus == Z_OK else {
+                throw SeedCodecError.decompressionFailed
+            }
+            defer { inflateEnd(&stream) }
+
+            let chunkSize = 64 * 1024
+            var output = Data()
+            var chunk = [UInt8](repeating: 0, count: chunkSize)
+
+            while true {
+                let status: Int32 = chunk.withUnsafeMutableBufferPointer { buffer in
+                    guard let target = buffer.baseAddress else {
+                        return Z_STREAM_ERROR
+                    }
+                    stream.next_out = target
+                    stream.avail_out = uInt(buffer.count)
+                    return inflate(&stream, Z_NO_FLUSH)
+                }
+
+                let produced = chunkSize - Int(stream.avail_out)
+                if produced > 0 {
+                    output.append(contentsOf: chunk.prefix(produced))
+                }
+
+                if status == Z_STREAM_END {
+                    return output
+                }
+                if status != Z_OK {
+                    throw SeedCodecError.decompressionFailed
+                }
+            }
+        }
+    }
+
+    private nonisolated static func mapToHePlace(_ item: EncodedHePlaceItem, center: CLLocationCoordinate2D) -> HePlace? {
+        guard let coordinate = item.record.coordinate else {
+            return nil
+        }
+
+        let name = item.record.eventName?.nonEmpty ?? item.record.venueName?.nonEmpty ?? "Unknown"
+        let type = HeType(rawValue: item.category) ?? .other
+        let placeID = UUID(uuidString: item.iosPlaceID) ?? UUID()
+        let startAt = SeedDateParser.startAt(item)
+        let endAt = SeedDateParser.endAt(item, startAt: startAt)
+        let mapSpot = item.record.venueName?.nonEmpty
+            ?? item.record.venueAddress?.nonEmpty
+            ?? item.record.city?.nonEmpty
+            ?? item.record.prefecture?.nonEmpty
+            ?? name
+        let hint = item.hint?.nonEmpty ?? "\(mapSpot)・おすすめ"
+        let detail = makeDetailDescription(from: item.record)
+        let openHours = makeOpenHours(start: item.normalizedStartTime, end: item.normalizedEndTime)
+        let realDistance = center.distance(to: coordinate)
+
+        return HePlace(
+            id: placeID,
+            name: name,
+            heType: type,
+            coordinate: coordinate,
+            startAt: startAt,
+            endAt: endAt,
+            distanceMeters: realDistance,
+            scaleScore: item.scaleScore ?? 70,
+            hint: hint,
+            openHours: openHours,
+            mapSpot: mapSpot,
+            detailDescription: detail,
+            imageTag: type == .hanabi ? "花火" : (type == .matsuri ? "祭典" : "へ"),
+            imageHint: item.record.eventName?.nonEmpty ?? name,
+            heatScore: item.heatScore ?? 72,
+            surpriseScore: item.surpriseScore ?? 66
+        )
+    }
+
+    private nonisolated static func isCloserAndHigherPriority(_ lhs: HePlace, _ rhs: HePlace) -> Bool {
+        if lhs.distanceMeters != rhs.distanceMeters {
+            return lhs.distanceMeters < rhs.distanceMeters
+        }
+        if lhs.scaleScore != rhs.scaleScore {
+            return lhs.scaleScore > rhs.scaleScore
+        }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private nonisolated static func makeOpenHours(start: String?, end: String?) -> String? {
+        let startText = start?.nonEmpty
+        let endText = end?.nonEmpty
+        if let startText, let endText {
+            return "Open \(startText) - \(endText)"
+        }
+        if let startText {
+            return "Start \(startText)"
+        }
+        return nil
+    }
+
+    private nonisolated static func makeDetailDescription(from record: FusedEventRecord) -> String {
+        let candidates = [
+            record.eventName,
+            record.venueName,
+            record.accessText,
+            record.rainoutPolicy,
+            record.contact,
+            record.sourceNotes,
+        ]
+        let kept = candidates.compactMap { $0?.nonEmpty }
+        return kept.isEmpty ? "詳細情報準備中" : kept.joined(separator: " / ")
+    }
+}
+
+nonisolated private enum SeedCodecError: Error {
+    case decompressionFailed
+}
+
+private final class _BundleToken {}
+
+nonisolated private struct HePlacesSpatialIndexEnvelope: Decodable {
+    let version: Int
+    let spatialIndex: SpatialIndexMeta
+    let payloadFile: String?
+    let payloadSHA256: String?
+    let payloadSizeBytes: Int?
+    let payloadBuckets: [String: EncodedPayloadBucketMeta]
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case spatialIndex = "spatial_index"
+        case payloadFile = "payload_file"
+        case payloadSHA256 = "payload_sha256"
+        case payloadSizeBytes = "payload_size_bytes"
+        case payloadBuckets = "payload_buckets"
+    }
+}
+
+nonisolated private struct SpatialIndexMeta: Decodable {
+    let scheme: String
+    let precision: Int
+    let bucketCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case scheme
+        case precision
+        case bucketCount = "bucket_count"
+    }
+}
+
+nonisolated private struct EncodedPayloadBucketMeta: Decodable {
+    let recordCount: Int?
+    let payloadSHA256: String?
+    let payloadOffset: UInt64
+    let payloadLength: Int
+
+    enum CodingKeys: String, CodingKey {
+        case recordCount = "record_count"
+        case payloadSHA256 = "payload_sha256"
+        case payloadOffset = "payload_offset"
+        case payloadLength = "payload_length"
+    }
+}
+
+nonisolated private struct EncodedHePlaceItem: Decodable {
+    let category: String
+    let iosPlaceID: String
+    let distanceMeters: Double?
+    let scaleScore: Int?
+    let heatScore: Int?
+    let surpriseScore: Int?
+    let hint: String?
+    let normalizedStartDate: String?
+    let normalizedEndDate: String?
+    let normalizedStartTime: String?
+    let normalizedEndTime: String?
+    let geohash: String?
+    let record: FusedEventRecord
+
+    enum CodingKeys: String, CodingKey {
+        case category
+        case iosPlaceID = "ios_place_id"
+        case distanceMeters = "distance_meters"
+        case scaleScore = "scale_score"
+        case heatScore = "heat_score"
+        case surpriseScore = "surprise_score"
+        case hint
+        case normalizedStartDate = "normalized_start_date"
+        case normalizedEndDate = "normalized_end_date"
+        case normalizedStartTime = "normalized_start_time"
+        case normalizedEndTime = "normalized_end_time"
+        case geohash
+        case record
+    }
+}
+
+nonisolated private struct FusedEventRecord: Decodable {
+    let eventName: String?
+    let venueName: String?
+    let venueAddress: String?
+    let prefecture: String?
+    let city: String?
+    let lat: Double?
+    let lng: Double?
+    let accessText: String?
+    let rainoutPolicy: String?
+    let contact: String?
+    let sourceNotes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventName = "event_name"
+        case venueName = "venue_name"
+        case venueAddress = "venue_address"
+        case prefecture
+        case city
+        case lat
+        case lng
+        case accessText = "access_text"
+        case rainoutPolicy = "rainout_policy"
+        case contact
+        case sourceNotes = "source_notes"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        eventName = Self.decodeString(container, key: .eventName)
+        venueName = Self.decodeString(container, key: .venueName)
+        venueAddress = Self.decodeString(container, key: .venueAddress)
+        prefecture = Self.decodeString(container, key: .prefecture)
+        city = Self.decodeString(container, key: .city)
+        lat = Self.decodeDouble(container, key: .lat)
+        lng = Self.decodeDouble(container, key: .lng)
+        accessText = Self.decodeString(container, key: .accessText)
+        rainoutPolicy = Self.decodeString(container, key: .rainoutPolicy)
+        contact = Self.decodeString(container, key: .contact)
+        sourceNotes = Self.decodeString(container, key: .sourceNotes)
+    }
+
+    var coordinate: CLLocationCoordinate2D? {
+        guard let lat, let lng, (-90...90).contains(lat), (-180...180).contains(lng) else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
+    private nonisolated static func decodeString(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> String? {
+        if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return String(value)
+        }
+        return nil
+    }
+
+    private nonisolated static func decodeDouble(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Double? {
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let text = try? container.decodeIfPresent(String.self, forKey: key),
+           let value = Double(text) {
+            return value
+        }
+        return nil
+    }
+}
+
+nonisolated private enum SeedDateParser {
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
+        return calendar
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }()
+
+    nonisolated static func startAt(_ item: EncodedHePlaceItem) -> Date? {
+        guard let day = item.normalizedStartDate?.nonEmpty else {
+            return nil
+        }
+        let time = item.normalizedStartTime?.nonEmpty ?? "18:00"
+        return dateTimeFormatter.date(from: "\(day) \(time)")
+    }
+
+    nonisolated static func endAt(_ item: EncodedHePlaceItem, startAt: Date?) -> Date? {
+        if let day = item.normalizedEndDate?.nonEmpty {
+            let time = item.normalizedEndTime?.nonEmpty ?? "21:00"
+            if let end = dateTimeFormatter.date(from: "\(day) \(time)") {
+                if let startAt, end < startAt {
+                    return calendar.date(byAdding: .hour, value: 2, to: startAt)
+                }
+                return end
+            }
+        }
+
+        if let startAt {
+            return calendar.date(byAdding: .hour, value: 2, to: startAt)
+        }
+        return nil
+    }
+}
+
+nonisolated private enum GeohashCodec {
+    private static let alphabet = Array("0123456789bcdefghjkmnpqrstuvwxyz")
+    private static let bits: [Int] = [16, 8, 4, 2, 1]
+    private static let decodeMap: [Character: Int] = {
+        var map: [Character: Int] = [:]
+        for (index, ch) in alphabet.enumerated() {
+            map[ch] = index
+        }
+        return map
+    }()
+
+    nonisolated static func encode(_ coordinate: CLLocationCoordinate2D, precision: Int) -> String {
+        var latRange = (-90.0, 90.0)
+        var lngRange = (-180.0, 180.0)
+        var isLng = true
+        var bitIndex = 0
+        var current = 0
+        var out: [Character] = []
+
+        while out.count < precision {
+            if isLng {
+                let mid = (lngRange.0 + lngRange.1) / 2
+                if coordinate.longitude >= mid {
+                    current |= bits[bitIndex]
+                    lngRange.0 = mid
+                } else {
+                    lngRange.1 = mid
+                }
+            } else {
+                let mid = (latRange.0 + latRange.1) / 2
+                if coordinate.latitude >= mid {
+                    current |= bits[bitIndex]
+                    latRange.0 = mid
+                } else {
+                    latRange.1 = mid
+                }
+            }
+
+            isLng.toggle()
+            if bitIndex < 4 {
+                bitIndex += 1
+            } else {
+                out.append(alphabet[current])
+                bitIndex = 0
+                current = 0
+            }
+        }
+
+        return String(out)
+    }
+
+    nonisolated static func boundingBox(of geohash: String) -> (minLat: Double, maxLat: Double, minLng: Double, maxLng: Double)? {
+        var latRange = (-90.0, 90.0)
+        var lngRange = (-180.0, 180.0)
+        var isLng = true
+
+        for ch in geohash {
+            guard let decoded = decodeMap[ch] else {
+                return nil
+            }
+            for bit in bits {
+                let isSet = (decoded & bit) != 0
+                if isLng {
+                    let mid = (lngRange.0 + lngRange.1) / 2
+                    if isSet {
+                        lngRange.0 = mid
+                    } else {
+                        lngRange.1 = mid
+                    }
+                } else {
+                    let mid = (latRange.0 + latRange.1) / 2
+                    if isSet {
+                        latRange.0 = mid
+                    } else {
+                        latRange.1 = mid
+                    }
+                }
+                isLng.toggle()
+            }
+        }
+
+        return (latRange.0, latRange.1, lngRange.0, lngRange.1)
+    }
+}
+
+nonisolated private extension CLLocationCoordinate2D {
+    func distance(to other: CLLocationCoordinate2D) -> Double {
+        let lhs = CLLocation(latitude: latitude, longitude: longitude)
+        let rhs = CLLocation(latitude: other.latitude, longitude: other.longitude)
+        return lhs.distance(from: rhs)
+    }
+}
+
+nonisolated private extension String {
+    var nonEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

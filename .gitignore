@@ -11,7 +11,13 @@ ios开发/tsugie/tsugie.xcodeproj/project.xcworkspace/xcuserdata/
 
 设计/原型/local-config.js
 
-数据端
+# 数据端默认不跟踪新增产物；脚本目录例外（用于可维护流水线）
+数据端/*
+!数据端/scripts/
+!数据端/scripts/**
+数据端/scripts/**/__pycache__/
+数据端/scripts/**/*.pyc
+*.pyc
 
 japan-260212.osm.pbf
 

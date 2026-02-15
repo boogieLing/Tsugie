@@ -1,6 +1,7 @@
 import CoreLocation
 import Combine
 import MapKit
+import os
 import SwiftUI
 
 enum SideDrawerMenu: String, CaseIterable {
@@ -47,23 +48,38 @@ final class HomeMapViewModel: ObservableObject {
     @Published var startNotificationEnabled = true
     @Published var nearbyNotificationEnabled = false
 
+    private let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "HomeMapViewModel")
     private let placeStateStore: PlaceStateStore
-    private let initialCenter = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+    private let locationProvider: AppLocationProviding
+    private let initialCenter = DefaultAppLocationProvider.developmentFixedCoordinate
     private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
     private let focusedMapSpan = MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
     private let focusedCenterLatitudeOffset: CLLocationDegrees = 0.0023
+    private let nearbyRadiusKm: Double
+    private let nearbyLimit: Int
+    private var shouldBootstrapFromBundled: Bool
+    private var resolvedCenter: CLLocationCoordinate2D
     private var autoOpenTask: DispatchWorkItem?
     private var tickerCancellable: AnyCancellable?
+    private var bootstrapTask: Task<Void, Never>?
     private var hasAutoOpened = false
     private var ignoreMapTapUntil: Date?
 
     init(
         places: [HePlace]? = nil,
-        placeStateStore: PlaceStateStore? = nil
+        placeStateStore: PlaceStateStore? = nil,
+        locationProvider: AppLocationProviding? = nil,
+        nearbyRadiusKm: Double = 30,
+        nearbyLimit: Int = 700
     ) {
-        self.places = (places ?? MockHePlaceRepository.load())
+        self.places = (places ?? [])
             .filter { $0.heType != .nature }
         self.placeStateStore = placeStateStore ?? PlaceStateStore()
+        self.locationProvider = locationProvider ?? DefaultAppLocationProvider()
+        self.nearbyRadiusKm = max(1, nearbyRadiusKm)
+        self.nearbyLimit = max(1, nearbyLimit)
+        self.shouldBootstrapFromBundled = places == nil
+        self.resolvedCenter = initialCenter
 
         let region = MKCoordinateRegion(
             center: initialCenter,
@@ -142,13 +158,17 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func onViewAppear() {
+        debugLog("onViewAppear places=\(self.places.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
         startStatusTicker()
+        bootstrapNearbyPlacesIfNeeded()
         scheduleAutoOpenIfNeeded()
     }
 
     func onViewDisappear() {
         tickerCancellable?.cancel()
         tickerCancellable = nil
+        bootstrapTask?.cancel()
+        bootstrapTask = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
@@ -360,11 +380,12 @@ final class HomeMapViewModel: ObservableObject {
         withAnimation(.easeInOut(duration: 0.25)) {
             mapPosition = .region(
                 MKCoordinateRegion(
-                    center: initialCenter,
+                    center: resolvedCenter,
                     span: defaultMapSpan
                 )
             )
         }
+        reloadNearbyPlacesAroundCurrentLocation(userInitiated: true)
     }
 
     func focus(on place: HePlace) {
@@ -600,6 +621,65 @@ final class HomeMapViewModel: ObservableObject {
             }
     }
 
+    private func bootstrapNearbyPlacesIfNeeded() {
+        guard shouldBootstrapFromBundled else {
+            return
+        }
+        reloadNearbyPlacesAroundCurrentLocation(userInitiated: false)
+    }
+
+    private func reloadNearbyPlacesAroundCurrentLocation(userInitiated: Bool) {
+        if !userInitiated, bootstrapTask != nil {
+            return
+        }
+
+        bootstrapTask?.cancel()
+        bootstrapTask = Task { [weak self] in
+            guard let self else { return }
+
+            let center = await self.locationProvider.currentCoordinate(fallback: self.initialCenter)
+            let radiusKm = self.nearbyRadiusKm
+            let limit = self.nearbyLimit
+            let loaded = await Task.detached(priority: .userInitiated) {
+                EncodedHePlaceRepository.loadNearby(
+                    center: center,
+                    radiusKm: radiusKm,
+                    limit: limit
+                )
+            }.value
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self.bootstrapTask = nil
+            self.resolvedCenter = center
+
+            let usingMockFallback = loaded.isEmpty
+            let normalized = self.normalizedPlaces(loaded)
+            self.debugLog(
+                "reloadNearby done center=(\(center.latitude),\(center.longitude)) loaded=\(loaded.count) normalized=\(normalized.count) usingMockFallback=\(usingMockFallback)"
+            )
+            if !normalized.isEmpty {
+                self.places = normalized
+                self.shouldBootstrapFromBundled = false
+                self.scheduleAutoOpenIfNeeded()
+            }
+        }
+    }
+
+    private func debugLog(_ message: String) {
+#if DEBUG
+        print("[HomeMapViewModel] \(message)")
+#endif
+        logger.info("\(message, privacy: .public)")
+    }
+
+    private func normalizedPlaces(_ loaded: [HePlace]) -> [HePlace] {
+        let source = loaded.isEmpty ? MockHePlaceRepository.load() : loaded
+        return source.filter { $0.heType != .nature }
+    }
+
     private func restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: UUID?) {
         guard let focusedPlaceID,
               let place = place(for: focusedPlaceID) else {
@@ -625,5 +705,6 @@ final class HomeMapViewModel: ObservableObject {
     deinit {
         autoOpenTask?.cancel()
         tickerCancellable?.cancel()
+        bootstrapTask?.cancel()
     }
 }

@@ -207,3 +207,24 @@
 - 祭典（お祭り）相关的站点清单、抓取配置、字段融合与后续实现，统一放在 `数据端/OMATSURI/`。
 - 花火（HANABI）与祭典（OMATSURI）保持目录与代码解耦，避免在同一子项目内混放不同垂类逻辑。
 - 数据端统一运维脚本入口固定为：`数据端/scripts/`（如 `start_ops_console.sh`、`ops_console.sh`）；`HANABI/` 与 `OMATSURI/` 内仅保留兼容转发入口，不再作为主入口维护。
+
+## 13. iOS 内置数据包接入基线（新增）
+
+- 数据到 iOS 的默认接入流程固定为：
+  1. 数据端运行完成并更新 `数据端/HANABI/data/latest_run.json` 与 `数据端/OMATSURI/data/latest_run.json`
+  2. 执行统一维护脚本：`bash 数据端/scripts/update_ios_payload.sh --pretty`
+  3. 产物写入：
+     - `ios开发/tsugie/tsugie/Resources/he_places.index.json`（空间索引）
+     - `ios开发/tsugie/tsugie/Resources/he_places.payload.bin`（二进制分片 payload）
+  4. iOS 端通过 `ios开发/tsugie/tsugie/Infrastructure/EncodedHePlaceRepository.swift` 读取索引并按 `offset/length` 随机读取附近 bucket 的 payload；启动按当前位置实时检索附近 Geohash 桶并解码
+
+- 数据包编解码基线（强制）：
+  - 无损压缩：`zlib`
+  - 混淆：`xor_sha256_stream_v1`
+  - 帧编码：`binary_frame_v1`（索引记录分片偏移，payload 以二进制存储）
+  - 解码顺序必须与编码顺序完全逆向一致（`按 offset/length 读取二进制分片 -> 去混淆 -> zlib 解压 -> JSON decode`）
+
+- 维护要求：
+  - 编解码算法、密钥策略、资源路径、脚本入口任一变化，必须在同一次工作中同步更新 `AGENTS.md` 与 `记录/项目变更记录.md`。
+  - iOS 默认数据源优先读取资源包；仅在资源缺失或解码失败时允许回退 Mock 数据。
+  - 开发阶段可用天空树（`35.7101, 139.8107`）作为定位桩点；正式场景必须接入动态定位后实时检索。

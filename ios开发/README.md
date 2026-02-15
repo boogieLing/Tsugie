@@ -7,6 +7,34 @@
 - 第一阶段骨架（地图首页 + 点位 + quickCard 基础链路）：
   - `ios开发/tsugie/tsugie/`
 
+## 数据接入（HANABI + OMATSURI）
+
+- iOS 内置数据资源：
+  - `ios开发/tsugie/tsugie/Resources/he_places.index.json`（空间索引）
+  - `ios开发/tsugie/tsugie/Resources/he_places.payload.bin`（二进制分片 payload）
+- 维护入口脚本：`数据端/scripts/update_ios_payload.sh`
+- 底层导出脚本：`数据端/scripts/export_ios_seed.py`
+- 推荐更新命令：
+
+```bash
+bash 数据端/scripts/update_ios_payload.sh --pretty
+```
+
+- App 侧默认加载链路：
+  - `Infrastructure/EncodedHePlaceRepository.swift` 解包（按 offset/length 读取二进制分片 -> 去混淆 -> zlib 解压 -> JSON 解码）
+  - 启动时按当前位置实时计算附近 Geohash 桶，仅读取并解码附近桶（不全量解码）
+  - `HomeMapViewModel` 默认优先使用资源包数据；资源缺失或解码失败时回退到 `MockHePlaceRepository`
+
+## 技术方案与内存优化
+
+- 完整技术文档：`记录/tsugie-ios-全量内置实时附近检索技术方案-v1.md`
+- 当前内存画像（天空树 + 30km，数据链路）：
+  - 命中 bucket：`75`
+  - 读取 payload 分片：约 `179KB`
+  - 解码记录：`746` 条
+  - 解压后 JSON：约 `1.07MB`
+  - 启动阶段内存峰值估算：约 `8MB ~ 20MB`（不含地图渲染）
+
 ## 约束
 
 - 仅在 `ios开发/` 内进行 iOS 代码实现。
