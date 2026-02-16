@@ -13,6 +13,9 @@ PAYLOAD_OUTPUT="${DEFAULT_PAYLOAD_OUTPUT}"
 KEY="${DEFAULT_KEY}"
 PRETTY=0
 GEOHASH_PRECISION=""
+GEO_OVERLAP_GATE=1
+MAX_HIGH_RISK_GROUPS=0
+GEO_GATE_REPORT_OUTPUT="${REPO_ROOT}/数据端/reports/latest_geo_overlap_quality_gate.json"
 
 usage() {
   cat <<USAGE
@@ -23,6 +26,9 @@ Options:
   --payload-output PATH     Output payload bin path (default: ${DEFAULT_PAYLOAD_OUTPUT})
   --key STRING              Obfuscation key seed (default: ${DEFAULT_KEY})
   --geohash-precision N     Geohash precision (3-8)
+  --max-high-risk-groups N  Geo overlap gate threshold (default: 0)
+  --skip-geo-overlap-gate   Skip geo overlap quality gate before export
+  --geo-gate-report PATH    Geo overlap gate report output path
   --pretty                  Pretty-print index json
   -h, --help                Show this help message
 USAGE
@@ -46,6 +52,18 @@ while [[ $# -gt 0 ]]; do
       GEOHASH_PRECISION="$2"
       shift 2
       ;;
+    --max-high-risk-groups)
+      MAX_HIGH_RISK_GROUPS="$2"
+      shift 2
+      ;;
+    --skip-geo-overlap-gate)
+      GEO_OVERLAP_GATE=0
+      shift
+      ;;
+    --geo-gate-report)
+      GEO_GATE_REPORT_OUTPUT="$2"
+      shift 2
+      ;;
     --pretty)
       PRETTY=1
       shift
@@ -59,8 +77,19 @@ while [[ $# -gt 0 ]]; do
       usage >&2
       exit 1
       ;;
-  esac
+    esac
 done
+
+if [[ "${GEO_OVERLAP_GATE}" -eq 1 ]]; then
+  echo "[step] geo overlap quality gate"
+  python3 "${REPO_ROOT}/数据端/scripts/geo_overlap_quality_gate.py" \
+    --project all \
+    --max-high-risk-groups "${MAX_HIGH_RISK_GROUPS}" \
+    --report-output "${GEO_GATE_REPORT_OUTPUT}"
+  echo "[ok] geo overlap quality gate passed"
+else
+  echo "[warn] geo overlap quality gate is skipped"
+fi
 
 EXPORT_CMD=(
   python3 "${REPO_ROOT}/数据端/scripts/export_ios_seed.py"

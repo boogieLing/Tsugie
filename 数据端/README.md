@@ -33,6 +33,8 @@
 bash 数据端/scripts/update_ios_payload.sh --pretty
 ```
 
+说明：该脚本默认先执行坐标重叠质量门禁（`geo_overlap_quality_gate.py`），若检测到高风险重叠组会直接失败并阻断导出。
+
 产物默认输出到：
 
 - `ios开发/tsugie/tsugie/Resources/he_places.index.json`（空间索引）
@@ -47,13 +49,15 @@ bash 数据端/scripts/update_ios_payload.sh --pretty
 维护建议：
 
 1. 先确认两个子项目 `latest_run.json` 指向期望 `fused_run_id`
-2. 执行统一脚本：`bash 数据端/scripts/update_ios_payload.sh --pretty`
+2. 执行统一脚本（含地理门禁）：`bash 数据端/scripts/update_ios_payload.sh --pretty`
 3. 关注脚本输出中的 `record_counts`、`spatial_index`（precision/bucket_count）、`index_size_bytes/index_sha256`、`payload_size_bytes/payload_sha256`
-4. 在 iOS 工程构建后验证地图与日历数据是否刷新
+4. 检查地理门禁报告：`数据端/reports/latest_geo_overlap_quality_gate.json`
+5. 在 iOS 工程构建后验证地图与日历数据是否刷新
 
 补充：
 
 - `数据端/scripts/update_ios_payload.sh` 是维护入口，会调用 `数据端/scripts/export_ios_seed.py`。
+- `数据端/scripts/update_ios_payload.sh` 默认会调用 `数据端/scripts/geo_overlap_quality_gate.py` 作为导出前质量门禁。
 - 默认导出为 Geohash 空间分桶，iOS 端按当前位置实时检索附近桶并解码。
 - 需要自定义输出或 key 时，可直接调用 `export_ios_seed.py`。
 
