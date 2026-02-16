@@ -87,6 +87,117 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
         XCTAssertEqual(places.first?.name, "Near B")
     }
 
+    func testLoadNearbyPrefersPreciseCoordinatesOverPrefCenterFallback() throws {
+        let payloadJSON = """
+        [
+          {
+            "category": "hanabi",
+            "ios_place_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "scale_score": 90,
+            "record": {
+              "event_name": "Approximate Event",
+              "geo_source": "pref_center_fallback",
+              "lat": 35.71010,
+              "lng": 139.81070
+            }
+          },
+          {
+            "category": "hanabi",
+            "ios_place_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "scale_score": 80,
+            "record": {
+              "event_name": "Precise Event",
+              "geo_source": "network_geocode",
+              "lat": 35.71040,
+              "lng": 139.81100
+            }
+          }
+        ]
+        """
+
+        let (indexData, payloadData) = try makeSpatialPackage(payloadJSON: payloadJSON, bucketKey: "x", precision: 1)
+        let places = EncodedHePlaceRepository.loadNearby(
+            from: indexData,
+            payloadData: payloadData,
+            center: center,
+            radiusKm: 30,
+            limit: 1
+        )
+
+        XCTAssertEqual(places.count, 1)
+        XCTAssertEqual(places.first?.name, "Precise Event")
+        XCTAssertEqual(places.first?.geoSource, "network_geocode")
+    }
+
+    func testLoadNearbyDoesNotBackfillApproximateWhenPreciseExists() throws {
+        let payloadJSON = """
+        [
+          {
+            "category": "hanabi",
+            "ios_place_id": "0f0f0f0f-0000-4000-8000-000000000001",
+            "scale_score": 90,
+            "record": {
+              "event_name": "Approximate Event",
+              "geo_source": "pref_center_fallback",
+              "lat": 35.71010,
+              "lng": 139.81070
+            }
+          },
+          {
+            "category": "hanabi",
+            "ios_place_id": "0f0f0f0f-0000-4000-8000-000000000002",
+            "scale_score": 80,
+            "record": {
+              "event_name": "Precise Event",
+              "geo_source": "source_exact",
+              "lat": 35.71040,
+              "lng": 139.81100
+            }
+          }
+        ]
+        """
+
+        let (indexData, payloadData) = try makeSpatialPackage(payloadJSON: payloadJSON, bucketKey: "x", precision: 1)
+        let places = EncodedHePlaceRepository.loadNearby(
+            from: indexData,
+            payloadData: payloadData,
+            center: center,
+            radiusKm: 20,
+            limit: 10
+        )
+
+        XCTAssertEqual(places.count, 1)
+        XCTAssertEqual(places.first?.name, "Precise Event")
+    }
+
+    func testLoadNearbyDoesNotFallbackToFullScanWhenSpatialBucketMisses() throws {
+        let payloadJSON = """
+        [
+          {
+            "category": "hanabi",
+            "ios_place_id": "99999999-9999-4999-8999-999999999999",
+            "scale_score": 88,
+            "record": {
+              "event_name": "Out Of Range Bucket Event",
+              "lat": 35.711,
+              "lng": 139.812
+            }
+          }
+        ]
+        """
+
+        let (indexData, payloadData) = try makeSpatialPackage(payloadJSON: payloadJSON, bucketKey: "zzzzz", precision: 5)
+        let places = EncodedHePlaceRepository.loadNearby(
+            from: indexData,
+            payloadData: payloadData,
+            center: center,
+            radiusKm: 1,
+            limit: 50
+        )
+
+        XCTAssertTrue(places.isEmpty)
+    }
+
     func testLoadNearbyFromInvalidIndexReturnsEmpty() {
         let bad = Data("{\"version\":3,\"payload_buckets\":{}}".utf8)
         let places = EncodedHePlaceRepository.loadNearby(
@@ -125,6 +236,7 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
         bucketKey: String,
         precision: Int
     ) throws -> (indexData: Data, payloadData: Data) {
+        let entryCount = try countJSONArrayEntries(payloadJSON)
         let payloadChunk = try encodePayload(payloadJSON: payloadJSON)
         let indexDoc: [String: Any] = [
             "version": 3,
@@ -136,7 +248,7 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
             "payload_file": "he_places.payload.bin",
             "payload_buckets": [
                 bucketKey: [
-                    "record_count": 2,
+                    "record_count": entryCount,
                     "payload_offset": 0,
                     "payload_length": payloadChunk.count,
                 ],
@@ -151,6 +263,14 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
         let raw = Data(payloadJSON.utf8)
         let compressed = try zlibCompress(raw)
         return xorObfuscate(compressed, keySeed: keySeed)
+    }
+
+    private func countJSONArrayEntries(_ payloadJSON: String) throws -> Int {
+        guard let data = payloadJSON.data(using: .utf8),
+              let array = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+            throw NSError(domain: "EncodedHePlaceRepositoryTests", code: 2)
+        }
+        return array.count
     }
 
     private func xorObfuscate(_ data: Data, keySeed: String) -> Data {

@@ -17,15 +17,15 @@ enum EncodedHePlaceRepository {
     nonisolated static func load() -> [HePlace] {
         loadNearby(
             center: defaultStartupCenter,
-            radiusKm: 30,
-            limit: 700
+            radiusKm: 20,
+            limit: 240
         )
     }
 
     nonisolated static func loadNearby(
         center: CLLocationCoordinate2D,
-        radiusKm: Double = 30,
-        limit: Int = 700
+        radiusKm: Double = 20,
+        limit: Int = 240
     ) -> [HePlace] {
         guard let indexURL = resolveResourceURL(resourceName: indexResourceName, resourceExtension: indexResourceExtension) else {
             debugLog("loadNearby abort: index resource missing (\(indexResourceName).\(indexResourceExtension))")
@@ -113,42 +113,59 @@ enum EncodedHePlaceRepository {
         limit: Int,
         payloadReader: (EncodedPayloadBucketMeta) -> Data?
     ) -> [HePlace] {
-        let candidateKeys = nearbyBucketKeys(
-            center: center,
-            precision: indexEnvelope.spatialIndex.precision,
-            radiusKm: radiusKm
-        )
-
         var items: [EncodedHePlaceItem] = []
         items.reserveCapacity(512)
         var matchedBuckets = 0
         var failedChunkRead = 0
         var decodedFromCandidateBuckets = 0
+        var decodedFromExpandedBuckets = 0
+        var expandedRounds = 0
 
-        for key in candidateKeys {
-            guard let bucket = indexEnvelope.payloadBuckets[key] else {
+        let normalizedRadiusKm = max(radiusKm, 0.5)
+        let expansionRadii = [normalizedRadiusKm, min(normalizedRadiusKm * 2, 80), min(normalizedRadiusKm * 4, 140)]
+        let initialCandidateKeys = nearbyBucketKeys(
+            center: center,
+            precision: indexEnvelope.spatialIndex.precision,
+            radiusKm: expansionRadii[0]
+        )
+        var inspectedKeys = Set<String>()
+
+        for (index, searchRadiusKm) in expansionRadii.enumerated() {
+            var keys = nearbyBucketKeys(
+                center: center,
+                precision: indexEnvelope.spatialIndex.precision,
+                radiusKm: searchRadiusKm
+            )
+            keys.subtract(inspectedKeys)
+            if keys.isEmpty {
                 continue
             }
-            matchedBuckets += 1
-            guard let payload = payloadReader(bucket) else {
-                failedChunkRead += 1
-                continue
-            }
-            let decoded = decodeItems(payloadChunk: payload)
-            decodedFromCandidateBuckets += decoded.count
-            items.append(contentsOf: decoded)
-        }
 
-        var decodedFromFullScan = 0
-        if items.isEmpty {
-            for bucket in indexEnvelope.payloadBuckets.values {
+            if index > 0 {
+                expandedRounds += 1
+            }
+
+            inspectedKeys.formUnion(keys)
+            for key in keys {
+                guard let bucket = indexEnvelope.payloadBuckets[key] else {
+                    continue
+                }
+                matchedBuckets += 1
                 guard let payload = payloadReader(bucket) else {
                     failedChunkRead += 1
                     continue
                 }
                 let decoded = decodeItems(payloadChunk: payload)
-                decodedFromFullScan += decoded.count
+                if index == 0 {
+                    decodedFromCandidateBuckets += decoded.count
+                } else {
+                    decodedFromExpandedBuckets += decoded.count
+                }
                 items.append(contentsOf: decoded)
+            }
+
+            if !items.isEmpty {
+                break
             }
         }
 
@@ -157,15 +174,33 @@ enum EncodedHePlaceRepository {
 
         var places = items.compactMap { mapToHePlace($0, center: center) }
         places.sort(by: isCloserAndHigherPriority)
-
-        let filtered = places.filter { $0.distanceMeters <= radiusMeters * 1.2 }
+        let precisePlaces = places.filter { !$0.isApproximateCoordinate }
+        let approximatePlaces = places.filter(\.isApproximateCoordinate)
+        let preciseInRange = precisePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
+        let approximateInRange = approximatePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
         debugLog(
-            "loadNearby stats candidateKeys=\(candidateKeys.count) matchedBuckets=\(matchedBuckets) failedChunkRead=\(failedChunkRead) decodedCandidate=\(decodedFromCandidateBuckets) decodedFullScan=\(decodedFromFullScan) mappedPlaces=\(places.count) filteredPlaces=\(filtered.count)"
+            "loadNearby stats candidateKeys=\(initialCandidateKeys.count) scannedKeys=\(inspectedKeys.count) matchedBuckets=\(matchedBuckets) failedChunkRead=\(failedChunkRead) decodedCandidate=\(decodedFromCandidateBuckets) decodedExpanded=\(decodedFromExpandedBuckets) expandedRounds=\(expandedRounds) mappedPlaces=\(places.count) precise=\(precisePlaces.count) approximate=\(approximatePlaces.count) preciseInRange=\(preciseInRange.count) approximateInRange=\(approximateInRange.count)"
         )
-        if !filtered.isEmpty {
-            return Array(filtered.prefix(cappedLimit))
+
+        if preciseInRange.count >= cappedLimit {
+            return Array(preciseInRange.prefix(cappedLimit))
         }
-        return Array(places.prefix(cappedLimit))
+
+        if !preciseInRange.isEmpty {
+            return Array(preciseInRange.prefix(cappedLimit))
+        }
+
+        if !precisePlaces.isEmpty {
+            return Array(precisePlaces.prefix(cappedLimit))
+        }
+
+        if !approximateInRange.isEmpty {
+            return Array(approximateInRange.prefix(min(cappedLimit, 40)))
+        }
+        if !approximatePlaces.isEmpty {
+            return Array(approximatePlaces.prefix(min(cappedLimit, 40)))
+        }
+        return []
     }
 
     private nonisolated static func resolveResourceURL(resourceName: String, resourceExtension: String?) -> URL? {
@@ -238,7 +273,7 @@ enum EncodedHePlaceRepository {
         precision: Int,
         radiusKm: Double
     ) -> Set<String> {
-        let normalizedPrecision = max(3, min(8, precision))
+        let normalizedPrecision = max(1, min(8, precision))
         let centerHash = GeohashCodec.encode(center, precision: normalizedPrecision)
         guard let bounds = GeohashCodec.boundingBox(of: centerHash) else {
             return [centerHash]
@@ -443,6 +478,7 @@ enum EncodedHePlaceRepository {
             name: name,
             heType: type,
             coordinate: coordinate,
+            geoSource: item.record.geoSource?.nonEmpty ?? "unknown",
             startAt: startAt,
             endAt: endAt,
             distanceMeters: realDistance,
@@ -588,6 +624,7 @@ nonisolated private struct FusedEventRecord: Decodable {
     let rainoutPolicy: String?
     let contact: String?
     let sourceNotes: String?
+    let geoSource: String?
 
     enum CodingKeys: String, CodingKey {
         case eventName = "event_name"
@@ -601,6 +638,7 @@ nonisolated private struct FusedEventRecord: Decodable {
         case rainoutPolicy = "rainout_policy"
         case contact
         case sourceNotes = "source_notes"
+        case geoSource = "geo_source"
     }
 
     init(from decoder: Decoder) throws {
@@ -616,6 +654,7 @@ nonisolated private struct FusedEventRecord: Decodable {
         rainoutPolicy = Self.decodeString(container, key: .rainoutPolicy)
         contact = Self.decodeString(container, key: .contact)
         sourceNotes = Self.decodeString(container, key: .sourceNotes)
+        geoSource = Self.decodeString(container, key: .geoSource)
     }
 
     var coordinate: CLLocationCoordinate2D? {

@@ -84,8 +84,8 @@ final class HomeMapViewModel: ObservableObject {
         places: [HePlace]? = nil,
         placeStateStore: PlaceStateStore? = nil,
         locationProvider: AppLocationProviding? = nil,
-        nearbyRadiusKm: Double = 30,
-        nearbyLimit: Int = 700
+        nearbyRadiusKm: Double = 20,
+        nearbyLimit: Int = 240
     ) {
         self.places = (places ?? [])
             .filter { $0.heType != .nature }
