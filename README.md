@@ -4,7 +4,7 @@
 
 Tsugi e 的目标是：在「当前时间 + 当前地点」条件下，给用户一个下一站值得去的「へ（可前往地点）」决策。
 
-![Tsugie 品牌视觉](设计/static/tsugie-logo-real.png)
+![Tsugie 品牌视觉](设计/static/tsugie-logo-anime.png)
 
 ## 当前产品基线（MVP）
 
@@ -19,35 +19,6 @@ Tsugi e 的目标是：在「当前时间 + 当前地点」条件下，给用户
 详细需求以 `需求/tsugihe_mvp_start_v0.1.md` 为准。
 
 进入正式 iOS 开发阶段的执行总纲：`需求/tsugie-ios-dev-handoff-v1.md`。
-
-## 图标系统（当前基线）
-
-### 主视觉与入口图标
-
-| 用途 | 预览 | 资源路径 |
-|---|---|---|
-| 应用品牌图 | ![应用品牌图](设计/static/tsugie-logo-anime.png) | `设计/static/tsugie-logo-anime.png` |
-| 主页侧栏按钮 | ![主页侧栏按钮](设计/static/icon/tsugie-logo/tsugie-logo-text.png) | `设计/static/icon/tsugie-logo/tsugie-logo-text.png` |
-| 日历背景图 | ![日历背景图](设计/static/icon/karendaa/1.png) | `设计/static/icon/karendaa/1.png` |
-| 收藏图标 | ![收藏图标](设计/static/icon/normal-okiniiri/1.png) | `设计/static/icon/normal-okiniiri/1.png` |
-| 定位点图标 | ![定位点图标](设计/static/icon/current-location-pin.svg) | `设计/static/icon/current-location-pin.svg` |
-
-### 小图标系统（筛选项）
-
-| 分类 | 预览 | 资源路径 |
-|---|---|---|
-| 全部 | ![全部](设计/static/icon/main/all.png) | `设计/static/icon/main/all.png` |
-| 樱花 | ![樱花](设计/static/icon/main/sakura.png) | `设计/static/icon/main/sakura.png` |
-| 花火大会 | ![花火大会](设计/static/icon/main/hanabi.png) | `设计/static/icon/main/hanabi.png` |
-| 红叶 | ![红叶](设计/static/icon/main/momiji.png) | `设计/static/icon/main/momiji.png` |
-| 祭典 | ![祭典](设计/static/icon/main/omatsuri.png) | `设计/static/icon/main/omatsuri.png` |
-
-### PNG -> SVG 持久化脚本
-
-- 脚本：`设计/static/icon/scripts/generate-svg-from-png.sh`
-- 用法：
-  - `bash 设计/static/icon/scripts/generate-svg-from-png.sh`
-  - `bash 设计/static/icon/scripts/generate-svg-from-png.sh --root 设计/static/icon --mode embed`
 
 ## 当前研发进度（基于记录）
 
