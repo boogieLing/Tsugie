@@ -51,7 +51,7 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.favoriteFilterCount(.checked), 1)
     }
 
-    func testMapCategoryFilterCountUsesRenderedSet() {
+    func testMapCategoryFilterCountUsesFullSet() {
         let first = makePlace(name: "A", heType: .hanabi)
         let second = makePlace(name: "B", heType: .matsuri)
         let third = makePlace(name: "C", heType: .matsuri)

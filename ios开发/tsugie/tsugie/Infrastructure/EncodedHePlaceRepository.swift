@@ -22,6 +22,45 @@ enum EncodedHePlaceRepository {
         )
     }
 
+    nonisolated static func loadAll(center: CLLocationCoordinate2D = defaultStartupCenter) -> [HePlace] {
+        guard let indexURL = resolveResourceURL(resourceName: indexResourceName, resourceExtension: indexResourceExtension) else {
+            debugLog("loadAll abort: index resource missing (\(indexResourceName).\(indexResourceExtension))")
+            return []
+        }
+        guard let indexData = try? Data(contentsOf: indexURL) else {
+            debugLog("loadAll abort: cannot read index at \(indexURL.path)")
+            return []
+        }
+        guard let indexEnvelope = try? JSONDecoder().decode(HePlacesSpatialIndexEnvelope.self, from: indexData) else {
+            debugLog("loadAll abort: cannot decode index json")
+            return []
+        }
+        guard let payloadURL = resolvePayloadURL(indexEnvelope: indexEnvelope) else {
+            debugLog("loadAll abort: payload resource missing")
+            return []
+        }
+        guard let fileHandle = try? FileHandle(forReadingFrom: payloadURL) else {
+            debugLog("loadAll abort: cannot open payload at \(payloadURL.path)")
+            return []
+        }
+
+        defer {
+            try? fileHandle.close()
+        }
+
+        return loadAll(
+            from: indexEnvelope,
+            center: center,
+            payloadReader: { bucket in
+                readChunk(
+                    with: fileHandle,
+                    offset: bucket.payloadOffset,
+                    length: bucket.payloadLength
+                )
+            }
+        )
+    }
+
     nonisolated static func loadNearby(
         center: CLLocationCoordinate2D,
         radiusKm: Double = 20,
@@ -93,6 +132,24 @@ enum EncodedHePlaceRepository {
         )
     }
 
+    nonisolated static func loadAll(
+        from indexData: Data,
+        payloadData: Data,
+        center: CLLocationCoordinate2D
+    ) -> [HePlace] {
+        guard let indexEnvelope = try? JSONDecoder().decode(HePlacesSpatialIndexEnvelope.self, from: indexData) else {
+            return []
+        }
+
+        return loadAll(
+            from: indexEnvelope,
+            center: center,
+            payloadReader: { bucket in
+                readChunk(from: payloadData, offset: bucket.payloadOffset, length: bucket.payloadLength)
+            }
+        )
+    }
+
     private nonisolated static func resolvePayloadURL(indexEnvelope: HePlacesSpatialIndexEnvelope) -> URL? {
         if let payloadFile = indexEnvelope.payloadFile?.nonEmpty {
             let filename = (payloadFile as NSString).deletingPathExtension
@@ -113,6 +170,9 @@ enum EncodedHePlaceRepository {
         limit: Int,
         payloadReader: (EncodedPayloadBucketMeta) -> Data?
     ) -> [HePlace] {
+        if Task.isCancelled {
+            return []
+        }
         var items: [EncodedHePlaceItem] = []
         items.reserveCapacity(512)
         var matchedBuckets = 0
@@ -131,6 +191,9 @@ enum EncodedHePlaceRepository {
         var inspectedKeys = Set<String>()
 
         for (index, searchRadiusKm) in expansionRadii.enumerated() {
+            if Task.isCancelled {
+                return []
+            }
             var keys = nearbyBucketKeys(
                 center: center,
                 precision: indexEnvelope.spatialIndex.precision,
@@ -147,6 +210,9 @@ enum EncodedHePlaceRepository {
 
             inspectedKeys.formUnion(keys)
             for key in keys {
+                if Task.isCancelled {
+                    return []
+                }
                 guard let bucket = indexEnvelope.payloadBuckets[key] else {
                     continue
                 }
@@ -155,7 +221,9 @@ enum EncodedHePlaceRepository {
                     failedChunkRead += 1
                     continue
                 }
-                let decoded = decodeItems(payloadChunk: payload)
+                let decoded: [EncodedHePlaceItem] = autoreleasepool {
+                    decodeItems(payloadChunk: payload)
+                }
                 if index == 0 {
                     decodedFromCandidateBuckets += decoded.count
                 } else {
@@ -201,6 +269,47 @@ enum EncodedHePlaceRepository {
             return Array(approximatePlaces.prefix(min(cappedLimit, 40)))
         }
         return []
+    }
+
+    private nonisolated static func loadAll(
+        from indexEnvelope: HePlacesSpatialIndexEnvelope,
+        center: CLLocationCoordinate2D,
+        payloadReader: (EncodedPayloadBucketMeta) -> Data?
+    ) -> [HePlace] {
+        if Task.isCancelled {
+            return []
+        }
+        var items: [EncodedHePlaceItem] = []
+        items.reserveCapacity(indexEnvelope.payloadBuckets.count * 4)
+        var failedChunkRead = 0
+
+        let orderedBuckets = indexEnvelope.payloadBuckets.values.sorted {
+            if $0.payloadOffset == $1.payloadOffset {
+                return $0.payloadLength < $1.payloadLength
+            }
+            return $0.payloadOffset < $1.payloadOffset
+        }
+
+        for bucket in orderedBuckets {
+            if Task.isCancelled {
+                return []
+            }
+            guard let payload = payloadReader(bucket) else {
+                failedChunkRead += 1
+                continue
+            }
+            let decoded: [EncodedHePlaceItem] = autoreleasepool {
+                decodeItems(payloadChunk: payload)
+            }
+            items.append(contentsOf: decoded)
+        }
+
+        var places = items.compactMap { mapToHePlace($0, center: center) }
+        places.sort(by: isCloserAndHigherPriority)
+        debugLog(
+            "loadAll stats buckets=\(orderedBuckets.count) failedChunkRead=\(failedChunkRead) decodedItems=\(items.count) mappedPlaces=\(places.count)"
+        )
+        return places
     }
 
     private nonisolated static func resolveResourceURL(resourceName: String, resourceExtension: String?) -> URL? {

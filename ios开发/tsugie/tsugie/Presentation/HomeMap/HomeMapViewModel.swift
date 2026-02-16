@@ -34,8 +34,26 @@ final class HomeMapViewModel: ObservableObject {
         let visibleMenuState: PlaceState?
     }
 
+    private struct ViewportQuerySignature: Equatable {
+        let centerLatE5: Int
+        let centerLngE5: Int
+        let spanLatE5: Int
+        let spanLngE5: Int
+        let filter: MapPlaceCategoryFilter
+
+        init(region: MKCoordinateRegion, filter: MapPlaceCategoryFilter) {
+            centerLatE5 = Int((region.center.latitude * 100_000).rounded())
+            centerLngE5 = Int((region.center.longitude * 100_000).rounded())
+            spanLatE5 = Int((region.span.latitudeDelta * 100_000).rounded())
+            spanLngE5 = Int((region.span.longitudeDelta * 100_000).rounded())
+            self.filter = filter
+        }
+    }
+
     private var mapCameraPosition: MapCameraPosition
+    @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
+    @Published private(set) var renderedPlaces: [HePlace]
     private var _selectedPlaceID: UUID?
     private var _markerActionPlaceID: UUID?
     private var _quickCardPlaceID: UUID?
@@ -63,14 +81,24 @@ final class HomeMapViewModel: ObservableObject {
     private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
     private let focusedMapSpan = MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
     private let focusedCenterLatitudeOffset: CLLocationDegrees = 0.0023
-    private let nearbyRadiusKm: Double
+    private let mapRebuildDistanceKm: Double = 250
+    private let minimumViewportRadiusKm: Double
     private let nearbyLimit: Int
+    private let mapBufferScale: Double = 1.8
     private var shouldBootstrapFromBundled: Bool
+    private var isLoadingAllPlaces = false
+    private var didLoadAllPlaces = false
     private var resolvedCenter: CLLocationCoordinate2D
     private var autoOpenTask: DispatchWorkItem?
     private var bootstrapTask: Task<Void, Never>?
+    private var loadAllTask: Task<Void, Never>?
+    private var viewportReloadTask: Task<Void, Never>?
+    private var nearbyLoadTask: Task<[HePlace], Never>?
+    private var activeNearbyQueryToken: UUID?
+    private var lastViewportQuerySignature: ViewportQuerySignature?
     private var mapZoomRestoreTask: Task<Void, Never>?
     private var quickCardPresentationTask: Task<Void, Never>?
+    private var lastKnownMapRegion: MKCoordinateRegion?
     private var placesRevision: UInt64 = 1
     private var markerEntriesCacheKey: MarkerEntriesCacheKey?
     private var markerEntriesCache: [MapMarkerEntry] = []
@@ -84,14 +112,16 @@ final class HomeMapViewModel: ObservableObject {
         places: [HePlace]? = nil,
         placeStateStore: PlaceStateStore? = nil,
         locationProvider: AppLocationProviding? = nil,
-        nearbyRadiusKm: Double = 20,
+        minimumViewportRadiusKm: Double = 1.2,
         nearbyLimit: Int = 240
     ) {
-        self.places = (places ?? [])
+        let sourcePlaces = (places ?? [])
             .filter { $0.heType != .nature }
+        self.places = sourcePlaces
+        self.renderedPlaces = sourcePlaces
         self.placeStateStore = placeStateStore ?? PlaceStateStore()
         self.locationProvider = locationProvider ?? DefaultAppLocationProvider()
-        self.nearbyRadiusKm = max(1, nearbyRadiusKm)
+        self.minimumViewportRadiusKm = max(0.5, minimumViewportRadiusKm)
         self.nearbyLimit = max(1, nearbyLimit)
         self.shouldBootstrapFromBundled = places == nil
         self.resolvedCenter = initialCenter
@@ -102,6 +132,7 @@ final class HomeMapViewModel: ObservableObject {
             span: defaultMapSpan
         )
         self.mapCameraPosition = .region(region)
+        self.lastKnownMapRegion = region
     }
 
     var mapPosition: MapCameraPosition {
@@ -116,14 +147,14 @@ final class HomeMapViewModel: ObservableObject {
         guard let quickCardPlaceID = _quickCardPlaceID else {
             return nil
         }
-        return places.first { $0.id == quickCardPlaceID }
+        return place(for: quickCardPlaceID)
     }
 
     var detailPlace: HePlace? {
         guard let detailPlaceID = _detailPlaceID else {
             return nil
         }
-        return places.first { $0.id == detailPlaceID }
+        return place(for: detailPlaceID)
     }
 
     var selectedPlaceID: UUID? {
@@ -198,7 +229,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func onViewAppear() {
-        debugLog("onViewAppear places=\(self.places.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
+        debugLog("onViewAppear allPlaces=\(self.places.count) renderedPlaces=\(self.renderedPlaces.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
         bootstrapNearbyPlacesIfNeeded()
         scheduleAutoOpenIfNeeded()
     }
@@ -206,6 +237,11 @@ final class HomeMapViewModel: ObservableObject {
     func onViewDisappear() {
         bootstrapTask?.cancel()
         bootstrapTask = nil
+        viewportReloadTask?.cancel()
+        viewportReloadTask = nil
+        nearbyLoadTask?.cancel()
+        nearbyLoadTask = nil
+        activeNearbyQueryToken = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
@@ -595,14 +631,14 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func mapCategoryFilterCount(_ filter: MapPlaceCategoryFilter) -> Int {
-        let rendered = mapPlaces()
+        let full = places.isEmpty ? renderedPlaces : places
         switch filter {
         case .all:
-            return rendered.count
+            return full.count
         case .hanabi:
-            return rendered.filter { $0.heType == .hanabi }.count
+            return full.filter { $0.heType == .hanabi }.count
         case .matsuri:
-            return rendered.filter { $0.heType == .matsuri }.count
+            return full.filter { $0.heType == .matsuri }.count
         }
     }
 
@@ -620,14 +656,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func resetToCurrentLocation() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            setProgrammaticMapPosition(.region(
-                MKCoordinateRegion(
-                    center: resolvedCenter,
-                    span: defaultMapSpan
-                )
-            ))
-        }
+        forceMapViewRebuild(reason: "userResetLocation")
         reloadNearbyPlacesAroundCurrentLocation(userInitiated: true)
     }
 
@@ -713,13 +742,17 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func favoritePlaces() -> [HePlace] {
-        places
+        let source = places.isEmpty ? renderedPlaces : places
+        return source
             .filter { placeState(for: $0.id).isFavorite }
             .sorted(by: isHigherPriority)
     }
 
     func place(for placeID: UUID) -> HePlace? {
-        places.first { $0.id == placeID }
+        if let matched = places.first(where: { $0.id == placeID }) {
+            return matched
+        }
+        return renderedPlaces.first(where: { $0.id == placeID })
     }
 
     func focusForBottomCard(on place: HePlace) {
@@ -752,11 +785,11 @@ final class HomeMapViewModel: ObservableObject {
     func mapPlaces() -> [HePlace] {
         switch mapCategoryFilter {
         case .all:
-            return places
+            return renderedPlaces
         case .hanabi:
-            return places.filter { $0.heType == .hanabi }
+            return renderedPlaces.filter { $0.heType == .hanabi }
         case .matsuri:
-            return places.filter { $0.heType == .matsuri }
+            return renderedPlaces.filter { $0.heType == .matsuri }
         }
     }
 
@@ -871,10 +904,15 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func bootstrapNearbyPlacesIfNeeded() {
-        guard shouldBootstrapFromBundled else {
+        if shouldBootstrapFromBundled {
+            reloadNearbyPlacesAroundCurrentLocation(userInitiated: false)
             return
         }
-        reloadNearbyPlacesAroundCurrentLocation(userInitiated: false)
+
+        loadAllPlacesIfNeeded(center: resolvedCenter)
+        if let region = mapCameraPosition.region {
+            scheduleViewportReload(for: region, reason: "viewAppear", debounceNanoseconds: 0)
+        }
     }
 
     private func reloadNearbyPlacesAroundCurrentLocation(userInitiated: Bool) {
@@ -887,15 +925,6 @@ final class HomeMapViewModel: ObservableObject {
             guard let self else { return }
 
             let center = await self.locationProvider.currentCoordinate(fallback: self.initialCenter)
-            let radiusKm = self.nearbyRadiusKm
-            let limit = self.nearbyLimit
-            let loaded = await Task.detached(priority: .userInitiated) {
-                EncodedHePlaceRepository.loadNearby(
-                    center: center,
-                    radiusKm: radiusKm,
-                    limit: limit
-                )
-            }.value
 
             guard !Task.isCancelled else {
                 return
@@ -904,16 +933,23 @@ final class HomeMapViewModel: ObservableObject {
             self.bootstrapTask = nil
             self.resolvedCenter = center
 
-            let usingMockFallback = loaded.isEmpty
-            let normalized = self.normalizedPlaces(loaded)
-            self.debugLog(
-                "reloadNearby done center=(\(center.latitude),\(center.longitude)) loaded=\(loaded.count) normalized=\(normalized.count) usingMockFallback=\(usingMockFallback)"
+            let targetRegion = MKCoordinateRegion(
+                center: center,
+                span: self.defaultMapSpan
             )
-            if !normalized.isEmpty {
-                self.replacePlaces(normalized)
-                self.shouldBootstrapFromBundled = false
-                self.scheduleAutoOpenIfNeeded()
+            if userInitiated {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.setProgrammaticMapPosition(.region(targetRegion))
+                }
             }
+
+            self.loadAllPlacesIfNeeded(center: center)
+            self.scheduleViewportReload(
+                for: targetRegion,
+                reason: userInitiated ? "resetLocation" : "bootstrap",
+                debounceNanoseconds: userInitiated ? 0 : 30_000_000
+            )
+            self.shouldBootstrapFromBundled = false
         }
     }
 
@@ -924,17 +960,193 @@ final class HomeMapViewModel: ObservableObject {
         logger.info("\(message, privacy: .public)")
     }
 
-    private func normalizedPlaces(_ loaded: [HePlace]) -> [HePlace] {
-        let source = loaded.isEmpty ? MockHePlaceRepository.load() : loaded
+    private func normalizedPlaces(_ loaded: [HePlace], fallbackToMockWhenEmpty: Bool) -> [HePlace] {
+        let source = (fallbackToMockWhenEmpty && loaded.isEmpty) ? MockHePlaceRepository.load() : loaded
         return source.filter { $0.heType != .nature }
     }
 
-    private func replacePlaces(_ newPlaces: [HePlace]) {
+    private func replaceAllPlaces(_ newPlaces: [HePlace]) {
         places = newPlaces
+    }
+
+    private func replaceRenderedPlaces(_ newPlaces: [HePlace]) {
+        renderedPlaces = newPlaces
         placesRevision &+= 1
         markerEntriesCacheKey = nil
         markerEntriesCache = []
         markerEntriesIndexByID = [:]
+        reconcileSelectionForMapFilter()
+    }
+
+    private func loadAllPlacesIfNeeded(center: CLLocationCoordinate2D) {
+        guard !didLoadAllPlaces, !isLoadingAllPlaces else {
+            return
+        }
+
+        isLoadingAllPlaces = true
+        loadAllTask?.cancel()
+        loadAllTask = Task { [weak self] in
+            guard let self else { return }
+            let loadedAllTask = Task.detached(priority: .utility) {
+                EncodedHePlaceRepository.loadAll(center: center)
+            }
+            let loadedAll = await withTaskCancellationHandler(operation: {
+                await loadedAllTask.value
+            }, onCancel: {
+                loadedAllTask.cancel()
+            })
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self.isLoadingAllPlaces = false
+            let normalized = self.normalizedPlaces(loadedAll, fallbackToMockWhenEmpty: false)
+            if normalized.isEmpty {
+                self.debugLog("loadAll done center=(\(center.latitude),\(center.longitude)) loaded=0, keep existing allPlaces=\(self.places.count)")
+                return
+            }
+
+            self.replaceAllPlaces(normalized)
+            self.didLoadAllPlaces = true
+            self.debugLog("loadAll done center=(\(center.latitude),\(center.longitude)) loaded=\(loadedAll.count) normalized=\(normalized.count)")
+        }
+    }
+
+    func handleMapCameraChange(_ region: MKCoordinateRegion) {
+        lastKnownMapRegion = region
+        scheduleViewportReload(for: region, reason: "cameraMove", debounceNanoseconds: 220_000_000)
+    }
+
+    private func scheduleViewportReload(
+        for region: MKCoordinateRegion,
+        reason: String,
+        debounceNanoseconds: UInt64
+    ) {
+        let signature = ViewportQuerySignature(region: region, filter: mapCategoryFilter)
+        if signature == lastViewportQuerySignature, reason != "bootstrap" {
+            return
+        }
+
+        viewportReloadTask?.cancel()
+        viewportReloadTask = Task { [weak self] in
+            guard let self else { return }
+            if debounceNanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            }
+            guard !Task.isCancelled else { return }
+            await self.reloadRenderedPlaces(for: region, signature: signature, reason: reason)
+        }
+    }
+
+    private func reloadRenderedPlaces(
+        for region: MKCoordinateRegion,
+        signature: ViewportQuerySignature,
+        reason: String
+    ) async {
+        let expandedRegion = expandedMapRegion(region, scale: mapBufferScale)
+        let rawQueryRadiusKm = max(minimumViewportRadiusKm, diagonalRadiusKm(for: expandedRegion))
+        let queryRadiusKm = min(rawQueryRadiusKm, 80)
+        let dynamicQueryLimit = Int((queryRadiusKm * 50).rounded(.up))
+        let queryLimit = min(1_500, max(nearbyLimit, max(200, dynamicQueryLimit)))
+        let searchCenter = expandedRegion.center
+        let userCenter = resolvedCenter
+
+        nearbyLoadTask?.cancel()
+        let queryToken = UUID()
+        activeNearbyQueryToken = queryToken
+        let nearbyLoadTask = Task.detached(priority: .userInitiated) {
+            EncodedHePlaceRepository.loadNearby(
+                center: searchCenter,
+                radiusKm: queryRadiusKm,
+                limit: queryLimit
+            )
+        }
+        self.nearbyLoadTask = nearbyLoadTask
+        let loaded = await withTaskCancellationHandler(operation: {
+            await nearbyLoadTask.value
+        }, onCancel: {
+            nearbyLoadTask.cancel()
+        })
+
+        guard !Task.isCancelled else {
+            return
+        }
+        guard self.activeNearbyQueryToken == queryToken else {
+            return
+        }
+        self.nearbyLoadTask = nil
+        self.activeNearbyQueryToken = nil
+
+        lastViewportQuerySignature = signature
+        let normalized = normalizedPlaces(loaded, fallbackToMockWhenEmpty: reason == "bootstrap")
+        let inRegion = filteredPlacesInRegion(normalized, region: expandedRegion)
+        let rendered = rebasedDistancePlaces(inRegion, center: userCenter)
+        debugLog(
+            "reloadRendered reason=\(reason) center=(\(region.center.latitude),\(region.center.longitude)) span=(\(region.span.latitudeDelta),\(region.span.longitudeDelta)) rawQueryRadiusKm=\(rawQueryRadiusKm) queryRadiusKm=\(queryRadiusKm) queryLimit=\(queryLimit) loaded=\(loaded.count) normalized=\(normalized.count) inRegion=\(inRegion.count) rendered=\(rendered.count)"
+        )
+        replaceRenderedPlaces(rendered)
+        if places.isEmpty, !rendered.isEmpty {
+            replaceAllPlaces(rendered)
+        }
+        if !rendered.isEmpty {
+            scheduleAutoOpenIfNeeded()
+        }
+    }
+
+    private func rebasedDistancePlaces(_ source: [HePlace], center: CLLocationCoordinate2D) -> [HePlace] {
+        let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
+        return source.map { place in
+            let placeLocation = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+            let distance = centerLocation.distance(from: placeLocation)
+            return HePlace(
+                id: place.id,
+                name: place.name,
+                heType: place.heType,
+                coordinate: place.coordinate,
+                geoSource: place.geoSource,
+                startAt: place.startAt,
+                endAt: place.endAt,
+                distanceMeters: distance,
+                scaleScore: place.scaleScore,
+                hint: place.hint,
+                openHours: place.openHours,
+                mapSpot: place.mapSpot,
+                detailDescription: place.detailDescription,
+                imageTag: place.imageTag,
+                imageHint: place.imageHint,
+                heatScore: place.heatScore,
+                surpriseScore: place.surpriseScore
+            )
+        }
+    }
+
+    private func expandedMapRegion(_ region: MKCoordinateRegion, scale: Double) -> MKCoordinateRegion {
+        let clampedScale = max(1, scale)
+        return MKCoordinateRegion(
+            center: region.center,
+            span: MKCoordinateSpan(
+                latitudeDelta: max(region.span.latitudeDelta * clampedScale, 0.005),
+                longitudeDelta: max(region.span.longitudeDelta * clampedScale, 0.005)
+            )
+        )
+    }
+
+    private func diagonalRadiusKm(for region: MKCoordinateRegion) -> Double {
+        let halfLatMeters = max(region.span.latitudeDelta, 0.001) * 111_320 / 2
+        let lngScale = max(cos(region.center.latitude * .pi / 180), 0.1)
+        let halfLngMeters = max(region.span.longitudeDelta, 0.001) * 111_320 * lngScale / 2
+        let halfDiagonalMeters = sqrt(halfLatMeters * halfLatMeters + halfLngMeters * halfLngMeters)
+        return max(halfDiagonalMeters / 1_000, 1)
+    }
+
+    private func filteredPlacesInRegion(_ source: [HePlace], region: MKCoordinateRegion) -> [HePlace] {
+        let halfLat = region.span.latitudeDelta / 2
+        let halfLng = region.span.longitudeDelta / 2
+        return source.filter { place in
+            abs(place.coordinate.latitude - region.center.latitude) <= halfLat &&
+                abs(place.coordinate.longitude - region.center.longitude) <= halfLng
+        }
     }
 
     private func restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: UUID?) {
@@ -999,8 +1211,38 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func setProgrammaticMapPosition(_ position: MapCameraPosition) {
+        maybeRebuildMapViewIfNeeded(nextPosition: position)
         objectWillChange.send()
         mapCameraPosition = position
+        if let region = position.region {
+            lastKnownMapRegion = region
+        }
+    }
+
+    private func maybeRebuildMapViewIfNeeded(nextPosition: MapCameraPosition) {
+        guard let previousRegion = mapCameraPosition.region ?? lastKnownMapRegion,
+              let nextRegion = nextPosition.region else {
+            return
+        }
+
+        let previous = CLLocation(latitude: previousRegion.center.latitude, longitude: previousRegion.center.longitude)
+        let next = CLLocation(latitude: nextRegion.center.latitude, longitude: nextRegion.center.longitude)
+        let distanceKm = previous.distance(from: next) / 1_000
+        guard distanceKm >= mapRebuildDistanceKm else {
+            return
+        }
+
+        // 跨区域大跳转时重建 Map 实例，避免旧瓦片/渲染缓存长期堆积。
+        forceMapViewRebuild(reason: "longDistanceJump:\(Int(distanceKm.rounded()))km")
+    }
+
+    private func forceMapViewRebuild(reason: String) {
+        mapViewInstanceID = UUID()
+        lastViewportQuerySignature = nil
+        nearbyLoadTask?.cancel()
+        nearbyLoadTask = nil
+        activeNearbyQueryToken = nil
+        debugLog("forceMapViewRebuild reason=\(reason)")
     }
 
     private func mutateInteractionState(_ block: () -> Void, notify: Bool = true) {
@@ -1034,6 +1276,10 @@ final class HomeMapViewModel: ObservableObject {
     deinit {
         autoOpenTask?.cancel()
         bootstrapTask?.cancel()
+        loadAllTask?.cancel()
+        viewportReloadTask?.cancel()
+        nearbyLoadTask?.cancel()
+        activeNearbyQueryToken = nil
         mapZoomRestoreTask?.cancel()
         quickCardPresentationTask?.cancel()
     }

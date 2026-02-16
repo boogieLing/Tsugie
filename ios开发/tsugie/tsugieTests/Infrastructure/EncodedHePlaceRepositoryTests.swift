@@ -211,15 +211,7 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
     }
 
     func testLoadNearbyFromGeneratedPayloadFilesAroundSkytree() throws {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Infrastructure
-            .deletingLastPathComponent()   // tsugieTests
-            .deletingLastPathComponent()   // tsugie
-        let indexURL = root.appendingPathComponent("tsugie/Resources/he_places.index.json")
-        let payloadURL = root.appendingPathComponent("tsugie/Resources/he_places.payload.bin")
-
-        let indexData = try Data(contentsOf: indexURL)
-        let payloadData = try Data(contentsOf: payloadURL)
+        let (indexData, payloadData) = try bundledSpatialPackage()
         let places = EncodedHePlaceRepository.loadNearby(
             from: indexData,
             payloadData: payloadData,
@@ -229,6 +221,26 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
         )
 
         XCTAssertGreaterThan(places.count, 50)
+    }
+
+    func testLoadAllFromGeneratedPayloadFilesHasGlobalCoverage() throws {
+        let (indexData, payloadData) = try bundledSpatialPackage()
+        let allPlaces = EncodedHePlaceRepository.loadAll(
+            from: indexData,
+            payloadData: payloadData,
+            center: center
+        )
+        let nearbyPlaces = EncodedHePlaceRepository.loadNearby(
+            from: indexData,
+            payloadData: payloadData,
+            center: center,
+            radiusKm: 30,
+            limit: 700
+        )
+
+        XCTAssertGreaterThan(allPlaces.count, 600)
+        XCTAssertGreaterThan(allPlaces.count, nearbyPlaces.count)
+        XCTAssertGreaterThan(nearbyPlaces.count, 50)
     }
 
     private func makeSpatialPackage(
@@ -271,6 +283,19 @@ final class EncodedHePlaceRepositoryTests: XCTestCase {
             throw NSError(domain: "EncodedHePlaceRepositoryTests", code: 2)
         }
         return array.count
+    }
+
+    private func bundledSpatialPackage() throws -> (indexData: Data, payloadData: Data) {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Infrastructure
+            .deletingLastPathComponent()   // tsugieTests
+            .deletingLastPathComponent()   // tsugie
+        let indexURL = root.appendingPathComponent("tsugie/Resources/he_places.index.json")
+        let payloadURL = root.appendingPathComponent("tsugie/Resources/he_places.payload.bin")
+        return (
+            try Data(contentsOf: indexURL),
+            try Data(contentsOf: payloadURL)
+        )
     }
 
     private func xorObfuscate(_ data: Data, keySeed: String) -> Data {

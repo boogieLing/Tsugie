@@ -29,6 +29,10 @@ struct HomeMapView: View {
         let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
 
         ZStack(alignment: .bottom) {
+            if viewModel.isCalendarPresented {
+                Color.clear
+                    .ignoresSafeArea()
+            } else {
                 Map(position: mapPositionBinding) {
                     ForEach(viewModel.mapMarkerEntries()) { entry in
                         Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
@@ -59,6 +63,10 @@ struct HomeMapView: View {
                         }
                         .annotationTitles(.hidden)
                     }
+                }
+                .id(viewModel.mapViewInstanceID)
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    viewModel.handleMapCameraChange(context.region)
                 }
                 .ignoresSafeArea()
                 .simultaneousGesture(TapGesture().onEnded {
@@ -146,9 +154,10 @@ struct HomeMapView: View {
 
                 SideDrawerLayerView(viewModel: viewModel)
                     .zIndex(20)
+            }
         }
         .overlay(alignment: .topTrailing) {
-            if !viewModel.isDetailVisible && !viewModel.isSideDrawerOpen {
+            if !viewModel.isCalendarPresented && !viewModel.isDetailVisible && !viewModel.isSideDrawerOpen {
                 HStack(spacing: 8) {
                     Button {
                         viewModel.closeMarkerActionBubble()

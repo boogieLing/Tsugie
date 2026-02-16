@@ -7,7 +7,7 @@ private struct CalendarCategoryMeta: Identifiable {
 }
 
 private struct CalendarScoredItem: Identifiable {
-    let id = UUID()
+    let id: UUID
     let place: HePlace
     let snapshot: EventStatusSnapshot
     let distanceMeters: Double
@@ -18,13 +18,13 @@ private struct CalendarScoredItem: Identifiable {
 private struct CalendarBucket: Identifiable {
     let id: String
     let dayDate: Date
-    let items: [CalendarScoredItem]
     let counts: [String: Int]
+    let totalCount: Int
 }
 
 private struct CalendarMonthBlock: Identifiable {
     struct Cell: Identifiable {
-        let id = UUID()
+        let id: String
         let day: Int?
         let dayKey: String?
         let date: Date?
@@ -201,6 +201,11 @@ struct CalendarPageView: View {
     @State private var selectedDayKey: String?
     @State private var dayFilterID = "all"
     @State private var didInitialAutoScroll = false
+    @State private var cachedBucketsByDayKey: [String: CalendarBucket] = [:]
+    @State private var cachedMonthBlocks: [CalendarMonthBlock] = []
+    @State private var cachedDayKeys: Set<String> = []
+    @State private var cachedDetailItemsByDayKey: [String: [CalendarScoredItem]] = [:]
+    @State private var cachedPlacesSignature = ""
 
     private var categories: [CalendarCategoryMeta] {
         [
@@ -238,6 +243,18 @@ struct CalendarPageView: View {
             }
             .ignoresSafeArea()
             .animation(.spring(response: 0.34, dampingFraction: 0.88), value: isDayDrawerOpen)
+            .onAppear {
+                refreshCalendarCacheIfNeeded(force: true)
+            }
+            .onChange(of: places.count) { _, _ in
+                refreshCalendarCacheIfNeeded(force: false)
+            }
+            .onChange(of: selectedDayKey) { _, newDayKey in
+                guard let newDayKey else {
+                    return
+                }
+                loadDetailItemsIfNeeded(for: newDayKey)
+            }
         }
     }
 
@@ -261,10 +278,8 @@ struct CalendarPageView: View {
     }
 
     private var monthList: some View {
-        let blocks = buildCalendarMonths()
-        let dayKeys = Set(blocks.flatMap { block in
-            block.cells.compactMap(\.dayKey)
-        })
+        let blocks = cachedMonthBlocks
+        let dayKeys = cachedDayKeys
 
         return ScrollViewReader { scrollProxy in
             ScrollView {
@@ -291,6 +306,9 @@ struct CalendarPageView: View {
                 scrollCurrentDayToCenterIfNeeded(scrollProxy: scrollProxy, dayKeys: dayKeys)
             }
             .onChange(of: places.count) { _, _ in
+                scrollCurrentDayToCenterIfNeeded(scrollProxy: scrollProxy, dayKeys: dayKeys)
+            }
+            .onChange(of: cachedMonthBlocks.count) { _, _ in
                 scrollCurrentDayToCenterIfNeeded(scrollProxy: scrollProxy, dayKeys: dayKeys)
             }
         }
@@ -406,8 +424,7 @@ struct CalendarPageView: View {
 
         return ZStack {
             Button {
-                selectedDayKey = nil
-                dayFilterID = "all"
+                closeDayDrawer()
             } label: {
                 Color(red: 0.11, green: 0.23, blue: 0.29, opacity: 0.16)
                     .ignoresSafeArea()
@@ -420,7 +437,7 @@ struct CalendarPageView: View {
                         ids: dayFilterIDs(for: bucket),
                         categories: categories,
                         counts: bucket.counts,
-                        totalCount: bucket.items.count,
+                        totalCount: bucket.totalCount,
                         selectedID: dayFilterID,
                         activeGradient: activeGradient,
                         activeGlowColor: activeGlowColor,
@@ -430,7 +447,7 @@ struct CalendarPageView: View {
                 }
 
                 dayDrawer(width: width)
-                }
+            }
                 .padding(.top, max(proxy.safeAreaInsets.top, 0) + 12)
                 .padding(.trailing, 30)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 0) + 12)
@@ -440,6 +457,7 @@ struct CalendarPageView: View {
 
     private func dayDrawer(width: CGFloat) -> some View {
         let bucket = selectedBucket
+        let filteredItems = selectedDayItems
 
         return VStack(spacing: 10) {
             HStack {
@@ -448,8 +466,7 @@ struct CalendarPageView: View {
                     .foregroundStyle(Color(red: 0.21, green: 0.37, blue: 0.43))
                 Spacer()
                 TsugieClosePillButton(action: {
-                    selectedDayKey = nil
-                    dayFilterID = "all"
+                    closeDayDrawer()
                 }, accessibilityLabel: L10n.Common.close)
             }
 
@@ -457,11 +474,11 @@ struct CalendarPageView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if let bucket {
                         VStack(spacing: 8) {
-                            ForEach(filteredDayItems(bucket), id: \.id) { item in
+                            ForEach(filteredItems, id: \.id) { item in
                                 dayItemRow(item)
                             }
 
-                            if filteredDayItems(bucket).isEmpty {
+                            if filteredItems.isEmpty {
                                 Text(L10n.Calendar.drawerNoMatch)
                                     .font(.system(size: 12))
                                     .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
@@ -506,8 +523,7 @@ struct CalendarPageView: View {
         let category = categories.first(where: { $0.id == item.categoryID }) ?? categories[0]
         let state = placeStateProvider(item.place.id)
         return Button {
-            selectedDayKey = nil
-            dayFilterID = "all"
+            closeDayDrawer()
             onClose()
             onSelectPlace(item.place.id)
         } label: {
@@ -559,26 +575,103 @@ struct CalendarPageView: View {
 
     private var selectedBucket: CalendarBucket? {
         guard let selectedDayKey else { return nil }
-        return buildCalendarBuckets().first(where: { $0.id == selectedDayKey })
+        return cachedBucketsByDayKey[selectedDayKey]
     }
 
     private var isDayDrawerOpen: Bool {
         selectedDayKey != nil
     }
 
-    private func filteredDayItems(_ bucket: CalendarBucket) -> [CalendarScoredItem] {
-        if dayFilterID == "all" {
-            return bucket.items
+    private func closeDayDrawer() {
+        selectedDayKey = nil
+        dayFilterID = "all"
+        cachedDetailItemsByDayKey.removeAll(keepingCapacity: true)
+    }
+
+    private var selectedDayItems: [CalendarScoredItem] {
+        guard let selectedDayKey else {
+            return []
         }
-        return bucket.items.filter { $0.categoryID == dayFilterID }
+        let source = cachedDetailItemsByDayKey[selectedDayKey] ?? []
+        return filteredDayItems(source)
+    }
+
+    private func filteredDayItems(_ source: [CalendarScoredItem]) -> [CalendarScoredItem] {
+        if dayFilterID == "all" {
+            return source
+        }
+        return source.filter { $0.categoryID == dayFilterID }
     }
 
     private func buildCalendarBuckets() -> [CalendarBucket] {
-        let scored = places.compactMap { place -> CalendarScoredItem? in
-            let snapshot = EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now)
-            guard let start = snapshot.startDate else { return nil }
+        var countsByDay: [String: [String: Int]] = [:]
+        var dateByDay: [String: Date] = [:]
+
+        for place in places {
+            guard let start = place.startAt else {
+                continue
+            }
             let key = dayKeyOf(start)
+            let normalizedDate = Calendar.current.startOfDay(for: start)
+            dateByDay[key] = dateByDay[key] ?? normalizedDate
+            let category = categoryID(for: place)
+            var counts = countsByDay[key, default: [:]]
+            counts[category, default: 0] += 1
+            countsByDay[key] = counts
+        }
+
+        var buckets: [CalendarBucket] = countsByDay.compactMap { key, counts in
+            guard let date = dateByDay[key] else { return nil }
+            let totalCount = counts.values.reduce(0, +)
+            return CalendarBucket(id: key, dayDate: date, counts: counts, totalCount: totalCount)
+        }
+        buckets.sort { $0.dayDate < $1.dayDate }
+        return buckets
+    }
+
+    private func refreshCalendarCacheIfNeeded(force: Bool) {
+        let signature = makePlacesSignature()
+        guard force || signature != cachedPlacesSignature else {
+            return
+        }
+
+        let buckets = buildCalendarBuckets()
+        let blocks = buildCalendarMonths(from: buckets)
+        cachedBucketsByDayKey = Dictionary(uniqueKeysWithValues: buckets.map { ($0.id, $0) })
+        cachedMonthBlocks = blocks
+        cachedDayKeys = Set(blocks.flatMap { $0.cells.compactMap(\.dayKey) })
+        cachedDetailItemsByDayKey = [:]
+        cachedPlacesSignature = signature
+
+        if let selectedDayKey, cachedBucketsByDayKey[selectedDayKey] == nil {
+            closeDayDrawer()
+        }
+    }
+
+    private func loadDetailItemsIfNeeded(for dayKey: String) {
+        if cachedDetailItemsByDayKey[dayKey] != nil {
+            return
+        }
+
+        let built = buildDetailItems(for: dayKey)
+        if cachedDetailItemsByDayKey.count >= 8 {
+            cachedDetailItemsByDayKey.removeAll(keepingCapacity: true)
+        }
+        cachedDetailItemsByDayKey[dayKey] = built
+    }
+
+    private func buildDetailItems(for dayKey: String) -> [CalendarScoredItem] {
+        let items = places.compactMap { place -> CalendarScoredItem? in
+            guard let start = place.startAt else {
+                return nil
+            }
+            let key = dayKeyOf(start)
+            guard key == dayKey else {
+                return nil
+            }
+            let snapshot = EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now)
             return CalendarScoredItem(
+                id: place.id,
                 place: place,
                 snapshot: snapshot,
                 distanceMeters: place.distanceMeters,
@@ -586,21 +679,10 @@ struct CalendarPageView: View {
                 dayKey: key
             )
         }
-
-        let grouped = Dictionary(grouping: scored, by: \.dayKey)
-        var buckets: [CalendarBucket] = grouped.compactMap { key, items in
-            guard let date = items.first?.snapshot.startDate else { return nil }
-            let sorted = items.sorted(by: recommendationCompare)
-            var counts: [String: Int] = [:]
-            sorted.forEach { counts[$0.categoryID, default: 0] += 1 }
-            return CalendarBucket(id: key, dayDate: date, items: sorted, counts: counts)
-        }
-        buckets.sort { $0.dayDate < $1.dayDate }
-        return buckets
+        return items.sorted(by: recommendationCompare)
     }
 
-    private func buildCalendarMonths() -> [CalendarMonthBlock] {
-        let buckets = buildCalendarBuckets()
+    private func buildCalendarMonths(from buckets: [CalendarBucket]) -> [CalendarMonthBlock] {
         guard !buckets.isEmpty else { return [] }
 
         let bucketMap = Dictionary(uniqueKeysWithValues: buckets.map { ($0.id, $0) })
@@ -622,20 +704,39 @@ struct CalendarPageView: View {
             let firstWeekday = Calendar.current.component(.weekday, from: cursor) - 1
             let daysInMonth = Calendar.current.range(of: .day, in: .month, for: cursor)?.count ?? 30
             var cells: [CalendarMonthBlock.Cell] = []
+            let monthID = "\(year)-\(String(format: "%02d", month))"
 
             for _ in 0..<firstWeekday {
-                cells.append(.init(day: nil, dayKey: nil, date: nil, bucket: nil))
+                let fillerIndex = cells.count
+                cells.append(
+                    .init(
+                        id: "\(monthID)-pad-\(fillerIndex)",
+                        day: nil,
+                        dayKey: nil,
+                        date: nil,
+                        bucket: nil
+                    )
+                )
             }
 
             for day in 1...daysInMonth {
                 let date = DateComponents(calendar: .current, year: year, month: month, day: day).date
                 let key = date.map(dayKeyOf) ?? ""
-                cells.append(.init(day: day, dayKey: key, date: date, bucket: bucketMap[key]))
+                let cellID = key.isEmpty ? "\(monthID)-day-\(day)" : key
+                cells.append(
+                    .init(
+                        id: cellID,
+                        day: day,
+                        dayKey: key,
+                        date: date,
+                        bucket: bucketMap[key]
+                    )
+                )
             }
 
             blocks.append(
                 CalendarMonthBlock(
-                    id: "\(year)-\(String(format: "%02d", month))",
+                    id: monthID,
                     title: cursor.formatted(
                         Date.FormatStyle()
                             .year(.defaultDigits)
@@ -650,6 +751,13 @@ struct CalendarPageView: View {
         }
 
         return blocks
+    }
+
+    private func makePlacesSignature() -> String {
+        guard let first = places.first, let last = places.last else {
+            return "0"
+        }
+        return "\(places.count)|\(first.id.uuidString)|\(last.id.uuidString)"
     }
 
     private func categoryID(for place: HePlace) -> String {
