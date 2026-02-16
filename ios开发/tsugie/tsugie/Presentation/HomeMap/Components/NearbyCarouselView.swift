@@ -6,12 +6,12 @@ struct NearbyCarouselItemModel: Identifiable, Equatable {
     let snapshot: EventStatusSnapshot
     let distanceText: String
     let placeState: PlaceState
+    let stamp: PlaceStampPresentation?
+    let endpointIconName: String
 }
 
 struct NearbyCarouselView: View {
     let items: [NearbyCarouselItemModel]
-    let activeGradient: LinearGradient
-    let activeGlowColor: Color
     let onSelectPlace: (UUID) -> Void
 
     var body: some View {
@@ -20,18 +20,17 @@ struct NearbyCarouselView: View {
                 ForEach(items) { item in
                     NearbyCarouselItemView(
                         item: item,
-                        activeGradient: activeGradient,
-                        activeGlowColor: activeGlowColor,
                         onSelectPlace: onSelectPlace
                     )
                     .equatable()
                 }
             }
             .padding(.horizontal, 28)
-            .padding(.vertical, 2)
+            .padding(.vertical, 12)
             .background(Color.clear)
         }
         .scrollIndicators(.hidden)
+        .scrollClipDisabled()
         .background(Color.clear)
     }
 
@@ -39,8 +38,6 @@ struct NearbyCarouselView: View {
 
 private struct NearbyCarouselItemView: View, Equatable {
     let item: NearbyCarouselItemModel
-    let activeGradient: LinearGradient
-    let activeGlowColor: Color
     let onSelectPlace: (UUID) -> Void
 
     static func == (lhs: NearbyCarouselItemView, rhs: NearbyCarouselItemView) -> Bool {
@@ -64,13 +61,17 @@ private struct NearbyCarouselItemView: View, Equatable {
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
 
-                    PlaceStateIconsView(
-                        placeState: item.placeState,
-                        size: 16,
-                        activeGradient: activeGradient,
-                        activeGlowColor: activeGlowColor,
-                        activeGlowBoost: 2.5
-                    )
+                    HStack(spacing: 6) {
+                        FavoriteStateIconView(
+                            isFavorite: item.placeState.isFavorite,
+                            size: 19
+                        )
+                        StampIconView(
+                            stamp: item.stamp,
+                            isColorized: item.placeState.isCheckedIn,
+                            size: 20
+                        )
+                    }
                 }
 
                 HStack(spacing: 10) {
@@ -85,7 +86,11 @@ private struct NearbyCarouselItemView: View, Equatable {
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
                 }
 
-                TsugieMiniProgressView(snapshot: item.snapshot, glowBoost: 1.7)
+                TsugieMiniProgressView(
+                    snapshot: item.snapshot,
+                    glowBoost: 1.7,
+                    endpointIconName: item.endpointIconName
+                )
                     .padding(.top, 1)
             }
             .padding(.horizontal, 12)

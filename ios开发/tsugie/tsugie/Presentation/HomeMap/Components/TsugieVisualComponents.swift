@@ -356,13 +356,14 @@ struct TsugieStatusTrackView: View {
     let snapshot: EventStatusSnapshot
     let variant: Variant
     let progress: Double
+    var endpointIconName: String? = nil
 
     var body: some View {
         let clamped = min(max(progress, 0), 1)
         GeometryReader { proxy in
             let width = proxy.size.width
             let fillWidth = max(width * clamped, 0)
-            let x = edgeAdjustedX(for: width, progress: clamped)
+            let x = edgeAdjustedX(for: width, progress: endpointProgressValue)
             let centerY = proxy.size.height / 2
 
             ZStack(alignment: .leading) {
@@ -378,18 +379,9 @@ struct TsugieStatusTrackView: View {
                     )
                     .shadow(color: fillShadowColor, radius: fillShadowRadius, x: 0, y: 0)
 
-                if showFace {
-                    Text(faceText)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(faceColor)
-                        .position(x: x, y: centerY - (trackHeight / 2) - 7)
-                }
-
-                Text("へ")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(endpointTextColor)
-                    .frame(minWidth: 18, minHeight: 16)
-                    .padding(.horizontal, 6)
+                endpointBubbleContent
+                    .frame(minWidth: endpointBubbleMinWidth, minHeight: endpointBubbleMinHeight)
+                    .padding(.horizontal, endpointBubbleHorizontalPadding)
                     .background(endpointBackground, in: Capsule())
                     .overlay(Capsule().stroke(endpointBorder, lineWidth: 1))
                     .position(x: x, y: centerY)
@@ -401,8 +393,10 @@ struct TsugieStatusTrackView: View {
     private func edgeAdjustedX(for width: CGFloat, progress: Double) -> CGFloat {
         guard width > 0 else { return 0 }
         let px = width * progress
-        let minX = width * 0.08
-        let maxX = width * 0.92
+        let half = endpointBubbleHalfWidth
+        guard width > (half * 2) else { return width / 2 }
+        let minX = half
+        let maxX = width - half
         return min(max(px, minX), maxX)
     }
 
@@ -410,8 +404,22 @@ struct TsugieStatusTrackView: View {
         variant == .quick ? 10 : 13
     }
 
-    private var showFace: Bool {
-        variant == .detail
+    private var endpointProgressValue: Double {
+        switch snapshot.status {
+        case .upcoming, .unknown:
+            return 0
+        case .ended:
+            return 1
+        case .ongoing:
+            return min(max(progress, 0), 1)
+        }
+    }
+
+    private var endpointBubbleMinWidth: CGFloat { 27 }
+    private var endpointBubbleMinHeight: CGFloat { 24 }
+    private var endpointBubbleHorizontalPadding: CGFloat { 9 }
+    private var endpointBubbleHalfWidth: CGFloat {
+        (endpointBubbleMinWidth + endpointBubbleHorizontalPadding * 2) / 2
     }
 
     private var trackColor: Color {
@@ -499,26 +507,44 @@ struct TsugieStatusTrackView: View {
         }
     }
 
-    private var faceText: String {
-        switch snapshot.status {
-        case .ongoing:
-            return "(=^･ω･^=)ﾉ"
-        case .upcoming:
-            return "(=˘ω˘=) zZ"
-        case .ended:
-            return "(=•ω•=)"
-        case .unknown:
-            return "(=˘ω˘=)"
+    @ViewBuilder
+    private var endpointBubbleContent: some View {
+        if let endpointIconName {
+            if endpointIconName == TsugieSmallIcon.hanabiAsset {
+                Image(endpointIconName)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(width: 13, height: 13)
+                    .scaleEffect(1.65)
+                    .rotationEffect(.degrees(23))
+                    .foregroundStyle(hanabiEndpointGradient)
+            } else {
+                Image(endpointIconName)
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(width: 13, height: 13)
+                    .scaleEffect(1.65 * 1.3)
+                    .saturation(1.18)
+                    .contrast(1.05)
+            }
+        } else {
+            Text("へ")
+                .font(.system(size: 10, weight: .black))
+                .foregroundStyle(endpointTextColor)
         }
     }
 
-    private var faceColor: Color {
-        switch snapshot.status {
-        case .ongoing:
-            return Color(red: 0.93, green: 1.0, blue: 0.99)
-        case .upcoming, .ended, .unknown:
-            return Color(red: 0.27, green: 0.38, blue: 0.44, opacity: 0.82)
-        }
+    private var hanabiEndpointGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 250.0 / 255.0, green: 112.0 / 255.0, blue: 154.0 / 255.0),
+                Color(red: 254.0 / 255.0, green: 225.0 / 255.0, blue: 64.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -526,13 +552,14 @@ struct TsugieMiniProgressView: View {
     let snapshot: EventStatusSnapshot
     var trackHeight: CGFloat = 10
     var glowBoost: CGFloat = 1
+    var endpointIconName: String? = nil
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let pct = min(max(progressValue, 0), 1)
             let fillWidth = max(width * pct, 6)
-            let endpointX = min(max(width * pct, width * 0.06), width * 0.94)
+            let endpointX = edgeAdjustedX(for: width, progress: endpointProgressValue)
 
             ZStack(alignment: .leading) {
                 Capsule()
@@ -544,11 +571,9 @@ struct TsugieMiniProgressView: View {
                     .frame(width: fillWidth, height: trackHeight)
                     .shadow(color: fillGlowColor, radius: fillGlowRadius, x: 0, y: 0)
 
-                Text("へ")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(endpointTextColor)
-                    .frame(minWidth: 17, minHeight: 15)
-                    .padding(.horizontal, 5)
+                endpointBubbleContent
+                    .frame(minWidth: endpointBubbleMinWidth, minHeight: endpointBubbleMinHeight)
+                    .padding(.horizontal, endpointBubbleHorizontalPadding)
                     .background(endpointBackground, in: Capsule())
                     .overlay(Capsule().stroke(endpointBorder, lineWidth: 1))
                     .shadow(color: endpointGlowColor, radius: endpointGlowRadius, x: 0, y: 0)
@@ -569,6 +594,34 @@ struct TsugieMiniProgressView: View {
         case .unknown:
             return 0.08
         }
+    }
+
+    private var endpointProgressValue: Double {
+        switch snapshot.status {
+        case .upcoming, .unknown:
+            return 0
+        case .ended:
+            return 1
+        case .ongoing:
+            return progressValue
+        }
+    }
+
+    private var endpointBubbleMinWidth: CGFloat { 26 }
+    private var endpointBubbleMinHeight: CGFloat { 23 }
+    private var endpointBubbleHorizontalPadding: CGFloat { 8 }
+    private var endpointBubbleHalfWidth: CGFloat {
+        (endpointBubbleMinWidth + endpointBubbleHorizontalPadding * 2) / 2
+    }
+
+    private func edgeAdjustedX(for width: CGFloat, progress: Double) -> CGFloat {
+        guard width > 0 else { return 0 }
+        let px = width * progress
+        let half = endpointBubbleHalfWidth
+        guard width > (half * 2) else { return width / 2 }
+        let minX = half
+        let maxX = width - half
+        return min(max(px, minX), maxX)
     }
 
     private var fillGradient: LinearGradient {
@@ -678,5 +731,45 @@ struct TsugieMiniProgressView: View {
         case .unknown:
             return 4 * glowBoost
         }
+    }
+
+    @ViewBuilder
+    private var endpointBubbleContent: some View {
+        if let endpointIconName {
+            if endpointIconName == TsugieSmallIcon.hanabiAsset {
+                Image(endpointIconName)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(width: 12, height: 12)
+                    .scaleEffect(1.65)
+                    .rotationEffect(.degrees(23))
+                    .foregroundStyle(hanabiEndpointGradient)
+            } else {
+                Image(endpointIconName)
+                    .resizable()
+                    .renderingMode(.original)
+                    .scaledToFit()
+                    .frame(width: 12, height: 12)
+                    .scaleEffect(1.65 * 1.3)
+                    .saturation(1.18)
+                    .contrast(1.05)
+            }
+        } else {
+            Text("へ")
+                .font(.system(size: 9, weight: .black))
+                .foregroundStyle(endpointTextColor)
+        }
+    }
+
+    private var hanabiEndpointGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 250.0 / 255.0, green: 112.0 / 255.0, blue: 154.0 / 255.0),
+                Color(red: 254.0 / 255.0, green: 225.0 / 255.0, blue: 64.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }

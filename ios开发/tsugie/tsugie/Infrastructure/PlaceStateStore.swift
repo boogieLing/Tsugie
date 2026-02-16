@@ -15,14 +15,17 @@ final class PlaceStateStore {
         states[placeID] ?? PlaceState()
     }
 
-    func toggleFavorite(for placeID: UUID) {
+    @discardableResult
+    func toggleFavorite(for placeID: UUID) -> PlaceState {
         var value = state(for: placeID)
         value.isFavorite.toggle()
         states[placeID] = value
         persist()
+        return value
     }
 
-    func toggleCheckedIn(for placeID: UUID) {
+    @discardableResult
+    func toggleCheckedIn(for placeID: UUID) -> PlaceState {
         var value = state(for: placeID)
         value.isCheckedIn.toggle()
         if value.isCheckedIn {
@@ -30,6 +33,7 @@ final class PlaceStateStore {
         }
         states[placeID] = value
         persist()
+        return value
     }
 
     private func persist() {

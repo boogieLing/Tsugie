@@ -7,6 +7,7 @@ struct QuickCardView: View {
     let metaText: String
     let hintText: String
     let placeState: PlaceState
+    let stamp: PlaceStampPresentation?
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onClose: () -> Void
@@ -33,13 +34,7 @@ struct QuickCardView: View {
                 Spacer()
 
                 HStack(spacing: 8) {
-                    PlaceStateIconsView(
-                        placeState: placeState,
-                        size: 19,
-                        activeGradient: activeGradient,
-                        activeGlowColor: activeGlowColor,
-                        activeGlowBoost: 1.9
-                    )
+                    FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 30)
 
                     TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.QuickCard.closeA11y)
                 }
@@ -62,7 +57,8 @@ struct QuickCardView: View {
             TsugieStatusTrackView(
                 snapshot: snapshot,
                 variant: .quick,
-                progress: progress ?? 0.08
+                progress: progress ?? 0.08,
+                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
             )
             .padding(.top, 8)
 
@@ -111,6 +107,10 @@ struct QuickCardView: View {
         .padding(.top, 8)
         .padding(.horizontal, 14)
         .padding(.bottom, 16)
+        .background(alignment: .bottomTrailing) {
+            PlaceStampBackgroundView(stamp: stamp, size: 173, loadMode: .immediate)
+                .offset(x: 18, y: 20)
+        }
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.white.opacity(0.66))

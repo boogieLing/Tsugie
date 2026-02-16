@@ -3,64 +3,65 @@ import SwiftUI
 struct MarkerActionBubbleView: View {
     let isVisible: Bool
     let placeState: PlaceState
+    let stamp: PlaceStampPresentation?
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onFavoriteTap: () -> Void
     let onCheckedInTap: () -> Void
     private let menuClockwiseDegrees: Double = 33
     private let menuRadius: CGFloat = 52
-    private let hiddenScale: CGFloat = 0.36
 
     var body: some View {
         ZStack {
             actionButton(
-                title: placeState.isFavorite ? "★" : "☆",
                 active: placeState.isFavorite,
                 label: L10n.Marker.favoriteA11y,
                 action: onFavoriteTap,
                 radius: menuRadius,
                 angleDegrees: -150
-            )
+            ) {
+                FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 27)
+            }
 
             actionButton(
-                title: placeState.isCheckedIn ? "◉" : "◌",
                 active: placeState.isCheckedIn,
                 label: L10n.Marker.checkedInA11y,
                 action: onCheckedInTap,
                 radius: menuRadius,
                 angleDegrees: -45
-            )
+            ) {
+                StampIconView(
+                    stamp: stamp,
+                    isColorized: placeState.isCheckedIn,
+                    size: 41
+                )
+            }
         }
         .frame(width: 1, height: 1)
         .transaction { transaction in
             transaction.animation = nil
+            transaction.disablesAnimations = true
         }
     }
 
-    private func actionButton(
-        title: String,
+    private func actionButton<Icon: View>(
         active: Bool,
         label: String,
         action: @escaping () -> Void,
         radius: CGFloat,
-        angleDegrees: Double
+        angleDegrees: Double,
+        @ViewBuilder icon: () -> Icon
     ) -> some View {
         let finalAngle = angleDegrees + menuClockwiseDegrees
         let orbit = polarOffset(radius: isVisible ? radius : 0, angleDegrees: finalAngle)
 
         return Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
+            icon()
                 .frame(width: 30, height: 30)
                 .background(
                     Circle()
-                        .fill(active ? AnyShapeStyle(activeGradient) : AnyShapeStyle(Color.white.opacity(0.88)))
+                        .fill(Color.white.opacity(0.94))
                 )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(active ? 0 : 0.92), lineWidth: active ? 0 : 1)
-                )
-                .foregroundStyle(active ? .white : Color(red: 0.37, green: 0.47, blue: 0.52))
                 .tsugieActiveGlow(
                     isActive: active,
                     glowGradient: activeGradient,
@@ -78,10 +79,14 @@ struct MarkerActionBubbleView: View {
                 )
         }
         .offset(orbit)
-        .scaleEffect(isVisible ? 1 : hiddenScale)
         .opacity(isVisible ? 1 : 0)
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        .animation(nil, value: isVisible)
+        .transaction { transaction in
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     private func polarOffset(radius: CGFloat, angleDegrees: Double) -> CGSize {

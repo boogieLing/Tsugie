@@ -63,6 +63,9 @@ enum EventStatusResolver {
         }
 
         if let endAt, endAt >= startAt, now >= startAt, now <= endAt {
+            if Calendar.current.startOfDay(for: startAt) != Calendar.current.startOfDay(for: endAt) {
+                return multiDaySnapshot(startAt: startAt, endAt: endAt, now: now)
+            }
             let total = max(endAt.timeIntervalSince(startAt), 1)
             let passed = now.timeIntervalSince(startAt)
             let remainSec = max(Int(ceil(endAt.timeIntervalSince(now))), 0)
@@ -99,6 +102,139 @@ enum EventStatusResolver {
         }
 
         return EventStatusSnapshot(
+            status: .ended,
+            leftLabel: L10n.EventStatus.ended,
+            rightLabel: endAt.map { L10n.EventStatus.rightEndAt(formatHm($0)) } ?? L10n.EventStatus.endOnly,
+            startLabel: startLabel,
+            endLabel: endLabel,
+            etaLabel: "00:00:00",
+            progress: 1,
+            waitProgress: 1,
+            startDate: startAt,
+            endDate: endAt
+        )
+    }
+
+    private static func multiDaySnapshot(startAt: Date, endAt: Date, now: Date) -> EventStatusSnapshot {
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: startAt)
+        let endDay = calendar.startOfDay(for: endAt)
+        let nowDay = calendar.startOfDay(for: now)
+        let startLabel = formatHm(startAt)
+        let endLabel = formatHm(endAt)
+
+        if nowDay < startDay {
+            return upcomingSnapshot(
+                targetStart: startAt,
+                now: now,
+                startLabel: startLabel,
+                endLabel: endLabel,
+                endDate: endAt
+            )
+        }
+        if nowDay > endDay {
+            return endedSnapshot(startAt: startAt, endAt: endAt, startLabel: startLabel, endLabel: endLabel)
+        }
+
+        let startComponents = calendar.dateComponents([.hour, .minute], from: startAt)
+        let endComponents = calendar.dateComponents([.hour, .minute], from: endAt)
+        guard
+            let dayStart = calendar.date(
+                bySettingHour: startComponents.hour ?? 0,
+                minute: startComponents.minute ?? 0,
+                second: 0,
+                of: nowDay
+            ),
+            let rawDayEnd = calendar.date(
+                bySettingHour: endComponents.hour ?? 23,
+                minute: endComponents.minute ?? 59,
+                second: 0,
+                of: nowDay
+            )
+        else {
+            return endedSnapshot(startAt: startAt, endAt: endAt, startLabel: startLabel, endLabel: endLabel)
+        }
+
+        let dayEnd: Date = {
+            if rawDayEnd > dayStart {
+                return rawDayEnd
+            }
+            return calendar.date(byAdding: .day, value: 1, to: rawDayEnd) ?? rawDayEnd
+        }()
+
+        if now < dayStart {
+            return upcomingSnapshot(
+                targetStart: dayStart,
+                now: now,
+                startLabel: startLabel,
+                endLabel: endLabel,
+                endDate: endAt
+            )
+        }
+
+        if now <= dayEnd {
+            let total = max(dayEnd.timeIntervalSince(dayStart), 1)
+            let passed = now.timeIntervalSince(dayStart)
+            let remainSec = max(Int(ceil(dayEnd.timeIntervalSince(now))), 0)
+            return EventStatusSnapshot(
+                status: .ongoing,
+                leftLabel: L10n.EventStatus.leftRemaining(formatCountdownByGranularity(remainSec)),
+                rightLabel: L10n.EventStatus.rightEndAt(formatHm(dayEnd)),
+                startLabel: startLabel,
+                endLabel: endLabel,
+                etaLabel: formatCountdownByGranularity(remainSec),
+                progress: min(max(passed / total, 0), 1),
+                waitProgress: 1,
+                startDate: startAt,
+                endDate: endAt
+            )
+        }
+
+        if nowDay < endDay,
+           let nextStart = calendar.date(byAdding: .day, value: 1, to: dayStart) {
+            return upcomingSnapshot(
+                targetStart: nextStart,
+                now: now,
+                startLabel: startLabel,
+                endLabel: endLabel,
+                endDate: endAt
+            )
+        }
+
+        return endedSnapshot(startAt: startAt, endAt: endAt, startLabel: startLabel, endLabel: endLabel)
+    }
+
+    private static func upcomingSnapshot(
+        targetStart: Date,
+        now: Date,
+        startLabel: String,
+        endLabel: String,
+        endDate: Date?
+    ) -> EventStatusSnapshot {
+        let diffSec = max(Int(ceil(targetStart.timeIntervalSince(now))), 1)
+        let eta = formatCountdownByGranularity(diffSec)
+        let diffMinutes = max(Int(ceil(Double(diffSec) / 60)), 1)
+        return EventStatusSnapshot(
+            status: .upcoming,
+            leftLabel: L10n.EventStatus.leftStartsIn(eta),
+            rightLabel: L10n.EventStatus.rightStartAt(formatHm(targetStart)),
+            startLabel: startLabel,
+            endLabel: endLabel,
+            etaLabel: eta,
+            progress: 0,
+            waitProgress: min(max(1 - (Double(diffMinutes) / 180), 0), 1),
+            startDate: targetStart,
+            endDate: endDate
+        )
+    }
+
+    private static func endedSnapshot(
+        startAt: Date,
+        endAt: Date?,
+        startLabel: String,
+        endLabel: String
+    ) -> EventStatusSnapshot {
+        EventStatusSnapshot(
             status: .ended,
             leftLabel: L10n.EventStatus.ended,
             rightLabel: endAt.map { L10n.EventStatus.rightEndAt(formatHm($0)) } ?? L10n.EventStatus.endOnly,

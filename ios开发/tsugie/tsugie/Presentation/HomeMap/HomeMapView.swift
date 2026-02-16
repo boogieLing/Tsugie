@@ -27,6 +27,12 @@ struct HomeMapView: View {
             glowColor: TsugieVisuals.markerGlowColor(for: .other)
         )
         let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
+        let locationIconColor = Color(
+            red: 81.0 / 255.0,
+            green: 81.0 / 255.0,
+            blue: 81.0 / 255.0
+        )
+        let sidebarIconColor = locationIconColor
 
         ZStack(alignment: .bottom) {
             if viewModel.isCalendarPresented {
@@ -34,6 +40,15 @@ struct HomeMapView: View {
                     .ignoresSafeArea()
             } else {
                 Map(position: mapPositionBinding) {
+                    Annotation("CurrentLocation", coordinate: viewModel.currentLocationCoordinate, anchor: .center) {
+                        CurrentLocationMarkerView(
+                            pinColor: locationIconColor,
+                            glowColor: viewModel.activeMapGlowColor
+                        )
+                            .allowsHitTesting(false)
+                    }
+                    .annotationTitles(.hidden)
+
                     ForEach(viewModel.mapMarkerEntries()) { entry in
                         Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
                             MapMarkerAnnotationView(
@@ -47,12 +62,15 @@ struct HomeMapView: View {
                                     matsuri: markerActionStyleMatsuri,
                                     fallback: markerActionStyleFallback
                                 ),
+                                stamp: entry.isMenuVisible
+                                    ? viewModel.stampPresentation(for: entry.id, heType: entry.heType)
+                                    : nil,
                                 onFavoriteTap: {
-                                    viewModel.markAnnotationTapCooldown()
+                                    viewModel.markAnnotationTapCooldown(0.4)
                                     viewModel.toggleFavorite(for: entry.id)
                                 },
                                 onCheckedInTap: {
-                                    viewModel.markAnnotationTapCooldown()
+                                    viewModel.markAnnotationTapCooldown(0.4)
                                     viewModel.toggleCheckedIn(for: entry.id)
                                 },
                                 onTap: {
@@ -69,9 +87,12 @@ struct HomeMapView: View {
                     viewModel.handleMapCameraChange(context.region)
                 }
                 .ignoresSafeArea()
-                .simultaneousGesture(TapGesture().onEnded {
-                    viewModel.handleMapBackgroundTap()
-                })
+                .gesture(
+                    TapGesture().onEnded {
+                        viewModel.handleMapBackgroundTap()
+                    },
+                    including: .gesture
+                )
 
                 mapAmbientGlowLayer
 
@@ -81,6 +102,7 @@ struct HomeMapView: View {
                             place: detailPlace,
                             snapshot: viewModel.eventSnapshot(for: detailPlace, now: context.date),
                             placeState: viewModel.placeState(for: detailPlace.id),
+                            stamp: viewModel.stampPresentation(for: detailPlace),
                             distanceText: viewModel.distanceText(for: detailPlace),
                             openHoursText: viewModel.detailOpenHoursText(for: detailPlace, now: context.date),
                             activeGradient: viewModel.activePillGradient,
@@ -107,6 +129,7 @@ struct HomeMapView: View {
                             metaText: viewModel.quickMetaText(for: place, now: context.date),
                             hintText: viewModel.quickHintText(for: place),
                             placeState: viewModel.placeState(for: place.id),
+                            stamp: viewModel.stampPresentation(for: place),
                             activeGradient: viewModel.activePillGradient,
                             activeGlowColor: viewModel.activeMapGlowColor,
                             onClose: {
@@ -139,8 +162,6 @@ struct HomeMapView: View {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         NearbyCarouselView(
                             items: viewModel.nearbyCarouselItems(now: context.date),
-                            activeGradient: viewModel.activePillGradient,
-                            activeGlowColor: viewModel.activeMapGlowColor,
                             onSelectPlace: { placeID in
                                 viewModel.selectPlaceFromCarousel(placeID: placeID)
                             }
@@ -178,8 +199,10 @@ struct HomeMapView: View {
                         viewModel.resetToCurrentLocation()
                     } label: {
                         Image(systemName: "location.fill")
+                            .symbolRenderingMode(.monochrome)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.47))
+                            .foregroundStyle(locationIconColor)
+                            .opacity(1)
                             .frame(width: 34, height: 34)
                             .background(Color.white.opacity(0.66), in: Circle())
                             .background(.ultraThinMaterial, in: Circle())
@@ -191,9 +214,14 @@ struct HomeMapView: View {
                     Button {
                         viewModel.toggleSideDrawerPanel()
                     } label: {
-                        Text("(ᵔ◡ᵔ)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.29, green: 0.40, blue: 0.44))
+                        Image("HomeSidebarIcon")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(height: 19)
+                            .foregroundStyle(sidebarIconColor)
+                            .opacity(1)
+                            .shadow(color: sidebarIconColor.opacity(0.24), radius: 1.2, x: 0, y: 1)
                             .padding(.horizontal, 10)
                             .frame(height: 34)
                             .background(Color.white.opacity(0.66), in: Capsule())
@@ -286,6 +314,8 @@ struct MapMarkerEntry: Identifiable, Equatable {
     let coordinate: CLLocationCoordinate2D
     let heType: HeType
     let isSelected: Bool
+    let isCluster: Bool
+    let clusterCount: Int
     let isMenuVisible: Bool
     let menuPlaceState: PlaceState?
 
@@ -294,6 +324,8 @@ struct MapMarkerEntry: Identifiable, Equatable {
         lhs.name == rhs.name &&
         lhs.heType == rhs.heType &&
         lhs.isSelected == rhs.isSelected &&
+        lhs.isCluster == rhs.isCluster &&
+        lhs.clusterCount == rhs.clusterCount &&
         lhs.isMenuVisible == rhs.isMenuVisible &&
         lhs.menuPlaceState == rhs.menuPlaceState &&
         lhs.coordinate.latitude == rhs.coordinate.latitude &&
@@ -307,13 +339,15 @@ private struct MapMarkerAnnotationView: View, Equatable {
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let markerActionStyle: MarkerActionStyle
+    let stamp: PlaceStampPresentation?
     let onFavoriteTap: () -> Void
     let onCheckedInTap: () -> Void
     let onTap: () -> Void
 
     static func == (lhs: MapMarkerAnnotationView, rhs: MapMarkerAnnotationView) -> Bool {
         lhs.entry == rhs.entry &&
-        lhs.themeSignature == rhs.themeSignature
+        lhs.themeSignature == rhs.themeSignature &&
+        lhs.stamp == rhs.stamp
     }
 
     var body: some View {
@@ -321,6 +355,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
             MarkerActionBubbleView(
                 isVisible: entry.isMenuVisible,
                 placeState: entry.menuPlaceState ?? PlaceState(),
+                stamp: stamp,
                 activeGradient: markerActionStyle.gradient,
                 activeGlowColor: markerActionStyle.glowColor,
                 onFavoriteTap: onFavoriteTap,
@@ -333,6 +368,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
                 placeName: entry.name,
                 heType: entry.heType,
                 isSelected: entry.isSelected,
+                clusterCount: entry.clusterCount,
                 activeGradient: activeGradient,
                 activeGlowColor: activeGlowColor,
                 onTap: onTap
@@ -352,4 +388,21 @@ private struct MarkerThemeSignature: Equatable {
 private struct MarkerActionStyle {
     let gradient: LinearGradient
     let glowColor: Color
+}
+
+private struct CurrentLocationMarkerView: View {
+    let pinColor: Color
+    let glowColor: Color
+
+    var body: some View {
+        Image("CurrentLocationPinIcon")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(width: 22, height: 22)
+            .foregroundStyle(pinColor)
+            .shadow(color: glowColor.opacity(0.54), radius: 8, x: 0, y: 0)
+        .frame(width: 40, height: 40)
+        .accessibilityHidden(true)
+    }
 }

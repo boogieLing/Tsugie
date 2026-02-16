@@ -161,6 +161,7 @@ struct SideDrawerLayerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
         }
         .padding(12)
         .frame(width: width)
@@ -356,6 +357,8 @@ struct SideDrawerLayerView: View {
     private func favoriteCard(_ place: HePlace) -> some View {
         let snapshot = viewModel.eventSnapshot(for: place)
         let range = L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
+        let placeState = viewModel.placeState(for: place.id)
+        let stamp = viewModel.stampPresentation(for: place)
 
         return Button {
             viewModel.openQuickFromDrawer(placeID: place.id)
@@ -376,12 +379,14 @@ struct SideDrawerLayerView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
                     Spacer()
-                    PlaceStateIconsView(
-                        placeState: viewModel.placeState(for: place.id),
-                        size: 16,
-                        activeGradient: viewModel.activePillGradient,
-                        activeGlowColor: viewModel.activeMapGlowColor
-                    )
+                    HStack(spacing: 6) {
+                        FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 17)
+                        StampIconView(
+                            stamp: stamp,
+                            isColorized: placeState.isCheckedIn,
+                            size: 18
+                        )
+                    }
                 }
                 if snapshot.status == .ongoing {
                     TsugieMiniProgressView(snapshot: snapshot)
@@ -395,6 +400,10 @@ struct SideDrawerLayerView: View {
                 borderColor: drawerItemBorderColor,
                 borderOpacity: 0
             )
+            .overlay(alignment: .bottomTrailing) {
+                PlaceStampBackgroundView(stamp: stamp, size: 82, isCompact: true)
+                    .offset(x: 8, y: 10)
+            }
         }
         .buttonStyle(.plain)
     }
@@ -405,6 +414,7 @@ struct SideDrawerLayerView: View {
             favoriteFilterPill(.planned, L10n.SideDrawer.filterPlanned)
             favoriteFilterPill(.checked, L10n.SideDrawer.filterChecked)
         }
+        .padding(.horizontal, 4)
     }
 
     private func homeCategoryFilterRail(sideWidth: CGFloat, topSafeInset: CGFloat) -> some View {
@@ -440,6 +450,7 @@ struct SideDrawerLayerView: View {
         let isActive = viewModel.mapCategoryFilter == filter
         return TsugieFilterPill(
             leadingText: title,
+            leadingIconName: TsugieSmallIcon.assetName(for: filter),
             trailingText: "\(viewModel.mapCategoryFilterCount(filter))",
             isActive: isActive,
             activeGradient: viewModel.activePillGradient,
@@ -448,6 +459,7 @@ struct SideDrawerLayerView: View {
             fixedHeight: 32,
             onTap: { viewModel.setMapCategoryFilter(filter) }
         )
+        .accessibilityLabel(title)
     }
 
     private var themePalette: some View {
@@ -491,7 +503,12 @@ struct SideDrawerLayerView: View {
         }
     }
 
-    private func sliderRow(title: String, value: Binding<Double>, range: ClosedRange<Double> = 0.7...1.5) -> some View {
+    private func sliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double> = 0.7...1.5,
+        valueText: ((Double) -> String)? = nil
+    ) -> some View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.system(size: 10, weight: .bold))
@@ -500,7 +517,7 @@ struct SideDrawerLayerView: View {
 
             ThemeAdjusterSlider(value: value, range: range)
 
-            Text("\(Int((value.wrappedValue * 100).rounded()))%")
+            Text(valueText?(value.wrappedValue) ?? "\(Int((value.wrappedValue * 100).rounded()))%")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(Color(red: 0.35, green: 0.47, blue: 0.52))
                 .frame(width: 42, alignment: .trailing)

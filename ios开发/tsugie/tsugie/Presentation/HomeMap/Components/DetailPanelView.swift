@@ -4,14 +4,13 @@ struct DetailPanelView: View {
     let place: HePlace
     let snapshot: EventStatusSnapshot
     let placeState: PlaceState
+    let stamp: PlaceStampPresentation?
     let distanceText: String
     let openHoursText: String
     let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onFocusTap: () -> Void
     let onClose: () -> Void
-
-    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +31,6 @@ struct DetailPanelView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
-            .gesture(dragGesture)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -42,12 +40,7 @@ struct DetailPanelView: View {
                             .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                             .lineLimit(2)
                         Spacer()
-                        PlaceStateIconsView(
-                            placeState: placeState,
-                            size: 19,
-                            activeGradient: activeGradient,
-                            activeGlowColor: activeGlowColor
-                        )
+                        FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 20)
                     }
 
                     HStack {
@@ -87,6 +80,9 @@ struct DetailPanelView: View {
                     .fill(Color(red: 0.72, green: 1.0, blue: 0.90, opacity: 0.3))
                     .frame(width: 360, height: 360)
                     .offset(x: -140, y: -220)
+                PlaceStampBackgroundView(stamp: stamp, size: 216)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .offset(x: 16, y: 20)
             }
         }
         .overlay(
@@ -94,7 +90,6 @@ struct DetailPanelView: View {
                 .stroke(Color(red: 0.86, green: 0.93, blue: 0.95, opacity: 0.9), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .offset(y: max(0, dragOffset))
     }
 
     private var detailProgressBlock: some View {
@@ -109,7 +104,12 @@ struct DetailPanelView: View {
                     .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
             }
 
-            TsugieStatusTrackView(snapshot: snapshot, variant: .detail, progress: progressValue)
+            TsugieStatusTrackView(
+                snapshot: snapshot,
+                variant: .detail,
+                progress: progressValue,
+                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
+            )
                 .padding(.top, 8)
 
             HStack {
@@ -247,20 +247,6 @@ struct DetailPanelView: View {
                         )
                 }
         }
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 2)
-            .onChanged { value in
-                dragOffset = min(max(value.translation.height, 0), 260)
-            }
-            .onEnded { _ in
-                let delta = dragOffset
-                dragOffset = 0
-                if delta >= 110 {
-                    onClose()
-                }
-            }
     }
 
     private var progressTitle: String {

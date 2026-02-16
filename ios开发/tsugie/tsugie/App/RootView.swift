@@ -21,6 +21,7 @@ struct RootView: View {
         ) {
             CalendarPageView(
                 places: viewModel.places,
+                detailPlaces: viewModel.calendarDetailPlaces,
                 placeStateProvider: { viewModel.placeState(for: $0) },
                 onClose: {
                     viewModel.setCalendarPresented(false)

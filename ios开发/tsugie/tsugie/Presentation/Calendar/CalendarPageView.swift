@@ -3,7 +3,7 @@ import SwiftUI
 private struct CalendarCategoryMeta: Identifiable {
     let id: String
     let label: String
-    let logo: String
+    let iconName: String
 }
 
 private struct CalendarScoredItem: Identifiable {
@@ -54,7 +54,8 @@ private struct DayDrawerFilterRail: View {
                 let isActive = selectedID == id
 
                 TsugieFilterPill(
-                    leadingText: category.logo,
+                    leadingText: category.label,
+                    leadingIconName: category.iconName,
                     trailingText: "\(count)",
                     isActive: isActive,
                     activeGradient: activeGradient,
@@ -71,6 +72,7 @@ private struct DayDrawerFilterRail: View {
 
 struct TsugieFilterPill: View {
     let leadingText: String
+    var leadingIconName: String? = nil
     let trailingText: String
     let isActive: Bool
     let activeGradient: LinearGradient
@@ -79,7 +81,6 @@ struct TsugieFilterPill: View {
     var fixedHeight: CGFloat = 34
     let onTap: () -> Void
 
-    @State private var shimmerTravel = false
     @State private var pillScale: CGFloat = 1.0
     @State private var bounceNonce: Int = 0
 
@@ -89,79 +90,80 @@ struct TsugieFilterPill: View {
             onTap()
         } label: {
             HStack(spacing: 6) {
-                Text(leadingText)
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(isActive ? .white : Color(red: 0.27, green: 0.42, blue: 0.49))
+                if let leadingIconName {
+                    if leadingIconName == TsugieSmallIcon.hanabiAsset {
+                        Image(leadingIconName)
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .foregroundStyle(hanabiIconGradient)
+                    } else {
+                        Image(leadingIconName)
+                            .resizable()
+                            .renderingMode(.original)
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .scaleEffect(1.5)
+                            .saturation(1.25)
+                            .contrast(1.06)
+                    }
+                } else {
+                    Text(leadingText)
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(Color(red: 0.27, green: 0.42, blue: 0.49))
+                }
 
                 Text(trailingText)
                     .font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(isActive ? .white : Color(red: 0.30, green: 0.44, blue: 0.50))
+                    .foregroundStyle(Color(red: 0.30, green: 0.44, blue: 0.50))
             }
             .padding(.horizontal, fixedWidth == nil ? 10 : 0)
             .frame(width: fixedWidth, height: fixedHeight)
             .frame(height: fixedHeight)
-            .background(
-                isActive
-                ? AnyShapeStyle(activeGradient)
-                : AnyShapeStyle(Color.white)
-            , in: Capsule())
-            .overlay {
-                if isActive {
-                    GeometryReader { proxy in
-                        LinearGradient(
-                            colors: [
-                                .clear,
-                                Color.white.opacity(0.30),
-                                .clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(width: proxy.size.width * 0.78, height: proxy.size.height * 2.2)
-                        .rotationEffect(.degrees(22))
-                        .blur(radius: 4.2)
-                        .offset(x: shimmerTravel ? proxy.size.width * 1.12 : -proxy.size.width * 1.12)
-                    }
-                    .clipShape(Capsule())
-                    .allowsHitTesting(false)
-                }
-            }
+            .background(Color.white, in: Capsule())
             .overlay(
                 Capsule()
                     .stroke(
-                        isActive
-                        ? .clear
-                        : Color(red: 0.82, green: 0.90, blue: 0.94, opacity: 0.90),
+                        Color(red: 0.82, green: 0.90, blue: 0.94, opacity: 0.90),
                         lineWidth: 1
                     )
             )
             .shadow(
-                color: isActive ? activeGlowColor.opacity(0.24) : Color(red: 0.12, green: 0.30, blue: 0.38, opacity: 0.09),
-                radius: isActive ? 7 : 4,
+                color: Color(red: 0.12, green: 0.30, blue: 0.38, opacity: 0.09),
+                radius: 4,
                 x: 0,
-                y: isActive ? 3 : 2
+                y: 2
             )
             .scaleEffect(pillScale)
         }
         .buttonStyle(.plain)
-        .onAppear {
-            shimmerTravel = isActive
-        }
-        .onChange(of: isActive) { _, newValue in
-            guard newValue else {
-                shimmerTravel = false
-                return
-            }
-            shimmerTravel = false
-            DispatchQueue.main.async {
-                shimmerTravel = true
-            }
-        }
-        .animation(
-            isActive
-            ? .linear(duration: 1.80).repeatForever(autoreverses: false)
-            : .default,
-            value: shimmerTravel
+        .tsugieActiveGlow(
+            isActive: isActive,
+            glowGradient: activeGradient,
+            glowColor: activeGlowColor,
+            cornerRadius: fixedHeight * 0.5,
+            blurRadius: 12,
+            glowOpacity: 0.68,
+            scale: 1.04,
+            primaryOpacity: 0.54,
+            primaryRadius: 14,
+            primaryYOffset: 4,
+            secondaryOpacity: 0.34,
+            secondaryRadius: 22,
+            secondaryYOffset: 7
+        )
+        .opacity(isActive ? 1.0 : 0.56)
+    }
+
+    private var hanabiIconGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 250.0 / 255.0, green: 112.0 / 255.0, blue: 154.0 / 255.0),
+                Color(red: 254.0 / 255.0, green: 225.0 / 255.0, blue: 64.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
     }
 
@@ -191,6 +193,7 @@ struct TsugieFilterPill: View {
 
 struct CalendarPageView: View {
     let places: [HePlace]
+    let detailPlaces: [HePlace]
     let placeStateProvider: (UUID) -> PlaceState
     let onClose: () -> Void
     let onSelectPlace: (UUID) -> Void
@@ -209,11 +212,11 @@ struct CalendarPageView: View {
 
     private var categories: [CalendarCategoryMeta] {
         [
-            .init(id: "all", label: L10n.Calendar.categoryAll, logo: "◎"),
-            .init(id: "hanabi", label: L10n.Calendar.categoryHanabi, logo: "花"),
-            .init(id: "matsuri", label: L10n.Calendar.categoryMatsuri, logo: "祭"),
-            .init(id: "nature", label: L10n.Calendar.categoryNature, logo: "景"),
-            .init(id: "other", label: L10n.Calendar.categoryOther, logo: "他")
+            .init(id: "all", label: L10n.Calendar.categoryAll, iconName: TsugieSmallIcon.assetName(for: "all")),
+            .init(id: "hanabi", label: L10n.Calendar.categoryHanabi, iconName: TsugieSmallIcon.assetName(for: "hanabi")),
+            .init(id: "matsuri", label: L10n.Calendar.categoryMatsuri, iconName: TsugieSmallIcon.assetName(for: "matsuri")),
+            .init(id: "nature", label: L10n.Calendar.categoryNature, iconName: TsugieSmallIcon.assetName(for: "nature")),
+            .init(id: "other", label: L10n.Calendar.categoryOther, iconName: TsugieSmallIcon.assetName(for: "other"))
         ]
     }
     var body: some View {
@@ -247,6 +250,9 @@ struct CalendarPageView: View {
                 refreshCalendarCacheIfNeeded(force: true)
             }
             .onChange(of: places.count) { _, _ in
+                refreshCalendarCacheIfNeeded(force: false)
+            }
+            .onChange(of: detailPlaces.count) { _, _ in
                 refreshCalendarCacheIfNeeded(force: false)
             }
             .onChange(of: selectedDayKey) { _, newDayKey in
@@ -361,33 +367,63 @@ struct CalendarPageView: View {
             selectedDayKey = dayKey
             dayFilterID = "all"
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(day)")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(dayColor)
+            ZStack(alignment: .bottomTrailing) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(day)")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(dayColor)
 
-                if let bucket {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(categories.filter { $0.id != "all" }, id: \.id) { category in
-                            if let count = bucket.counts[category.id], count > 0 {
-                                HStack(spacing: 4) {
-                                    Text(category.logo)
-                                        .font(.system(size: 9, weight: .heavy))
-                                        .frame(width: 14, height: 14)
-                                        .background(Color.white.opacity(0.88), in: Circle())
-                                        .overlay(Circle().stroke(Color(red: 0.81, green: 0.90, blue: 0.93, opacity: 0.86), lineWidth: 1))
-                                        .foregroundStyle(Color(red: 0.31, green: 0.44, blue: 0.50))
-                                    Text("\(count)")
-                                        .font(.system(size: 10, weight: .heavy))
-                                        .foregroundStyle(Color(red: 0.35, green: 0.47, blue: 0.53))
+                    if let bucket {
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(categories.filter { $0.id != "all" }, id: \.id) { category in
+                                if let count = bucket.counts[category.id], count > 0 {
+                                    HStack(spacing: 2) {
+                                        if category.id == "hanabi" {
+                                            Image(TsugieSmallIcon.assetName(for: category.id))
+                                                .resizable()
+                                                .renderingMode(.template)
+                                                .scaledToFit()
+                                                .frame(width: 14, height: 14)
+                                                .foregroundStyle(hanabiCategoryGradient)
+                                        } else {
+                                            Image(TsugieSmallIcon.assetName(for: category.id))
+                                                .resizable()
+                                                .renderingMode(.original)
+                                                .scaledToFit()
+                                                .frame(width: 14, height: 14)
+                                                .saturation(1.25)
+                                                .contrast(1.06)
+                                        }
+                                        Text("\(count)")
+                                            .font(.system(size: 10, weight: .heavy))
+                                            .foregroundStyle(Color(red: 0.35, green: 0.47, blue: 0.53))
+                                            .lineLimit(1)
+                                            .fixedSize(horizontal: true, vertical: false)
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                if isToday {
+                    Image("HomeSidebarIcon")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                        .foregroundStyle(activeGlowColor.opacity(0.92))
+                        .opacity(0.76)
+                        .padding(.trailing, 4)
+                        .padding(.bottom, 4)
+                        .allowsHitTesting(false)
+                }
             }
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
-            .padding(4)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+            .padding(.top, 6)
+            .padding(.leading, 7)
+            .padding(.trailing, 7)
+            .padding(.bottom, 6)
             .background(cellBackground(isToday: isToday, hasEvents: hasEvents), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -529,12 +565,22 @@ struct CalendarPageView: View {
         } label: {
             VStack(spacing: 7) {
                 HStack(alignment: .center, spacing: 9) {
-                    Text(category.logo)
-                        .font(.system(size: 11, weight: .heavy))
-                        .frame(width: 21, height: 21)
-                        .background(Color.white.opacity(0.9), in: Circle())
-                        .overlay(Circle().stroke(Color(red: 0.81, green: 0.90, blue: 0.93, opacity: 0.90), lineWidth: 1))
-                        .foregroundStyle(Color(red: 0.26, green: 0.44, blue: 0.51))
+                    if category.id == "hanabi" {
+                        Image(category.iconName)
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .foregroundStyle(hanabiCategoryGradient)
+                    } else {
+                        Image(category.iconName)
+                            .resizable()
+                            .renderingMode(.original)
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .saturation(1.25)
+                            .contrast(1.06)
+                    }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.place.name)
@@ -571,6 +617,17 @@ struct CalendarPageView: View {
             .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    private var hanabiCategoryGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 250.0 / 255.0, green: 112.0 / 255.0, blue: 154.0 / 255.0),
+                Color(red: 254.0 / 255.0, green: 225.0 / 255.0, blue: 64.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private var selectedBucket: CalendarBucket? {
@@ -661,7 +718,7 @@ struct CalendarPageView: View {
     }
 
     private func buildDetailItems(for dayKey: String) -> [CalendarScoredItem] {
-        let items = places.compactMap { place -> CalendarScoredItem? in
+        let items = detailPlaces.compactMap { place -> CalendarScoredItem? in
             guard let start = place.startAt else {
                 return nil
             }
@@ -754,10 +811,11 @@ struct CalendarPageView: View {
     }
 
     private func makePlacesSignature() -> String {
-        guard let first = places.first, let last = places.last else {
-            return "0"
-        }
-        return "\(places.count)|\(first.id.uuidString)|\(last.id.uuidString)"
+        let placesFirst = places.first?.id.uuidString ?? "nil"
+        let placesLast = places.last?.id.uuidString ?? "nil"
+        let detailFirst = detailPlaces.first?.id.uuidString ?? "nil"
+        let detailLast = detailPlaces.last?.id.uuidString ?? "nil"
+        return "\(places.count)|\(placesFirst)|\(placesLast)|\(detailPlaces.count)|\(detailFirst)|\(detailLast)"
     }
 
     private func categoryID(for place: HePlace) -> String {
@@ -859,6 +917,17 @@ struct CalendarPageView: View {
                 .blur(radius: 108)
                 .opacity(0.18)
                 .offset(x: -150, y: 140)
+
+            Image("HomeCalendarIcon")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: 168, height: 168)
+                .opacity(0.22)
+                .blendMode(.multiply)
+                .padding(.trailing, 18)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
     }
 

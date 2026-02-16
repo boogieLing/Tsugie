@@ -50,13 +50,33 @@ final class EventStatusResolverTests: XCTestCase {
         XCTAssertNil(progress)
     }
 
-    private func fixedDate(hour: Int, minute: Int = 0) -> Date {
+    func testResolveMultiDayUsesDailyWindowOutsideHoursAsUpcoming() {
+        let start = fixedDate(day: 10, hour: 9)
+        let end = fixedDate(day: 12, hour: 21)
+        let now = fixedDate(day: 11, hour: 6)
+
+        let snapshot = EventStatusResolver.snapshot(startAt: start, endAt: end, now: now)
+
+        XCTAssertEqual(snapshot.status, .upcoming)
+    }
+
+    func testResolveMultiDayUsesDailyWindowAfterFinalCloseAsEnded() {
+        let start = fixedDate(day: 10, hour: 9)
+        let end = fixedDate(day: 12, hour: 21)
+        let now = fixedDate(day: 12, hour: 22)
+
+        let snapshot = EventStatusResolver.snapshot(startAt: start, endAt: end, now: now)
+
+        XCTAssertEqual(snapshot.status, .ended)
+    }
+
+    private func fixedDate(day: Int = 15, hour: Int, minute: Int = 0) -> Date {
         var components = DateComponents()
         components.calendar = Calendar(identifier: .gregorian)
         components.timeZone = TimeZone(secondsFromGMT: 0)
         components.year = 2026
         components.month = 2
-        components.day = 15
+        components.day = day
         components.hour = hour
         components.minute = minute
         return components.date!
