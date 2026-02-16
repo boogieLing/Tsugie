@@ -243,7 +243,7 @@ enum EncodedHePlaceRepository {
         var places = items.compactMap { mapToHePlace($0, center: center) }
         places.sort(by: isCloserAndHigherPriority)
         let precisePlaces = places.filter { !$0.isApproximateCoordinate }
-        let approximatePlaces = places.filter(\.isApproximateCoordinate)
+        let approximatePlaces = places.filter { $0.isApproximateCoordinate }
         let preciseInRange = precisePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
         let approximateInRange = approximatePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
         debugLog(

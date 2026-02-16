@@ -114,6 +114,11 @@ final class HomeMapViewModel: ObservableObject {
     private let idleViewportTrimDelayNanoseconds: UInt64 = 1_200_000_000
     private let minMoveForIdleRecycleKm: Double = 1.2
     private let minZoomRatioForIdleRecycle: Double = 1.22
+    private let minCameraMoveForViewportReloadKm: Double = 0.12
+    private let minCameraZoomRatioForViewportReload: Double = 1.05
+    private let programmaticCameraSuppressionWindow: TimeInterval = 1.2
+    private let programmaticCameraCenterToleranceKm: Double = 0.9
+    private let programmaticCameraSpanTolerance: CLLocationDegrees = 0.0035
     private let minimumViewportRadiusKm: Double
     private let nearbyLimit: Int
     private let mapBufferScale: Double = 1.8
@@ -158,6 +163,9 @@ final class HomeMapViewModel: ObservableObject {
     private var hasAutoOpened = false
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
+    private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
+    private var pendingProgrammaticCameraSource: String?
+    private var pendingProgrammaticCameraExpiresAt: Date = .distantPast
     private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
     private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
 
@@ -438,9 +446,13 @@ final class HomeMapViewModel: ObservableObject {
             _detailPlaceID = nil
             _quickCardPlaceID = showPanel ? placeID : nil
             _forcedExpandedPlaceID = shouldForceExpandedMarker ? placeID : nil
-            if let focusedRegion {
-                mapCameraPosition = .region(
-                    focusedRegion
+            if let focusedRegion,
+               let normalizedFocusedRegion = normalizedRegion(focusedRegion) {
+                mapCameraPosition = .region(normalizedFocusedRegion)
+                lastKnownMapRegion = normalizedFocusedRegion
+                registerProgrammaticCameraChangeTarget(
+                    normalizedFocusedRegion,
+                    source: "openQuickCardFocus"
                 )
             }
         }
@@ -937,12 +949,42 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
-    func nearbyPlaces(limit: Int = 10) -> [HePlace] {
-        Array(mapPlaces().sorted(by: isCloserAndEarlier).prefix(limit))
+    func nearbyPlaces(now: Date = Date(), limit: Int = 10) -> [HePlace] {
+        // Coarse stage: expired events are excluded from nearby recommendation.
+        let coarseCandidates = mapPlaces().filter { place in
+            eventStatus(for: place, now: now) != .ended
+        }
+        let ranked = coarseCandidates.map { place in
+            nearbyRecommendationSignal(for: place, now: now)
+        }
+        let sorted = ranked.sorted { lhs, rhs in
+            if lhs.score != rhs.score {
+                return lhs.score > rhs.score
+            }
+            if lhs.place.heType != rhs.place.heType {
+                if lhs.place.heType == .hanabi { return true }
+                if rhs.place.heType == .hanabi { return false }
+            }
+            if lhs.stage != rhs.stage {
+                return lhs.stage < rhs.stage
+            }
+            if lhs.stageDelta != rhs.stageDelta {
+                return lhs.stageDelta < rhs.stageDelta
+            }
+            if lhs.place.distanceMeters != rhs.place.distanceMeters {
+                return lhs.place.distanceMeters < rhs.place.distanceMeters
+            }
+            if lhs.place.scaleScore != rhs.place.scaleScore {
+                return lhs.place.scaleScore > rhs.place.scaleScore
+            }
+            return lhs.place.name.localizedStandardCompare(rhs.place.name) == .orderedAscending
+        }
+
+        return Array(sorted.prefix(limit).map(\.place))
     }
 
     func nearbyCarouselItems(now: Date, limit: Int = 10) -> [NearbyCarouselItemModel] {
-        nearbyPlaces(limit: limit).map { place in
+        nearbyPlaces(now: now, limit: limit).map { place in
             NearbyCarouselItemModel(
                 id: place.id,
                 name: place.name,
@@ -1118,6 +1160,94 @@ final class HomeMapViewModel: ObservableObject {
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
 
+    private func nearbyRecommendationSignal(for place: HePlace, now: Date) -> (place: HePlace, score: Double, stage: Int, stageDelta: TimeInterval) {
+        let snapshot = eventSnapshot(for: place, now: now)
+        let distanceKm = max(place.distanceMeters, 0) / 1_000
+        let spaceScore = Foundation.exp(-distanceKm / 5)
+        let timeScore = nearbyTimeScore(snapshot: snapshot, now: now)
+        let heatScore = min(max(Double(place.heatScore) / 100, 0), 1)
+        let scaleBoost = min(max(Double(place.scaleScore) / 100, 0), 1)
+
+        let categoryWeight: Double
+        switch place.heType {
+        case .hanabi:
+            categoryWeight = 1.35
+        case .matsuri:
+            categoryWeight = 1.0
+        case .nature:
+            categoryWeight = 0.9
+        case .other:
+            categoryWeight = 1.0
+        }
+
+        let geoConfidencePenalty: Double = place.geoSource == "missing" || place.geoSource == "pref_center_fallback" ? 0.85 : 1.0
+        let score = (
+            0.40 * spaceScore +
+            0.35 * timeScore +
+            0.15 * heatScore +
+            0.10 * scaleBoost
+        ) * categoryWeight * geoConfidencePenalty
+
+        return (
+            place: place,
+            score: score,
+            stage: nearbyStage(snapshot: snapshot),
+            stageDelta: nearbyStageDelta(snapshot: snapshot, now: now)
+        )
+    }
+
+    private func nearbyTimeScore(snapshot: EventStatusSnapshot, now: Date) -> Double {
+        switch snapshot.status {
+        case .ongoing:
+            return 1.0
+        case .upcoming:
+            guard let startDate = snapshot.startDate else {
+                return 0.08
+            }
+            let deltaHours = max(startDate.timeIntervalSince(now), 0) / 3_600
+            if deltaHours < 3 {
+                return 0.8
+            }
+            if deltaHours < 12 {
+                return 0.6
+            }
+            if deltaHours < 24 {
+                return 0.3
+            }
+            return 0.1
+        case .ended:
+            return 0.05
+        case .unknown:
+            return 0.08
+        }
+    }
+
+    private func nearbyStage(snapshot: EventStatusSnapshot) -> Int {
+        switch snapshot.status {
+        case .ongoing:
+            return 0
+        case .upcoming:
+            return 1
+        case .ended:
+            return 2
+        case .unknown:
+            return 3
+        }
+    }
+
+    private func nearbyStageDelta(snapshot: EventStatusSnapshot, now: Date) -> TimeInterval {
+        switch snapshot.status {
+        case .ongoing:
+            return max((snapshot.endDate ?? now).timeIntervalSince(now), 0)
+        case .upcoming:
+            return max((snapshot.startDate ?? snapshot.endDate ?? now).timeIntervalSince(now), 0)
+        case .ended:
+            return max(now.timeIntervalSince(snapshot.endDate ?? snapshot.startDate ?? now), 0)
+        case .unknown:
+            return .greatestFiniteMagnitude
+        }
+    }
+
     private func bootstrapNearbyPlacesIfNeeded() {
         if shouldBootstrapFromBundled {
             reloadNearbyPlacesAroundCurrentLocation(userInitiated: false)
@@ -1248,7 +1378,16 @@ final class HomeMapViewModel: ObservableObject {
         guard let normalizedRegion = normalizedRegion(region) else {
             return
         }
+        let previousRegion = lastKnownMapRegion
         lastKnownMapRegion = normalizedRegion
+
+        if shouldSuppressCameraMoveSideEffects(for: normalizedRegion) {
+            return
+        }
+        guard shouldTriggerViewportReload(from: previousRegion, to: normalizedRegion) else {
+            return
+        }
+
         cameraMoveCountSinceHardRecycle += 1
 
         let movedSinceRecycle = distanceKm(
@@ -1271,6 +1410,66 @@ final class HomeMapViewModel: ObservableObject {
         cameraChangeRevision &+= 1
         scheduleIdleRecycleIfNeeded(revision: cameraChangeRevision)
         scheduleViewportReload(for: normalizedRegion, reason: "cameraMove", debounceNanoseconds: 220_000_000)
+    }
+
+    private func shouldTriggerViewportReload(
+        from previousRegion: MKCoordinateRegion?,
+        to currentRegion: MKCoordinateRegion
+    ) -> Bool {
+        guard let previousRegion else {
+            return true
+        }
+        let movedKm = distanceKm(from: previousRegion.center, to: currentRegion.center)
+        if movedKm >= minCameraMoveForViewportReloadKm {
+            return true
+        }
+        let zoomRatio = zoomScaleRatio(from: previousRegion.span, to: currentRegion.span)
+        return zoomRatio >= minCameraZoomRatioForViewportReload
+    }
+
+    private func registerProgrammaticCameraChangeTarget(
+        _ region: MKCoordinateRegion,
+        source: String,
+        suppressionWindow: TimeInterval? = nil
+    ) {
+        pendingProgrammaticCameraTargetRegion = region
+        pendingProgrammaticCameraSource = source
+        pendingProgrammaticCameraExpiresAt = Date().addingTimeInterval(
+            suppressionWindow ?? programmaticCameraSuppressionWindow
+        )
+    }
+
+    private func clearProgrammaticCameraChangeTarget() {
+        pendingProgrammaticCameraTargetRegion = nil
+        pendingProgrammaticCameraSource = nil
+        pendingProgrammaticCameraExpiresAt = .distantPast
+    }
+
+    private func shouldSuppressCameraMoveSideEffects(for region: MKCoordinateRegion) -> Bool {
+        let now = Date()
+        guard now <= pendingProgrammaticCameraExpiresAt,
+              let target = pendingProgrammaticCameraTargetRegion else {
+            if now > pendingProgrammaticCameraExpiresAt {
+                clearProgrammaticCameraChangeTarget()
+            }
+            return false
+        }
+
+        let centerDistanceKm = distanceKm(from: target.center, to: region.center)
+        let latSpanDiff = abs(target.span.latitudeDelta - region.span.latitudeDelta)
+        let lngSpanDiff = abs(target.span.longitudeDelta - region.span.longitudeDelta)
+        guard centerDistanceKm <= programmaticCameraCenterToleranceKm,
+              latSpanDiff <= programmaticCameraSpanTolerance,
+              lngSpanDiff <= programmaticCameraSpanTolerance else {
+            return false
+        }
+
+        let source = pendingProgrammaticCameraSource ?? "programmatic"
+        debugLog(
+            "skipViewportReload reason=programmaticCameraChange source=\(source) centerDistanceKm=\(centerDistanceKm)"
+        )
+        clearProgrammaticCameraChangeTarget()
+        return true
     }
 
     private func maybeHardRecycleMapForCameraMove(region: MKCoordinateRegion) {
@@ -1965,8 +2164,10 @@ final class HomeMapViewModel: ObservableObject {
         maybeRebuildMapViewIfNeeded(nextPosition: position)
         objectWillChange.send()
         mapCameraPosition = position
-        if let region = position.region {
-            lastKnownMapRegion = region
+        if let region = position.region,
+           let normalizedTargetRegion = normalizedRegion(region) {
+            lastKnownMapRegion = normalizedTargetRegion
+            registerProgrammaticCameraChangeTarget(normalizedTargetRegion, source: "setProgrammaticMapPosition")
         }
     }
 
@@ -1989,6 +2190,11 @@ final class HomeMapViewModel: ObservableObject {
         if let pinnedRegion = normalizedRegion(pinnedRegion ?? mapCameraPosition.region ?? lastKnownMapRegion) {
             mapCameraPosition = .region(pinnedRegion)
             lastKnownMapRegion = pinnedRegion
+            registerProgrammaticCameraChangeTarget(
+                pinnedRegion,
+                source: "forceMapViewRebuild",
+                suppressionWindow: 1.6
+            )
             lastMapRecycleCenter = pinnedRegion.center
             lastMapRecycleSpan = pinnedRegion.span
             lastHardRecycleCenter = pinnedRegion.center

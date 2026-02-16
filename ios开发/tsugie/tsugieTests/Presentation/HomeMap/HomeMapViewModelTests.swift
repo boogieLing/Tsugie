@@ -62,23 +62,100 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mapCategoryFilterCount(.matsuri), 2)
     }
 
-    private func makePlace(name: String, heType: HeType) -> HePlace {
+    func testNearbyCarouselUsesScoredRecommendationOrder() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let ongoing = makePlace(
+            name: "ongoing",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(-30 * 60),
+            endAt: now.addingTimeInterval(90 * 60),
+            distanceMeters: 2_200,
+            scaleScore: 86,
+            heatScore: 88
+        )
+        let upcomingSoon = makePlace(
+            name: "upcoming",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(60 * 60),
+            endAt: now.addingTimeInterval(3 * 60 * 60),
+            distanceMeters: 400,
+            scaleScore: 60,
+            heatScore: 60
+        )
+        let endedClose = makePlace(
+            name: "ended",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(-4 * 60 * 60),
+            endAt: now.addingTimeInterval(-60 * 60),
+            distanceMeters: 120,
+            scaleScore: 94,
+            heatScore: 96
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [endedClose, upcomingSoon, ongoing],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        let ordered = viewModel.nearbyCarouselItems(now: now, limit: 3).map(\.name)
+
+        XCTAssertEqual(ordered, ["ongoing", "upcoming"])
+    }
+
+    func testNearbyCarouselPrioritizesHanabi() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let hanabi = makePlace(
+            name: "hanabi-priority",
+            heType: .hanabi,
+            startAt: now.addingTimeInterval(90 * 60),
+            endAt: now.addingTimeInterval(3 * 60 * 60),
+            distanceMeters: 1_500,
+            scaleScore: 75,
+            heatScore: 70
+        )
+        let matsuri = makePlace(
+            name: "matsuri-closer",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(60 * 60),
+            endAt: now.addingTimeInterval(3 * 60 * 60),
+            distanceMeters: 300,
+            scaleScore: 90,
+            heatScore: 90
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [matsuri, hanabi],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        let ordered = viewModel.nearbyCarouselItems(now: now, limit: 2).map(\.name)
+
+        XCTAssertEqual(ordered.first, "hanabi-priority")
+    }
+
+    private func makePlace(
+        name: String,
+        heType: HeType,
+        startAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        endAt: Date = Date(timeIntervalSince1970: 1_700_003_600),
+        distanceMeters: Double = 500,
+        scaleScore: Int = 80,
+        heatScore: Int = 60
+    ) -> HePlace {
         HePlace(
             id: UUID(),
             name: name,
             heType: heType,
             coordinate: CLLocationCoordinate2D(latitude: 35.7, longitude: 139.8),
-            startAt: Date(timeIntervalSince1970: 1_700_000_000),
-            endAt: Date(timeIntervalSince1970: 1_700_003_600),
-            distanceMeters: 500,
-            scaleScore: 80,
+            startAt: startAt,
+            endAt: endAt,
+            distanceMeters: distanceMeters,
+            scaleScore: scaleScore,
             hint: "hint",
             openHours: nil,
             mapSpot: "map",
             detailDescription: "desc",
             imageTag: "tag",
             imageHint: "image",
-            heatScore: 60,
+            heatScore: heatScore,
             surpriseScore: 50
         )
     }

@@ -209,11 +209,18 @@
 - 推荐优先：今日优先 -> 距离优先 -> 规模优先。
 - 系统默认输出一个“最速攻略へ”。
 - 日历某日列表排序：保持与推荐顺序一致（距离优先 + 开始优先，热度兜底）。
+- 数据字段与算法对齐基线：以 `需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md` 为准（2026-02-16）。
+- 在当前 iOS 数据包覆盖率下，`expected_visitors` 与 `launch_scale` 仅作为补充信息，不作为主排序强依赖。
+- 若切换到评分公式模式，默认采用 V1.1：`FinalScore = (0.40 * SpaceScore + 0.35 * TimeScore + 0.15 * HeatScore + 0.10 * ScaleBoost) * CategoryWeight`（详见上方修订文档）。
+- nearby 轮播推荐粗排阶段必须先过滤 `ended` 活动（仅保留 `upcoming/ongoing/unknown`）。
+- nearby 轮播在当前阶段默认优先花火大会：同条件下 `hanabi` 高于 `matsuri`。
 
 ### 7.4 nearby 逻辑
 
 - 不仅看当前视口：优先“扩展范围内但当前屏外”的地点。
 - 意义：地图放大时仍提示稍远可去地点。
+- 触发时机：仅在“用户地图拖动/缩放结束”后触发 nearby 重排，不在移动过程连续重排。
+- 触发排除：marker 点击、quickCard 聚焦、定位重置等程序化相机变化不触发 nearby 重排。
 
 ### 7.5 地图与定位逻辑
 
@@ -329,4 +336,3 @@
 - `设计/文档/node-0-1-色彩管理调节与顶栏定位归档-v8.md`
 - `设计/文档/figma-语义命名与へ抽象规范-v1.md`
 - `记录/项目变更记录.md`
-

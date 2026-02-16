@@ -245,3 +245,17 @@
   - 默认统一入口：`bash 数据端/scripts/update_ios_payload.sh --pretty`（脚本内已内置门禁，失败即阻断导出）。
 - 交付约束：
   - 该流程属于数据质量基线，不得依赖 iOS 端渲染过滤兜底替代。
+
+## 15. 推荐算法数据对齐基线（新增）
+
+- 推荐算法文档基线新增：`需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md`（2026-02-16）。
+- iOS 推荐逻辑在“数据字段定义、时间解析回退、过滤规则、评分权重”四部分，默认以该文档为准。
+- 在数据覆盖率未达标前，`expected_visitors` 与 `launch_scale` 不得作为主排序强依赖；优先使用 `distance/时间状态/scale_score/heat_score`。
+- nearby 轮播推荐粗排阶段必须过滤 `ended` 活动，不允许过期活动进入轮播候选池。
+- nearby 轮播推荐当前阶段默认优先 `hanabi`（花火大会），并通过类别权重与同分排序共同保证优先级。
+- nearby 重排触发策略固定为：仅用户手势移动结束后触发；地图移动过程中不得连续触发推荐重排。
+- marker 点击/quickCard 聚焦/定位重置等程序化相机变化，不得触发 nearby 重排。
+- 若推荐逻辑规则发生变化（字段、权重、过滤、排序优先级），必须在同一次工作中同步更新：
+  - `需求/tsugie-ios-dev-handoff-v1.md`
+  - `记录/项目变更记录.md`
+  - `AGENTS.md`
