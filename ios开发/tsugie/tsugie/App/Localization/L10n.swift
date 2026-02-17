@@ -245,6 +245,8 @@ enum L10n {
         static var categoryAll: String { text("calendar.category.all") }
         static var categoryHanabi: String { text("calendar.category.hanabi") }
         static var categoryMatsuri: String { text("calendar.category.matsuri") }
+        static var categorySakura: String { text("calendar.category.sakura") }
+        static var categoryMomiji: String { text("calendar.category.momiji") }
         static var categoryNature: String { text("calendar.category.nature") }
         static var categoryOther: String { text("calendar.category.other") }
 

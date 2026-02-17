@@ -23,7 +23,7 @@
 "home.menu.open_a11y" = "打开菜单";
 "home.quick.date_today_soon" = "今日開催！まもなく！";
 
-"quickcard.fast_plan" = "⚡ 最速攻略";
+"quickcard.fast_plan" = "✨ 最速攻略";
 "quickcard.close_a11y" = "关闭快速卡片";
 "quickcard.view_details" = "查看详情";
 "quickcard.start_route" = "开始导航";
@@ -61,9 +61,9 @@
 "detail.end_at" = "终了 %@";
 
 "drawer.title" = "Tsugie 导航";
-"drawer.menu.favorites" = "行きたい栞";
-"drawer.menu.notifications" = "知らせの灯";
-"drawer.menu.contact" = "ことづて";
+"drawer.menu.favorites" = "想去收藏";
+"drawer.menu.notifications" = "通知";
+"drawer.menu.contact" = "联系我们";
 "drawer.favorites.subtitle" = "想去的余韵和已走过的足迹都在这里。";
 "drawer.favorites.empty" = "收藏夹还是空白。";
 "drawer.favorites.open" = "打开收藏抽屉";
@@ -100,6 +100,8 @@
 "calendar.category.all" = "全部";
 "calendar.category.hanabi" = "花火";
 "calendar.category.matsuri" = "祭典";
+"calendar.category.sakura" = "樱花";
+"calendar.category.momiji" = "红叶";
 "calendar.category.nature" = "景观";
 "calendar.category.other" = "其他";
 

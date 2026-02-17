@@ -19,18 +19,18 @@ struct MarkerBubbleView: View {
         Button(action: onTap) {
             ZStack {
                 Circle()
-                    .fill(activeGlowColor.opacity(isSelected ? 0.34 : 0))
-                    .frame(width: 56, height: 56)
-                    .blur(radius: isSelected ? 12 : 0)
+                    .fill(activeGlowColor.opacity(0))
+                    .frame(width: 48, height: 48)
+                    .blur(radius: 0)
 
                 Circle()
-                    .fill(palette.markerHalo.opacity(isSelected ? 0.34 : 0.14))
-                    .frame(width: 40, height: 40)
+                    .fill(palette.markerHalo.opacity(0.14))
+                    .frame(width: 32, height: 32)
 
                 Text("へ")
-                    .font(.system(size: 19, weight: .heavy, design: .rounded))
+                    .font(.system(size: 17, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 26, height: 26)
                     .background(
                         markerGradient,
                             in: Circle()
@@ -42,14 +42,14 @@ struct MarkerBubbleView: View {
                             red: 0.08,
                             green: 0.28,
                             blue: 0.34,
-                            opacity: isSelected ? 0.28 : 0.20
+                            opacity: isSelected ? 0 : 0.20
                         ),
-                        radius: isSelected ? 7 : 4,
+                        radius: isSelected ? 0 : 4,
                         x: 0,
                         y: 3
                     )
                     .tsugieActiveGlow(
-                        isActive: isSelected,
+                        isActive: false,
                         glowGradient: activeGradient,
                         glowColor: activeGlowColor,
                         cornerRadius: 12,
@@ -64,39 +64,16 @@ struct MarkerBubbleView: View {
                         secondaryYOffset: 6
                     )
             }
-            .frame(width: 36, height: 36)
-            .overlay(alignment: .trailing) {
-                placeNamePill
-                    .offset(x: -38)
-                    .offset(x: isSelected ? 0 : 26)
-                    .scaleEffect(x: isSelected ? 1 : 0.82, y: 1, anchor: .trailing)
-                    .opacity(isSelected ? 1 : 0)
-                    .transaction { transaction in
-                        transaction.animation = nil
-                    }
-            }
-            .overlay(alignment: .topTrailing) {
+            .frame(width: 30, height: 30)
+            .overlay(alignment: .bottomLeading) {
                 if isCluster {
                     clusterCountBadge
-                        .offset(x: 11, y: -9)
+                        .offset(x: -11, y: 9)
                 }
             }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.Marker.placeActionA11y)
-    }
-
-    private var placeNamePill: some View {
-        Text(isCluster ? "" : placeName)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(Color(red: 0.17, green: 0.32, blue: 0.40))
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.white, in: Capsule())
-            .shadow(color: Color(red: 0.15, green: 0.38, blue: 0.46, opacity: 0.10), radius: 8, x: 0, y: 4)
-            .opacity(isCluster ? 0 : 1)
     }
 
     private var markerGradient: LinearGradient {
@@ -106,22 +83,22 @@ struct MarkerBubbleView: View {
     private var clusterCountBadge: some View {
         Text("+\(clusterCount)")
             .font(.system(size: 9, weight: .heavy))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color(red: 0.23, green: 0.24, blue: 0.26))
             .padding(.horizontal, 6)
             .frame(height: 16)
             .background(
                 Capsule()
-                    .fill(Color(red: 0.15, green: 0.34, blue: 0.44))
+                    .fill(Color.white)
             )
             .overlay(
                 Capsule()
-                    .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                    .stroke(Color(red: 0.82, green: 0.89, blue: 0.93, opacity: 0.9), lineWidth: 1)
             )
             .shadow(
-                color: activeGlowColor.opacity(0.22),
-                radius: 4,
+                color: Color.black.opacity(0.12),
+                radius: 3,
                 x: 0,
-                y: 2
+                y: 1
             )
     }
 }

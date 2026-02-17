@@ -154,6 +154,8 @@ struct TsugieFilterPill: View {
             secondaryYOffset: 7
         )
         .opacity(isActive ? 1.0 : 0.56)
+        .scaleEffect(isActive ? 1.0 : 0.97)
+        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isActive)
     }
 
     private var hanabiIconGradient: LinearGradient {
@@ -195,6 +197,7 @@ struct CalendarPageView: View {
     let places: [HePlace]
     let detailPlaces: [HePlace]
     let placeStateProvider: (UUID) -> PlaceState
+    let stampProvider: (UUID, HeType) -> PlaceStampPresentation?
     let onClose: () -> Void
     let onSelectPlace: (UUID) -> Void
     let now: Date
@@ -406,25 +409,27 @@ struct CalendarPageView: View {
                     }
                 }
 
-                if isToday {
-                    Image("HomeSidebarIcon")
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
-                        .foregroundStyle(activeGlowColor.opacity(0.92))
-                        .opacity(0.76)
-                        .padding(.trailing, 4)
-                        .padding(.bottom, 4)
-                        .allowsHitTesting(false)
-                }
             }
             .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
             .padding(.top, 6)
             .padding(.leading, 7)
             .padding(.trailing, 7)
             .padding(.bottom, 6)
-            .background(cellBackground(isToday: isToday, hasEvents: hasEvents), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(cellBackground(isToday: isToday, hasEvents: hasEvents))
+                    .overlay {
+                        if isToday {
+                            ImmediateStampImageView(resourceName: "tsugie-logo-anime.png", maxPixelSize: 256)
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .opacity(0.26)
+                                .clipped()
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(
@@ -558,6 +563,7 @@ struct CalendarPageView: View {
     private func dayItemRow(_ item: CalendarScoredItem) -> some View {
         let category = categories.first(where: { $0.id == item.categoryID }) ?? categories[0]
         let state = placeStateProvider(item.place.id)
+        let stamp = stampProvider(item.place.id, item.place.heType)
         return Button {
             closeDayDrawer()
             onClose()
@@ -587,9 +593,16 @@ struct CalendarPageView: View {
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                             .lineLimit(1)
-                        Text("\(distanceLabel(item.distanceMeters)) ・ \(L10n.Common.timeRange(item.snapshot.startLabel, item.snapshot.endLabel))")
+                        Text(distanceLabel(item.distanceMeters))
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.38, green: 0.49, blue: 0.54))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text(L10n.Common.timeRange(item.snapshot.startLabel, item.snapshot.endLabel))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(red: 0.38, green: 0.49, blue: 0.54))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(item.snapshot.leftLabel)
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.31, green: 0.43, blue: 0.48))
@@ -598,15 +611,14 @@ struct CalendarPageView: View {
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 5) {
-                        Text(category.label)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color(red: 0.36, green: 0.48, blue: 0.53))
-                        PlaceStateIconsView(
-                            placeState: state,
-                            size: 16,
-                            activeGradient: activeGradient,
-                            activeGlowColor: activeGlowColor
-                        )
+                        HStack(spacing: 6) {
+                            FavoriteStateIconView(isFavorite: state.isFavorite, size: 24)
+                            StampIconView(
+                                stamp: stamp,
+                                isColorized: state.isCheckedIn,
+                                size: 25
+                            )
+                        }
                     }
                 }
 

@@ -23,6 +23,7 @@ struct RootView: View {
                 places: viewModel.places,
                 detailPlaces: viewModel.calendarDetailPlaces,
                 placeStateProvider: { viewModel.placeState(for: $0) },
+                stampProvider: { viewModel.stampPresentation(for: $0, heType: $1) },
                 onClose: {
                     viewModel.setCalendarPresented(false)
                     isCalendarPresented = false

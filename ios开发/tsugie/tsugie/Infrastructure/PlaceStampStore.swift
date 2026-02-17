@@ -13,8 +13,13 @@ final class PlaceStampStore {
         case momijiKinen
     }
 
-    private var lockedStamps: [UUID: String] = [:]
-    private var transientStamps: [UUID: String] = [:]
+    private struct StampSelection: Codable, Equatable {
+        let resourceName: String
+        let rotationDegrees: Double
+    }
+
+    private var lockedStamps: [UUID: StampSelection] = [:]
+    private var transientStamps: [UUID: StampSelection] = [:]
 
     private let defaults: UserDefaults
     private let storageKey = "tsugie.placeStamp.v1"
@@ -27,7 +32,7 @@ final class PlaceStampStore {
     }
 
     func refreshTransientStamp(for placeID: UUID, heType: HeType) {
-        let previous = transientStamps[placeID]
+        let previous = transientStamps[placeID]?.resourceName
         guard let sampled = sampleStamp(for: heType, excluding: previous) else {
             return
         }
@@ -56,22 +61,33 @@ final class PlaceStampStore {
     func presentation(for placeID: UUID, heType: HeType, state: PlaceState) -> PlaceStampPresentation? {
         if state.isFavorite || state.isCheckedIn {
             lockStampIfNeeded(for: placeID, heType: heType)
-        } else if transientStamps[placeID] == nil {
+            let selectedStamp = lockedStamps[placeID] ?? transientStamps[placeID]
+            guard let selectedStamp else {
+                return nil
+            }
+            return PlaceStampPresentation(
+                resourceName: selectedStamp.resourceName,
+                isColorized: state.isCheckedIn,
+                rotationDegrees: selectedStamp.rotationDegrees
+            )
+        }
+
+        if transientStamps[placeID] == nil {
             refreshTransientStamp(for: placeID, heType: heType)
         }
 
-        let resourceName = lockedStamps[placeID] ?? transientStamps[placeID]
-        guard let resourceName else {
+        guard let selectedStamp = transientStamps[placeID] else {
             return nil
         }
 
         return PlaceStampPresentation(
-            resourceName: resourceName,
-            isColorized: state.isCheckedIn
+            resourceName: selectedStamp.resourceName,
+            isColorized: state.isCheckedIn,
+            rotationDegrees: selectedStamp.rotationDegrees
         )
     }
 
-    private func sampleStamp(for heType: HeType, excluding excluded: String? = nil) -> String? {
+    private func sampleStamp(for heType: HeType, excluding excluded: String? = nil) -> StampSelection? {
         let folders = folders(for: heType)
         let shuffledFolders = folders.shuffled()
 
@@ -82,14 +98,24 @@ final class PlaceStampStore {
             let candidates = allStampResourceNames.filter { $0.hasPrefix(prefix) }
             if let excluded,
                let picked = candidates.filter({ $0 != excluded }).randomElement() {
-                return picked
+                return StampSelection(
+                    resourceName: picked,
+                    rotationDegrees: sampleCounterclockwiseRotationDegrees()
+                )
             }
             if let picked = candidates.randomElement() {
-                return picked
+                return StampSelection(
+                    resourceName: picked,
+                    rotationDegrees: sampleCounterclockwiseRotationDegrees()
+                )
             }
         }
 
         return nil
+    }
+
+    private func sampleCounterclockwiseRotationDegrees() -> Double {
+        -Double(Int.random(in: 15...34))
     }
 
     private func folders(for heType: HeType) -> [StampFolder] {
@@ -114,19 +140,45 @@ final class PlaceStampStore {
     }
 
     private func restore() {
-        guard let data = defaults.data(forKey: storageKey),
-              let payload = try? JSONDecoder().decode([String: String].self, from: data) else {
+        guard let data = defaults.data(forKey: storageKey) else {
+            return
+        }
+
+        if let payload = try? JSONDecoder().decode([String: StampSelection].self, from: data) {
+            var restored: [UUID: StampSelection] = [:]
+            for (key, value) in payload {
+                guard let id = UUID(uuidString: key) else {
+                    continue
+                }
+                restored[id] = value
+            }
+            lockedStamps = restored
+            return
+        }
+
+        guard let legacyPayload = try? JSONDecoder().decode([String: String].self, from: data) else {
             return
         }
 
         var restored: [UUID: String] = [:]
-        for (key, value) in payload {
+        for (key, value) in legacyPayload {
             guard let id = UUID(uuidString: key) else {
                 continue
             }
             restored[id] = value
         }
-        lockedStamps = restored
+        lockedStamps = Dictionary(
+            uniqueKeysWithValues: restored.map {
+                (
+                    $0.key,
+                    StampSelection(
+                        resourceName: $0.value,
+                        rotationDegrees: sampleCounterclockwiseRotationDegrees()
+                    )
+                )
+            }
+        )
+        persist()
     }
 
     private static func discoverAllStampResourceNames() -> [String] {

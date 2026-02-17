@@ -26,6 +26,10 @@ enum TsugieSmallIcon {
             return hanabiAsset
         case "matsuri":
             return omatsuriAsset
+        case "sakura":
+            return sakuraAsset
+        case "momiji":
+            return momijiAsset
         case "nature":
             return sakuraAsset
         case "other":
@@ -38,13 +42,6 @@ enum TsugieSmallIcon {
     }
 
     static func assetName(for filter: MapPlaceCategoryFilter) -> String {
-        switch filter {
-        case .all:
-            return allAsset
-        case .hanabi:
-            return hanabiAsset
-        case .matsuri:
-            return omatsuriAsset
-        }
+        assetName(for: filter.rawValue)
     }
 }

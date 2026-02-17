@@ -12,13 +12,22 @@ struct FavoriteStateIconView: View {
     var size: CGFloat = 19
 
     var body: some View {
-        Image("FavoriteOkiniiriIcon")
-            .resizable()
-            .scaledToFit()
-            .frame(width: size, height: size)
-            .saturation(isFavorite ? 1 : 0)
-            .opacity(isFavorite ? 1 : 0.56)
-            .accessibilityLabel(L10n.PlaceState.favoriteA11y)
+        ZStack {
+            Image("FavoriteOkiniiriIcon")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(.white)
+                .frame(width: size * 1.06, height: size * 1.06)
+
+            Image("FavoriteOkiniiriIcon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .saturation(isFavorite ? 1 : 0)
+                .opacity(isFavorite ? 1 : 0.88)
+        }
+        .accessibilityLabel(L10n.PlaceState.favoriteA11y)
     }
 }
 
@@ -27,11 +36,13 @@ struct PlaceStampBackgroundView: View {
     var size: CGFloat
     var isCompact: Bool = false
     var loadMode: StampLoadMode = .deferred
+    var rotationDegrees: Double = 0
 
     var body: some View {
         if let stamp {
             stampImage(resourceName: stamp.resourceName)
                 .frame(width: size, height: size)
+                .rotationEffect(.degrees(rotationDegrees))
                 .saturation(stamp.isColorized ? 1 : 0)
                 .opacity(stamp.isColorized ? (isCompact ? 0.29 : 0.24) : (isCompact ? 0.20 : 0.16))
                 .blendMode(.multiply)
@@ -74,7 +85,7 @@ struct StampIconView: View {
     }
 }
 
-private struct ImmediateStampImageView: View {
+struct ImmediateStampImageView: View {
     let resourceName: String
     let maxPixelSize: Int
 
@@ -109,6 +120,10 @@ private struct ImmediateStampImageView: View {
         .onChange(of: maxPixelSize) { _, _ in
             reloadIfNeeded()
         }
+        .onDisappear {
+            image = nil
+            loadedKey = ""
+        }
     }
 
     private func reloadIfNeeded() {
@@ -121,7 +136,7 @@ private struct ImmediateStampImageView: View {
     }
 }
 
-private struct DeferredStampImageView: View {
+struct DeferredStampImageView: View {
     let resourceName: String
     let maxPixelSize: Int
 
@@ -141,6 +156,34 @@ private struct DeferredStampImageView: View {
         .task(id: "\(resourceName)-\(maxPixelSize)") {
             image = await Task.detached(priority: .utility) {
                 StampImageLoader.loadImage(resourceName: resourceName, maxPixelSize: maxPixelSize)
+            }.value
+        }
+        .onDisappear {
+            image = nil
+        }
+    }
+}
+
+struct StampWhiteBaseImageView: View {
+    let resourceName: String
+    let maxPixelSize: Int
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: "\(resourceName)-\(maxPixelSize)-white-base") {
+            image = await Task.detached(priority: .utility) {
+                StampImageLoader.loadWhiteBaseImage(resourceName: resourceName, maxPixelSize: maxPixelSize)
             }.value
         }
         .onDisappear {
@@ -175,5 +218,63 @@ private enum StampImageLoader {
         }
 
         return UIImage(contentsOfFile: imageURL.path)
+    }
+
+    nonisolated static func loadWhiteBaseImage(resourceName: String, maxPixelSize: Int) -> UIImage? {
+        guard let image = loadImage(resourceName: resourceName, maxPixelSize: maxPixelSize) else {
+            return nil
+        }
+        return makeWhiteBase(from: image)
+    }
+
+    private nonisolated static func makeWhiteBase(from image: UIImage) -> UIImage? {
+        guard let cgImage = image.cgImage else {
+            return nil
+        }
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo
+        ) else {
+            return nil
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let raw = context.data else {
+            return nil
+        }
+        let pixelCount = width * height
+        let buffer = raw.bindMemory(to: UInt8.self, capacity: pixelCount * bytesPerPixel)
+        let alphaThreshold = 8
+
+        for index in 0 ..< pixelCount {
+            let offset = index * bytesPerPixel
+            let alpha = Int(buffer[offset + 3])
+            if alpha > alphaThreshold {
+                buffer[offset] = 255
+                buffer[offset + 1] = 255
+                buffer[offset + 2] = 255
+                buffer[offset + 3] = 255
+            } else {
+                buffer[offset] = 0
+                buffer[offset + 1] = 0
+                buffer[offset + 2] = 0
+                buffer[offset + 3] = 0
+            }
+        }
+
+        guard let whiteBaseCGImage = context.makeImage() else {
+            return nil
+        }
+        return UIImage(cgImage: whiteBaseCGImage, scale: image.scale, orientation: image.imageOrientation)
     }
 }

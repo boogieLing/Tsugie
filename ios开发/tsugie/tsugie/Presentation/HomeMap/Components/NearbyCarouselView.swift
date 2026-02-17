@@ -85,11 +85,13 @@ private struct NearbyCarouselItemView: View, Equatable {
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.30, green: 0.40, blue: 0.44))
                 }
+                .padding(.bottom, 4)
 
                 TsugieMiniProgressView(
                     snapshot: item.snapshot,
                     glowBoost: 1.7,
-                    endpointIconName: item.endpointIconName
+                    endpointIconName: item.endpointIconName,
+                    endpointIconIsColorized: item.placeState.isFavorite
                 )
                     .padding(.top, 1)
             }

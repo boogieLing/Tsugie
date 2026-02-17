@@ -19,10 +19,20 @@ enum FavoriteDrawerFilter: String, CaseIterable {
     case checked
 }
 
-enum MapPlaceCategoryFilter: String, CaseIterable {
-    case all
-    case hanabi
-    case matsuri
+struct MapPlaceCategoryFilter: RawRepresentable, Hashable, Codable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    static let all = Self(rawValue: "all")
+    static let hanabi = Self(rawValue: "hanabi")
+    static let matsuri = Self(rawValue: "matsuri")
+    static let nature = Self(rawValue: "nature")
+    static let other = Self(rawValue: "other")
+    static let sakura = Self(rawValue: "sakura")
+    static let momiji = Self(rawValue: "momiji")
 }
 
 @MainActor
@@ -81,7 +91,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
     @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
     @Published var isThemePaletteOpen = false
-    @Published var selectedThemeScheme = "fresh"
+    @Published var selectedThemeScheme = "sunset"
     @Published var themeAlphaRatio: Double = 1
     @Published var themeSaturationRatio: Double = 1
     @Published var themeGlowRatio: Double = 1
@@ -93,6 +103,7 @@ final class HomeMapViewModel: ObservableObject {
     private let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "HomeMapViewModel")
     private let placeStateStore: PlaceStateStore
     private let placeStampStore: PlaceStampStore
+    private let placeDecorationStore: PlaceDecorationStore
     private let locationProvider: AppLocationProviding
     private let initialCenter = DefaultAppLocationProvider.developmentFixedCoordinate
     private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
@@ -119,6 +130,9 @@ final class HomeMapViewModel: ObservableObject {
     private let programmaticCameraSuppressionWindow: TimeInterval = 1.2
     private let programmaticCameraCenterToleranceKm: Double = 0.9
     private let programmaticCameraSpanTolerance: CLLocationDegrees = 0.0035
+    private let calendarDismissMapStabilizationWindow: TimeInterval = 0.9
+    private let calendarDismissTransientZoomRatioThreshold: Double = 3.2
+    private let calendarDismissTransientCenterToleranceKm: Double = 0.7
     private let minimumViewportRadiusKm: Double
     private let nearbyLimit: Int
     private let mapBufferScale: Double = 1.8
@@ -166,6 +180,7 @@ final class HomeMapViewModel: ObservableObject {
     private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
     private var pendingProgrammaticCameraSource: String?
     private var pendingProgrammaticCameraExpiresAt: Date = .distantPast
+    private var suppressMapInteractionUpdatesUntil: Date = .distantPast
     private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
     private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
 
@@ -173,6 +188,7 @@ final class HomeMapViewModel: ObservableObject {
         places: [HePlace]? = nil,
         placeStateStore: PlaceStateStore? = nil,
         placeStampStore: PlaceStampStore? = nil,
+        placeDecorationStore: PlaceDecorationStore? = nil,
         locationProvider: AppLocationProviding? = nil,
         minimumViewportRadiusKm: Double = 1.2,
         nearbyLimit: Int = 240
@@ -183,6 +199,7 @@ final class HomeMapViewModel: ObservableObject {
         self.renderedPlaces = sourcePlaces
         self.placeStateStore = placeStateStore ?? PlaceStateStore()
         self.placeStampStore = placeStampStore ?? PlaceStampStore()
+        self.placeDecorationStore = placeDecorationStore ?? PlaceDecorationStore()
         self.locationProvider = locationProvider ?? DefaultAppLocationProvider()
         self.minimumViewportRadiusKm = max(0.5, minimumViewportRadiusKm)
         self.nearbyLimit = max(1, nearbyLimit)
@@ -340,6 +357,11 @@ final class HomeMapViewModel: ObservableObject {
             cancelPendingMapZoomRestore()
             closeSideDrawerPanel()
             closeMarkerActionBubble()
+        } else {
+            suppressMapInteractionUpdatesUntil = Date().addingTimeInterval(calendarDismissMapStabilizationWindow)
+            if let pinnedRegion = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) {
+                setProgrammaticMapPosition(.region(pinnedRegion))
+            }
         }
     }
 
@@ -350,21 +372,23 @@ final class HomeMapViewModel: ObservableObject {
         cancelPendingMapZoomRestore()
         cancelPendingMapFocus()
 
-        guard placeForInteraction(placeID) != nil else {
+        guard let targetPlace = placeForInteraction(placeID) else {
             return
         }
 
         if _selectedPlaceID == placeID {
+            let currentPlaceState = placeStateStore.state(for: placeID)
+            if !currentPlaceState.isFavorite && !currentPlaceState.isCheckedIn {
+                placeStampStore.refreshTransientStamp(for: placeID, heType: targetPlace.heType)
+                objectWillChange.send()
+            }
             withAnimation(quickCardDismissAnimation) {
                 closeQuickCard(restoreMapZoom: false)
             }
             return
         }
 
-        let targetPlace = place(for: placeID)
-        let focusPlace = targetPlace.flatMap { place in
-            shouldFocusQuickCard(place: place) ? place : nil
-        }
+        let focusPlace: HePlace? = shouldFocusQuickCard(place: targetPlace) ? targetPlace : nil
         withAnimation(quickCardPresentationAnimation) {
             openQuickCard(
                 placeID: placeID,
@@ -422,6 +446,7 @@ final class HomeMapViewModel: ObservableObject {
         guard let targetPlace = placeForInteraction(placeID) else {
             return
         }
+        resetMapCategoryFilterIfNeeded(for: targetPlace)
         ensureRenderedContains(targetPlace)
         let currentPlaceState = placeStateStore.state(for: placeID)
         if showPanel && !currentPlaceState.isFavorite && !currentPlaceState.isCheckedIn {
@@ -796,13 +821,47 @@ final class HomeMapViewModel: ObservableObject {
 
     func mapCategoryFilterCount(_ filter: MapPlaceCategoryFilter) -> Int {
         let full = places.isEmpty ? renderedPlaces : places
-        switch filter {
-        case .all:
+        guard filter != .all else {
             return full.count
-        case .hanabi:
-            return full.filter { $0.heType == .hanabi }.count
-        case .matsuri:
-            return full.filter { $0.heType == .matsuri }.count
+        }
+        return full.filter { $0.heType.rawValue == filter.rawValue }.count
+    }
+
+    func mapCategoryFiltersForSidebar() -> [MapPlaceCategoryFilter] {
+        let source = places.isEmpty ? renderedPlaces : places
+        let typeIDs = Set(source.map { $0.heType.rawValue })
+        let preferredOrder = [
+            MapPlaceCategoryFilter.hanabi.rawValue,
+            MapPlaceCategoryFilter.matsuri.rawValue,
+            MapPlaceCategoryFilter.sakura.rawValue,
+            MapPlaceCategoryFilter.momiji.rawValue,
+            MapPlaceCategoryFilter.nature.rawValue,
+            MapPlaceCategoryFilter.other.rawValue
+        ]
+        let ordered = preferredOrder.filter { typeIDs.contains($0) }
+        let remaining = typeIDs.subtracting(Set(ordered)).sorted()
+        let categoryFilters = (ordered + remaining).map(MapPlaceCategoryFilter.init(rawValue:))
+        return [.all] + categoryFilters
+    }
+
+    func mapCategoryFilterTitle(_ filter: MapPlaceCategoryFilter) -> String {
+        switch filter.rawValue {
+        case MapPlaceCategoryFilter.all.rawValue:
+            return L10n.Calendar.categoryAll
+        case MapPlaceCategoryFilter.hanabi.rawValue:
+            return L10n.Calendar.categoryHanabi
+        case MapPlaceCategoryFilter.matsuri.rawValue:
+            return L10n.Calendar.categoryMatsuri
+        case MapPlaceCategoryFilter.nature.rawValue:
+            return L10n.Calendar.categoryNature
+        case MapPlaceCategoryFilter.other.rawValue:
+            return L10n.Calendar.categoryOther
+        case MapPlaceCategoryFilter.sakura.rawValue:
+            return L10n.Calendar.categorySakura
+        case MapPlaceCategoryFilter.momiji.rawValue:
+            return L10n.Calendar.categoryMomiji
+        default:
+            return filter.rawValue.localizedCapitalized
         }
     }
 
@@ -903,6 +962,13 @@ final class HomeMapViewModel: ObservableObject {
         return placeStampStore.presentation(for: placeID, heType: heType, state: state)
     }
 
+    func markerDecorationPresentation(for placeID: UUID, heType: HeType) -> PlaceDecorationPresentation? {
+        guard _selectedPlaceID == placeID else {
+            return nil
+        }
+        return placeDecorationStore.presentation(for: placeID, heType: heType)
+    }
+
     func toggleFavorite(for placeID: UUID) {
         let nextState = placeStateStore.toggleFavorite(for: placeID)
         if nextState.isFavorite, let place = place(for: placeID) {
@@ -998,14 +1064,24 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func mapPlaces() -> [HePlace] {
-        switch mapCategoryFilter {
-        case .all:
+        guard mapCategoryFilter != .all else {
             return renderedPlaces
-        case .hanabi:
-            return renderedPlaces.filter { $0.heType == .hanabi }
-        case .matsuri:
-            return renderedPlaces.filter { $0.heType == .matsuri }
         }
+        return renderedPlaces.filter { $0.heType.rawValue == mapCategoryFilter.rawValue }
+    }
+
+    private func resetMapCategoryFilterIfNeeded(for place: HePlace) {
+        guard mapCategoryFilter != .all, !isPlaceVisibleInMapCategoryFilter(place) else {
+            return
+        }
+        setMapCategoryFilter(.all)
+    }
+
+    private func isPlaceVisibleInMapCategoryFilter(_ place: HePlace) -> Bool {
+        guard mapCategoryFilter != .all else {
+            return true
+        }
+        return place.heType.rawValue == mapCategoryFilter.rawValue
     }
 
     private func filteredFavoritePlacesByStatus(from places: [HePlace]) -> [HePlace] {
@@ -1557,7 +1633,13 @@ final class HomeMapViewModel: ObservableObject {
     ) {
         let emergencyRegion = expandedMapRegion(region, scale: 1.05)
         let inEmergencyRegion = filteredPlacesInRegion(renderedPlaces, region: emergencyRegion)
-        let emergencyPlaces = nearestPlacesByDistance(inEmergencyRegion, limit: memoryEmergencyRenderedLimit)
+        let emergencyCandidates = nearestPlacesByDistance(inEmergencyRegion, limit: memoryEmergencyRenderedLimit)
+        // Keep active places (selected/quick/detail/menu) even when emergency trimming aggressively.
+        let emergencyPlaces = ensureActivePlacesIncluded(
+            in: emergencyCandidates,
+            sourcePool: renderedPlaces,
+            limit: memoryEmergencyRenderedLimit
+        )
         replaceRenderedPlaces(emergencyPlaces)
         invalidateAllPlacesDerivedCaches()
         forceMapViewRebuild(
@@ -1587,7 +1669,11 @@ final class HomeMapViewModel: ObservableObject {
         }
         let trimRegion = expandedMapRegion(region, scale: idleTrimScale)
         let trimmed = filteredPlacesInRegion(renderedPlaces, region: trimRegion)
-        let limited = Array(trimmed.prefix(maxRenderedPlaces))
+        let limited = ensureActivePlacesIncluded(
+            in: Array(trimmed.prefix(maxRenderedPlaces)),
+            sourcePool: renderedPlaces,
+            limit: maxRenderedPlaces
+        )
         replaceRenderedPlaces(limited)
         hasSignificantMoveSinceLastRecycle = false
         lastIdleTrimAt = Date()
@@ -1727,7 +1813,7 @@ final class HomeMapViewModel: ObservableObject {
                 limit: maxRenderedPlaces,
                 reference: envelope.center
             ),
-            sourcePool: inEnvelope,
+            sourcePool: renderedPlaces,
             limit: maxRenderedPlaces
         )
         if sameRenderedPlaceIDs(lhs: renderedPlaces, rhs: limited) {
@@ -2157,7 +2243,37 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func updateMapPositionFromInteraction(_ position: MapCameraPosition) {
-        mapCameraPosition = position
+        guard !isCalendarPresented,
+              let incomingRegion = position.region,
+              let normalizedIncomingRegion = normalizedRegion(incomingRegion) else {
+            return
+        }
+        if shouldIgnoreTransientMapPositionAfterCalendarDismiss(normalizedIncomingRegion) {
+            return
+        }
+        mapCameraPosition = .region(normalizedIncomingRegion)
+        lastKnownMapRegion = normalizedIncomingRegion
+    }
+
+    private func shouldIgnoreTransientMapPositionAfterCalendarDismiss(_ region: MKCoordinateRegion) -> Bool {
+        let now = Date()
+        guard now <= suppressMapInteractionUpdatesUntil,
+              let baseline = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) else {
+            return false
+        }
+        let movedKm = distanceKm(from: baseline.center, to: region.center)
+        let zoomRatio = zoomScaleRatio(from: baseline.span, to: region.span)
+        let isZoomingInAggressively = region.span.latitudeDelta < baseline.span.latitudeDelta * 0.55 &&
+            region.span.longitudeDelta < baseline.span.longitudeDelta * 0.55
+        guard movedKm <= calendarDismissTransientCenterToleranceKm,
+              isZoomingInAggressively,
+              zoomRatio >= calendarDismissTransientZoomRatioThreshold else {
+            return false
+        }
+        debugLog(
+            "ignoreMapPosition reason=calendarDismissTransientZoom movedKm=\(movedKm) zoomRatio=\(zoomRatio)"
+        )
+        return true
     }
 
     private func setProgrammaticMapPosition(_ position: MapCameraPosition) {
@@ -2304,6 +2420,7 @@ final class HomeMapViewModel: ObservableObject {
             objectWillChange.send()
         }
         block()
+        placeDecorationStore.retainOnly(placeID: _selectedPlaceID)
     }
 
     private func focusedCenter(for place: HePlace) -> CLLocationCoordinate2D {

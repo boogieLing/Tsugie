@@ -23,7 +23,7 @@
 "home.menu.open_a11y" = "メニューを開く";
 "home.quick.date_today_soon" = "本日開催！まもなく！";
 
-"quickcard.fast_plan" = "⚡ 最速攻略";
+"quickcard.fast_plan" = "✨ 最速攻略";
 "quickcard.close_a11y" = "クイック表示を閉じる";
 "quickcard.view_details" = "詳細を見る";
 "quickcard.start_route" = "ルートを開始";
@@ -100,6 +100,8 @@
 "calendar.category.all" = "全部";
 "calendar.category.hanabi" = "花火";
 "calendar.category.matsuri" = "祭典";
+"calendar.category.sakura" = "桜";
+"calendar.category.momiji" = "紅葉";
 "calendar.category.nature" = "景観";
 "calendar.category.other" = "その他";
 

@@ -32,6 +32,12 @@ struct HomeMapView: View {
             green: 81.0 / 255.0,
             blue: 81.0 / 255.0
         )
+        // Fixed to explicit brand color, no longer follows active theme switching.
+        let locationMarkerColor = Color(
+            red: 253.0 / 255.0,
+            green: 203.0 / 255.0,
+            blue: 110.0 / 255.0
+        )
         let sidebarIconColor = locationIconColor
 
         ZStack(alignment: .bottom) {
@@ -42,7 +48,7 @@ struct HomeMapView: View {
                 Map(position: mapPositionBinding) {
                     Annotation("CurrentLocation", coordinate: viewModel.currentLocationCoordinate, anchor: .center) {
                         CurrentLocationMarkerView(
-                            pinColor: locationIconColor,
+                            pinColor: locationMarkerColor,
                             glowColor: viewModel.activeMapGlowColor
                         )
                             .allowsHitTesting(false)
@@ -50,6 +56,7 @@ struct HomeMapView: View {
                     .annotationTitles(.hidden)
 
                     ForEach(viewModel.mapMarkerEntries()) { entry in
+                        let placeState = viewModel.placeState(for: entry.id)
                         Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
                             MapMarkerAnnotationView(
                                 entry: entry,
@@ -64,6 +71,11 @@ struct HomeMapView: View {
                                 ),
                                 stamp: entry.isMenuVisible
                                     ? viewModel.stampPresentation(for: entry.id, heType: entry.heType)
+                                    : nil,
+                                isDecorationVisible: entry.isSelected && placeState.isCheckedIn,
+                                isDecorationWhiteBaseEnabled: placeState.isCheckedIn,
+                                decoration: (entry.isSelected && placeState.isCheckedIn)
+                                    ? viewModel.markerDecorationPresentation(for: entry.id, heType: entry.heType)
                                     : nil,
                                 onFavoriteTap: {
                                     viewModel.markAnnotationTapCooldown(0.4)
@@ -109,6 +121,9 @@ struct HomeMapView: View {
                             activeGlowColor: viewModel.activeMapGlowColor,
                             onFocusTap: {
                                 viewModel.focus(on: detailPlace)
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+                                    viewModel.closeDetail()
+                                }
                             },
                             onClose: {
                                 withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
@@ -118,6 +133,7 @@ struct HomeMapView: View {
                         )
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.horizontal, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(15)
                 } else if let place = viewModel.quickCardPlace {
@@ -340,6 +356,9 @@ private struct MapMarkerAnnotationView: View, Equatable {
     let activeGlowColor: Color
     let markerActionStyle: MarkerActionStyle
     let stamp: PlaceStampPresentation?
+    let isDecorationVisible: Bool
+    let isDecorationWhiteBaseEnabled: Bool
+    let decoration: PlaceDecorationPresentation?
     let onFavoriteTap: () -> Void
     let onCheckedInTap: () -> Void
     let onTap: () -> Void
@@ -347,11 +366,35 @@ private struct MapMarkerAnnotationView: View, Equatable {
     static func == (lhs: MapMarkerAnnotationView, rhs: MapMarkerAnnotationView) -> Bool {
         lhs.entry == rhs.entry &&
         lhs.themeSignature == rhs.themeSignature &&
-        lhs.stamp == rhs.stamp
+        lhs.isDecorationVisible == rhs.isDecorationVisible &&
+        lhs.isDecorationWhiteBaseEnabled == rhs.isDecorationWhiteBaseEnabled &&
+        lhs.stamp == rhs.stamp &&
+        lhs.decoration == rhs.decoration
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            MarkerDecorationOverlayView(
+                isPresented: isDecorationVisible,
+                decoration: decoration,
+                useWhiteBase: isDecorationWhiteBaseEnabled,
+                onTap: onCheckedInTap
+            )
+            .offset(x: 14, y: -10)
+            .zIndex(0)
+
+            MarkerBubbleView(
+                placeName: entry.name,
+                heType: entry.heType,
+                isSelected: entry.isSelected,
+                clusterCount: entry.clusterCount,
+                activeGradient: activeGradient,
+                activeGlowColor: activeGlowColor,
+                onTap: onTap
+            )
+            .allowsHitTesting(!entry.isMenuVisible)
+            .zIndex(1)
+
             MarkerActionBubbleView(
                 isVisible: entry.isMenuVisible,
                 placeState: entry.menuPlaceState ?? PlaceState(),
@@ -363,16 +406,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
             )
             .offset(y: -14)
             .allowsHitTesting(entry.isMenuVisible)
-
-            MarkerBubbleView(
-                placeName: entry.name,
-                heType: entry.heType,
-                isSelected: entry.isSelected,
-                clusterCount: entry.clusterCount,
-                activeGradient: activeGradient,
-                activeGlowColor: activeGlowColor,
-                onTap: onTap
-            )
+            .zIndex(2)
         }
         .frame(width: 220, height: 170, alignment: .bottom)
     }
@@ -390,19 +424,194 @@ private struct MarkerActionStyle {
     let glowColor: Color
 }
 
+private struct MarkerDecorationBadgeView: View {
+    let decoration: PlaceDecorationPresentation
+    let useWhiteBase: Bool
+
+    var body: some View {
+        Group {
+            if decoration.isAssetCatalog {
+                Image(decoration.resourceName)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+            } else {
+                if useWhiteBase {
+                    ZStack {
+                        StampWhiteBaseImageView(
+                            resourceName: decoration.resourceName,
+                            maxPixelSize: 256
+                        )
+                        ImmediateStampImageView(
+                            resourceName: decoration.resourceName,
+                            maxPixelSize: 256
+                        )
+                    }
+                } else {
+                    ImmediateStampImageView(
+                        resourceName: decoration.resourceName,
+                        maxPixelSize: 256
+                    )
+                }
+            }
+        }
+        .scaledToFit()
+        .frame(width: 58, height: 58)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct MarkerDecorationOverlayView: View {
+    let isPresented: Bool
+    let decoration: PlaceDecorationPresentation?
+    let useWhiteBase: Bool
+    let onTap: () -> Void
+
+    @State private var displayedDecoration: PlaceDecorationPresentation?
+    @State private var progress: CGFloat = 0
+    @State private var pendingHide: DispatchWorkItem?
+
+    private let insertAnimation = Animation.spring(response: 0.46, dampingFraction: 0.76)
+    private let removeAnimation = Animation.easeInOut(duration: 0.32)
+    private let removeDuration: TimeInterval = 0.32
+
+    var body: some View {
+        Group {
+            if let displayedDecoration {
+                Button(action: onTap) {
+                    MarkerDecorationBadgeView(
+                        decoration: displayedDecoration,
+                        useWhiteBase: useWhiteBase
+                    )
+                    .modifier(MarkerDecorationPhaseModifier(progress: progress))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.Marker.checkedInA11y)
+            }
+        }
+        .onAppear {
+            syncAnimation()
+        }
+        .onChange(of: isPresented) { _, _ in
+            syncAnimation()
+        }
+        .onChange(of: decoration?.resourceName) { _, _ in
+            syncAnimation()
+        }
+        .onDisappear {
+            pendingHide?.cancel()
+            pendingHide = nil
+            displayedDecoration = nil
+            progress = 0
+        }
+    }
+
+    private func syncAnimation() {
+        pendingHide?.cancel()
+        pendingHide = nil
+
+        if isPresented, let decoration {
+            displayedDecoration = decoration
+            progress = 0
+            DispatchQueue.main.async {
+                withAnimation(insertAnimation) {
+                    progress = 1
+                }
+            }
+            return
+        }
+
+        guard displayedDecoration != nil else {
+            return
+        }
+
+        withAnimation(removeAnimation) {
+            progress = 0
+        }
+        let hideWorkItem = DispatchWorkItem {
+            displayedDecoration = nil
+        }
+        pendingHide = hideWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + removeDuration, execute: hideWorkItem)
+    }
+}
+
+private struct MarkerDecorationPhaseModifier: ViewModifier {
+    let progress: CGFloat
+
+    func body(content: Content) -> some View {
+        let clamped = min(max(progress, 0), 1)
+        let scale = 0.24 + (0.76 * clamped)
+        let rotation = -112 * (1 - clamped)
+        let xOffset = -14 * (1 - clamped)
+        let yOffset = 12 * (1 - clamped)
+
+        content
+            .scaleEffect(scale, anchor: .bottomLeading)
+            .rotationEffect(.degrees(Double(rotation)), anchor: .bottomLeading)
+            .offset(x: xOffset, y: yOffset)
+            .opacity(clamped)
+    }
+}
+
 private struct CurrentLocationMarkerView: View {
     let pinColor: Color
     let glowColor: Color
 
     var body: some View {
-        Image("CurrentLocationPinIcon")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
-            .frame(width: 22, height: 22)
-            .foregroundStyle(pinColor)
-            .shadow(color: glowColor.opacity(0.54), radius: 8, x: 0, y: 0)
+        ZStack {
+            // Use the same logo shape as shadow base to create a stronger 3D lift.
+            Image("CurrentLocationPinIcon")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .foregroundStyle(glowColor)
+                .opacity(0.52)
+                .offset(x: 1.8, y: 2.8)
+                .blur(radius: 1.9)
+
+            Image("CurrentLocationPinIcon")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .foregroundStyle(.black)
+                .opacity(0.18)
+                .offset(x: 0.6, y: 2.2)
+                .blur(radius: 1.4)
+
+            Image("CurrentLocationPinIcon")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .foregroundStyle(pinColor)
+                .shadow(color: glowColor.opacity(0.34), radius: 3.6, x: 0, y: 1.4)
+                .overlay {
+                    Image("CurrentLocationPinIcon")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.62),
+                                    .white.opacity(0.08),
+                                    .clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .opacity(0.74)
+                        .blendMode(.screen)
+                }
+        }
         .frame(width: 40, height: 40)
+        .saturation(1.65)
+        .shadow(color: glowColor.opacity(0.44), radius: 10, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.20), radius: 6, x: 0, y: 3)
         .accessibilityHidden(true)
     }
 }

@@ -53,11 +53,22 @@ struct SideDrawerLayerView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     .zIndex(viewModel.isFavoriteDrawerOpen ? 4 : 5)
 
-                homeCategoryFilterRail(sideWidth: sideWidth, topSafeInset: topSafeInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .zIndex(5)
+                if viewModel.isSideDrawerOpen {
+                    homeCategoryFilterRail(sideWidth: sideWidth, topSafeInset: topSafeInset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .trailing)
+                                    .combined(with: .opacity)
+                                    .combined(with: .scale(scale: 0.96, anchor: .trailing)),
+                                removal: .opacity
+                            )
+                        )
+                        .zIndex(5)
+                }
             }
             .allowsHitTesting(isLayerOpen)
+            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.isSideDrawerOpen)
         }
     }
 
@@ -347,9 +358,7 @@ struct SideDrawerLayerView: View {
                         .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
                 }
             case .none:
-                Text(L10n.SideDrawer.noneHint)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+                EmptyView()
             }
         }
     }
@@ -357,6 +366,12 @@ struct SideDrawerLayerView: View {
     private func favoriteCard(_ place: HePlace) -> some View {
         let snapshot = viewModel.eventSnapshot(for: place)
         let range = L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
+        let startDateText = snapshot.startDate?.formatted(
+            Date.FormatStyle()
+                .month(.twoDigits)
+                .day(.twoDigits)
+                .locale(viewModel.selectedLanguageLocale)
+        ) ?? L10n.Common.dateUnknown
         let placeState = viewModel.placeState(for: place.id)
         let stamp = viewModel.stampPresentation(for: place)
 
@@ -375,9 +390,11 @@ struct SideDrawerLayerView: View {
                         .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
                 }
                 HStack {
-                    Text(range)
+                    Text("\(startDateText) \(range)")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer()
                     HStack(spacing: 6) {
                         FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 17)
@@ -401,7 +418,12 @@ struct SideDrawerLayerView: View {
                 borderOpacity: 0
             )
             .overlay(alignment: .bottomTrailing) {
-                PlaceStampBackgroundView(stamp: stamp, size: 82, isCompact: true)
+                PlaceStampBackgroundView(
+                    stamp: stamp,
+                    size: 82,
+                    isCompact: true,
+                    rotationDegrees: stamp?.rotationDegrees ?? 0
+                )
                     .offset(x: 8, y: 10)
             }
         }
@@ -415,22 +437,22 @@ struct SideDrawerLayerView: View {
             favoriteFilterPill(.checked, L10n.SideDrawer.filterChecked)
         }
         .padding(.horizontal, 4)
+        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: viewModel.favoriteFilter)
     }
 
     private func homeCategoryFilterRail(sideWidth: CGFloat, topSafeInset: CGFloat) -> some View {
-        let isVisible = viewModel.isSideDrawerOpen
-
+        let filters = viewModel.mapCategoryFiltersForSidebar()
         return VStack(spacing: 8) {
-            mapCategoryFilterPill(.all, L10n.Calendar.categoryAll, fixedWidth: 82)
-            mapCategoryFilterPill(.hanabi, L10n.Calendar.categoryHanabi, fixedWidth: 82)
-            mapCategoryFilterPill(.matsuri, L10n.Calendar.categoryMatsuri, fixedWidth: 82)
+            ForEach(filters, id: \.rawValue) { filter in
+                mapCategoryFilterPill(
+                    filter,
+                    viewModel.mapCategoryFilterTitle(filter),
+                    fixedWidth: 82
+                )
+            }
         }
         .padding(.top, topSafeInset + 20)
         .padding(.trailing, 12 + sideWidth + 12)
-        .opacity(isVisible ? 1 : 0)
-        .offset(x: isVisible ? 0 : sideWidth + 32)
-        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: isVisible)
-        .allowsHitTesting(isVisible)
     }
 
     private func favoriteFilterPill(_ filter: FavoriteDrawerFilter, _ title: String) -> some View {
@@ -442,7 +464,9 @@ struct SideDrawerLayerView: View {
             activeGradient: viewModel.activePillGradient,
             activeGlowColor: viewModel.activeMapGlowColor,
             fixedHeight: 32,
-            onTap: { viewModel.setFavoriteFilter(filter) }
+            onTap: {
+                viewModel.setFavoriteFilter(filter)
+            }
         )
     }
 
@@ -457,7 +481,9 @@ struct SideDrawerLayerView: View {
             activeGlowColor: viewModel.activeMapGlowColor,
             fixedWidth: fixedWidth,
             fixedHeight: 32,
-            onTap: { viewModel.setMapCategoryFilter(filter) }
+            onTap: {
+                viewModel.setMapCategoryFilter(filter)
+            }
         )
         .accessibilityLabel(title)
     }
@@ -513,7 +539,7 @@ struct SideDrawerLayerView: View {
             Text(title)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(Color(red: 0.34, green: 0.46, blue: 0.52))
-                .frame(width: 48, alignment: .leading)
+                .frame(width: 64, alignment: .leading)
 
             ThemeAdjusterSlider(value: value, range: range)
 
@@ -564,18 +590,7 @@ struct SideDrawerLayerView: View {
     }
 
     private func themeChipGradient(_ scheme: String) -> LinearGradient {
-        switch scheme {
-        case "ocean":
-            return LinearGradient(colors: [Color(red: 0.00, green: 0.66, blue: 1.00), Color(red: 0.36, green: 0.68, blue: 0.89), Color(red: 0.49, green: 0.89, blue: 0.99)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case "sunset":
-            return LinearGradient(colors: [Color(red: 1.00, green: 0.62, blue: 0.26), Color(red: 1.00, green: 0.42, blue: 0.42), Color(red: 1.00, green: 0.84, blue: 0.44)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case "sakura":
-            return LinearGradient(colors: [Color(red: 1.00, green: 0.49, blue: 0.70), Color(red: 0.65, green: 0.52, blue: 1.00), Color(red: 1.00, green: 0.82, blue: 0.92)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case "night":
-            return LinearGradient(colors: [Color(red: 0.35, green: 0.66, blue: 1.00), Color(red: 0.50, green: 0.55, blue: 1.00), Color(red: 0.48, green: 0.96, blue: 0.95)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        default:
-            return LinearGradient(colors: [Color(red: 0.13, green: 0.85, blue: 0.80), Color(red: 0.48, green: 0.75, blue: 1.00), Color(red: 1.00, green: 0.61, blue: 0.87)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
+        TsugieVisuals.pillGradient(scheme: scheme, alphaRatio: 1, saturationRatio: 1)
     }
 }
 
@@ -602,9 +617,8 @@ private struct ThemeAdjusterSlider: View {
 
     private let sliderGradient = LinearGradient(
         colors: [
-            Color(red: 61 / 255, green: 78 / 255, blue: 129 / 255),
-            Color(red: 87 / 255, green: 83 / 255, blue: 201 / 255),
-            Color(red: 110 / 255, green: 127 / 255, blue: 243 / 255)
+            Color(red: 0.80, green: 0.73, blue: 0.80),
+            Color(red: 0.15, green: 0.50, blue: 0.70)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -626,12 +640,14 @@ private struct ThemeAdjusterSlider: View {
                 Capsule()
                     .fill(sliderGradient)
                     .frame(width: max(trackHeight, x + thumbSize / 2), height: trackHeight)
-                    .shadow(color: Color(red: 87 / 255, green: 83 / 255, blue: 201 / 255, opacity: 0.42), radius: 6, x: 0, y: 0)
 
                 Circle()
                     .fill(Color.white)
                     .frame(width: thumbSize, height: thumbSize)
-                    .shadow(color: Color(red: 87 / 255, green: 83 / 255, blue: 201 / 255, opacity: 0.52), radius: 5, x: 0, y: 2)
+                    .overlay(
+                        Circle()
+                            .stroke(Color(red: 0.72, green: 0.79, blue: 0.84, opacity: 0.85), lineWidth: 1)
+                    )
                     .offset(x: x)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

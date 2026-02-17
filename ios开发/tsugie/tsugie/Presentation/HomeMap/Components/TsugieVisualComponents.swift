@@ -12,38 +12,40 @@ enum TsugieVisuals {
 
     static let pillGradient = LinearGradient(
         colors: [
-            Color(red: 0.07, green: 0.74, blue: 0.62),
-            Color(red: 0.31, green: 0.80, blue: 0.96),
-            Color(red: 0.45, green: 0.72, blue: 1.00)
+            Color(red: 0.93, green: 0.47, blue: 0.67),
+            Color(red: 0.47, green: 0.45, blue: 0.96)
         ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
+        startPoint: UnitPoint(x: 0.16, y: 0.03),
+        endPoint: UnitPoint(x: 0.86, y: 0.97)
     )
 
     static func pillGradient(scheme: String, alphaRatio: Double, saturationRatio: Double) -> LinearGradient {
         let base = schemeBaseColors(scheme)
+        let points = schemeGradientPoints(scheme)
         return LinearGradient(
             colors: base.map { adjustedColor($0, alphaRatio: alphaRatio, saturationRatio: saturationRatio) },
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            startPoint: points.start,
+            endPoint: points.end
         )
     }
 
     static func drawerBackground(scheme: String, alphaRatio: Double, saturationRatio: Double) -> LinearGradient {
         let base = schemeDrawerBackgroundColors(scheme)
+        let points = schemeGradientPoints(scheme)
         return LinearGradient(
             colors: base.map { adjustedColor($0, alphaRatio: alphaRatio, saturationRatio: saturationRatio) },
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            startPoint: points.start,
+            endPoint: points.end
         )
     }
 
     static func drawerThemeBackground(scheme: String) -> LinearGradient {
         let base = schemeDrawerBackgroundColors(scheme)
+        let points = schemeGradientPoints(scheme)
         return LinearGradient(
             colors: base.map { Color(uiColor: $0) },
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            startPoint: points.start,
+            endPoint: points.end
         )
     }
 
@@ -51,25 +53,28 @@ enum TsugieVisuals {
         adjustedColor(schemeMapGlowColor(scheme), alphaRatio: alphaRatio, saturationRatio: saturationRatio)
     }
 
+    static func themeAccentColor(scheme: String, saturationRatio: Double) -> Color {
+        let base = schemeBaseColors(scheme).first ?? UIColor(red: 0.24, green: 0.20, blue: 0.58, alpha: 1)
+        // Keep current-location pin fully opaque while still following theme hue/saturation.
+        return adjustedColor(base, alphaRatio: 1, saturationRatio: saturationRatio)
+    }
+
     static func markerGradient(for type: HeType) -> LinearGradient {
         switch type {
         case .hanabi:
             return LinearGradient(
-                gradient: Gradient(stops: [
-                    .init(color: Color(red: 0.72, green: 0.80, blue: 0.72), location: 0),
-                    .init(color: Color(red: 0.71, green: 0.40, blue: 0.85), location: 0.18),
-                    .init(color: Color(red: 0.81, green: 0.42, blue: 0.79), location: 0.46),
-                    .init(color: Color(red: 0.93, green: 0.38, blue: 0.61), location: 0.78),
-                    .init(color: Color(red: 0.93, green: 0.38, blue: 0.61), location: 1)
-                ]),
+                colors: [
+                    Color(red: 254.0 / 255.0, green: 81.0 / 255.0, blue: 150.0 / 255.0),
+                    Color(red: 247.0 / 255.0, green: 112.0 / 255.0, blue: 98.0 / 255.0)
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         case .matsuri:
             return LinearGradient(
                 colors: [
-                    Color(red: 0.88, green: 0.76, blue: 0.99),
-                    Color(red: 0.56, green: 0.77, blue: 0.99)
+                    Color(red: 32.0 / 255.0, green: 156.0 / 255.0, blue: 255.0 / 255.0),
+                    Color(red: 104.0 / 255.0, green: 224.0 / 255.0, blue: 207.0 / 255.0)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -144,46 +149,90 @@ enum TsugieVisuals {
     private static func schemeBaseColors(_ scheme: String) -> [UIColor] {
         switch scheme {
         case "ocean":
-            return [UIColor(red: 0.00, green: 0.66, blue: 1.00, alpha: 1), UIColor(red: 0.36, green: 0.68, blue: 0.89, alpha: 1), UIColor(red: 0.49, green: 0.89, blue: 0.99, alpha: 1)]
+            return [
+                UIColor(red: 0.88, green: 0.31, blue: 0.68, alpha: 1),
+                UIColor(red: 0.98, green: 0.83, blue: 0.14, alpha: 1)
+            ]
         case "sunset":
-            return [UIColor(red: 1.00, green: 0.62, blue: 0.26, alpha: 1), UIColor(red: 1.00, green: 0.42, blue: 0.42, alpha: 1), UIColor(red: 1.00, green: 0.84, blue: 0.44, alpha: 1)]
+            return [
+                UIColor(red: 0.17, green: 0.85, blue: 0.84, alpha: 1),
+                UIColor(red: 0.77, green: 0.76, blue: 1.00, alpha: 1),
+                UIColor(red: 1.00, green: 0.73, blue: 0.76, alpha: 1)
+            ]
         case "sakura":
-            return [UIColor(red: 1.00, green: 0.49, blue: 0.70, alpha: 1), UIColor(red: 0.65, green: 0.52, blue: 1.00, alpha: 1), UIColor(red: 1.00, green: 0.82, blue: 0.92, alpha: 1)]
+            return [
+                UIColor(red: 0.65, green: 0.75, blue: 1.00, alpha: 1),
+                UIColor(red: 0.96, green: 0.50, blue: 0.52, alpha: 1)
+            ]
         case "night":
-            return [UIColor(red: 0.35, green: 0.66, blue: 1.00, alpha: 1), UIColor(red: 0.50, green: 0.55, blue: 1.00, alpha: 1), UIColor(red: 0.48, green: 0.96, blue: 0.95, alpha: 1)]
+            return [
+                UIColor(red: 0.97, green: 0.58, blue: 0.64, alpha: 1),
+                UIColor(red: 0.99, green: 0.84, blue: 0.74, alpha: 1)
+            ]
         default:
-            return [UIColor(red: 0.13, green: 0.85, blue: 0.80, alpha: 1), UIColor(red: 0.48, green: 0.75, blue: 1.00, alpha: 1), UIColor(red: 1.00, green: 0.61, blue: 0.87, alpha: 1)]
+            return [
+                UIColor(red: 0.24, green: 0.20, blue: 0.58, alpha: 1),
+                UIColor(red: 0.17, green: 0.46, blue: 0.73, alpha: 1),
+                UIColor(red: 0.17, green: 0.67, blue: 0.82, alpha: 1),
+                UIColor(red: 0.21, green: 0.92, blue: 0.58, alpha: 1)
+            ]
         }
     }
 
     private static func schemeDrawerBackgroundColors(_ scheme: String) -> [UIColor] {
         switch scheme {
         case "ocean":
-            return [UIColor(red: 0.93, green: 0.98, blue: 1.00, alpha: 0.95), UIColor(red: 0.93, green: 0.96, blue: 1.00, alpha: 0.89), UIColor(red: 0.92, green: 0.97, blue: 1.00, alpha: 0.86)]
+            return [
+                UIColor(red: 0.99, green: 0.92, blue: 0.97, alpha: 0.95),
+                UIColor(red: 1.00, green: 0.97, blue: 0.88, alpha: 0.89),
+                UIColor(red: 1.00, green: 0.99, blue: 0.95, alpha: 0.86)
+            ]
         case "sunset":
-            return [UIColor(red: 1.00, green: 0.97, blue: 0.94, alpha: 0.95), UIColor(red: 1.00, green: 0.97, blue: 0.94, alpha: 0.89), UIColor(red: 1.00, green: 0.95, blue: 0.90, alpha: 0.86)]
+            return [
+                UIColor(red: 0.90, green: 0.99, blue: 0.99, alpha: 0.95),
+                UIColor(red: 0.95, green: 0.94, blue: 1.00, alpha: 0.89),
+                UIColor(red: 1.00, green: 0.93, blue: 0.95, alpha: 0.86)
+            ]
         case "sakura":
-            return [UIColor(red: 1.00, green: 0.96, blue: 0.98, alpha: 0.95), UIColor(red: 0.98, green: 0.96, blue: 1.00, alpha: 0.89), UIColor(red: 0.97, green: 0.95, blue: 1.00, alpha: 0.86)]
+            return [
+                UIColor(red: 0.93, green: 0.96, blue: 1.00, alpha: 0.95),
+                UIColor(red: 0.98, green: 0.92, blue: 0.94, alpha: 0.89),
+                UIColor(red: 1.00, green: 0.95, blue: 0.96, alpha: 0.86)
+            ]
         case "night":
-            return [UIColor(red: 0.94, green: 0.96, blue: 1.00, alpha: 0.95), UIColor(red: 0.93, green: 0.95, blue: 1.00, alpha: 0.89), UIColor(red: 0.93, green: 0.96, blue: 1.00, alpha: 0.86)]
+            return [
+                UIColor(red: 0.91, green: 0.99, blue: 0.97, alpha: 0.95),
+                UIColor(red: 0.96, green: 0.93, blue: 1.00, alpha: 0.89),
+                UIColor(red: 0.91, green: 0.89, blue: 0.99, alpha: 0.86)
+            ]
         default:
-            return [UIColor(red: 0.96, green: 0.98, blue: 1.00, alpha: 0.95), UIColor(red: 0.96, green: 1.00, blue: 0.97, alpha: 0.89), UIColor(red: 0.94, green: 0.97, blue: 1.00, alpha: 0.86)]
+            return [
+                UIColor(red: 0.98, green: 0.94, blue: 0.97, alpha: 0.95),
+                UIColor(red: 0.94, green: 0.94, blue: 1.00, alpha: 0.89),
+                UIColor(red: 0.96, green: 0.97, blue: 1.00, alpha: 0.86)
+            ]
         }
     }
 
     private static func schemeMapGlowColor(_ scheme: String) -> UIColor {
         switch scheme {
         case "ocean":
-            return UIColor(red: 0.54, green: 0.83, blue: 1.00, alpha: 0.30)
+            return UIColor(red: 0.95, green: 0.69, blue: 0.73, alpha: 0.30)
         case "sunset":
-            return UIColor(red: 1.00, green: 0.75, blue: 0.57, alpha: 0.30)
+            return UIColor(red: 0.78, green: 0.76, blue: 1.00, alpha: 0.30)
         case "sakura":
-            return UIColor(red: 1.00, green: 0.69, blue: 0.84, alpha: 0.28)
+            return UIColor(red: 0.96, green: 0.68, blue: 0.72, alpha: 0.28)
         case "night":
-            return UIColor(red: 0.46, green: 0.66, blue: 1.00, alpha: 0.30)
+            return UIColor(red: 0.79, green: 0.70, blue: 0.98, alpha: 0.30)
         default:
-            return UIColor(red: 0.59, green: 0.90, blue: 1.00, alpha: 0.26)
+            return UIColor(red: 0.71, green: 0.58, blue: 0.95, alpha: 0.26)
         }
+    }
+
+    private static func schemeGradientPoints(_ scheme: String) -> (start: UnitPoint, end: UnitPoint) {
+        _ = scheme
+        // Unify all scheme angles to ~133deg.
+        return (UnitPoint(x: 0.16, y: 0.03), UnitPoint(x: 0.86, y: 0.97))
     }
 
     private static func adjustedColor(_ color: UIColor, alphaRatio: Double, saturationRatio: Double) -> Color {
@@ -357,6 +406,7 @@ struct TsugieStatusTrackView: View {
     let variant: Variant
     let progress: Double
     var endpointIconName: String? = nil
+    var endpointIconIsColorized: Bool = true
 
     var body: some View {
         let clamped = min(max(progress, 0), 1)
@@ -510,24 +560,37 @@ struct TsugieStatusTrackView: View {
     @ViewBuilder
     private var endpointBubbleContent: some View {
         if let endpointIconName {
-            if endpointIconName == TsugieSmallIcon.hanabiAsset {
-                Image(endpointIconName)
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
-                    .frame(width: 13, height: 13)
-                    .scaleEffect(1.65)
-                    .rotationEffect(.degrees(23))
-                    .foregroundStyle(hanabiEndpointGradient)
+            if endpointIconIsColorized {
+                if endpointIconName == TsugieSmallIcon.hanabiAsset {
+                    Image(endpointIconName)
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 13, height: 13)
+                        .scaleEffect(1.65 * 1.3)
+                        .rotationEffect(.degrees(23))
+                        .foregroundStyle(hanabiEndpointGradient)
+                } else {
+                    Image(endpointIconName)
+                        .resizable()
+                        .renderingMode(.original)
+                        .scaledToFit()
+                        .frame(width: 13, height: 13)
+                        .scaleEffect(1.65 * 1.3)
+                        .saturation(1.18)
+                        .contrast(1.05)
+                }
             } else {
                 Image(endpointIconName)
                     .resizable()
-                    .renderingMode(.original)
+                    .renderingMode(endpointIconName == TsugieSmallIcon.hanabiAsset ? .template : .original)
                     .scaledToFit()
                     .frame(width: 13, height: 13)
                     .scaleEffect(1.65 * 1.3)
-                    .saturation(1.18)
-                    .contrast(1.05)
+                    .rotationEffect(.degrees(endpointIconName == TsugieSmallIcon.hanabiAsset ? 23 : 0))
+                    .saturation(0)
+                    .contrast(0.95)
+                    .foregroundStyle(Color(red: 0.54, green: 0.61, blue: 0.67))
             }
         } else {
             Text("へ")
@@ -553,6 +616,7 @@ struct TsugieMiniProgressView: View {
     var trackHeight: CGFloat = 10
     var glowBoost: CGFloat = 1
     var endpointIconName: String? = nil
+    var endpointIconIsColorized: Bool = true
 
     var body: some View {
         GeometryReader { proxy in
@@ -736,24 +800,37 @@ struct TsugieMiniProgressView: View {
     @ViewBuilder
     private var endpointBubbleContent: some View {
         if let endpointIconName {
-            if endpointIconName == TsugieSmallIcon.hanabiAsset {
-                Image(endpointIconName)
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
-                    .frame(width: 12, height: 12)
-                    .scaleEffect(1.65)
-                    .rotationEffect(.degrees(23))
-                    .foregroundStyle(hanabiEndpointGradient)
+            if endpointIconIsColorized {
+                if endpointIconName == TsugieSmallIcon.hanabiAsset {
+                    Image(endpointIconName)
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 12, height: 12)
+                        .scaleEffect(1.65 * 1.3)
+                        .rotationEffect(.degrees(23))
+                        .foregroundStyle(hanabiEndpointGradient)
+                } else {
+                    Image(endpointIconName)
+                        .resizable()
+                        .renderingMode(.original)
+                        .scaledToFit()
+                        .frame(width: 12, height: 12)
+                        .scaleEffect(1.65 * 1.3)
+                        .saturation(1.18)
+                        .contrast(1.05)
+                }
             } else {
                 Image(endpointIconName)
                     .resizable()
-                    .renderingMode(.original)
+                    .renderingMode(endpointIconName == TsugieSmallIcon.hanabiAsset ? .template : .original)
                     .scaledToFit()
                     .frame(width: 12, height: 12)
                     .scaleEffect(1.65 * 1.3)
-                    .saturation(1.18)
-                    .contrast(1.05)
+                    .rotationEffect(.degrees(endpointIconName == TsugieSmallIcon.hanabiAsset ? 23 : 0))
+                    .saturation(0)
+                    .contrast(0.95)
+                    .foregroundStyle(Color(red: 0.54, green: 0.61, blue: 0.67))
             }
         } else {
             Text("へ")

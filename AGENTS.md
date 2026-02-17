@@ -259,3 +259,21 @@
   - `需求/tsugie-ios-dev-handoff-v1.md`
   - `记录/项目变更记录.md`
   - `AGENTS.md`
+
+## 16. 数据端活动内容抓取与润色基线（新增）
+
+- 每个活动的“图片 + 活动介绍”增强链路默认使用统一脚本：`数据端/scripts/enrich_event_content.py`。
+- 链路定位为“低频长跑”任务，默认低 QPS、允许长时间运行，避免高频重复抓取。
+- 默认输入基于两个子项目最新融合批次：
+  - `数据端/HANABI/data/latest_run.json` 的 `fused_run_id`
+  - `数据端/OMATSURI/data/latest_run.json` 的 `fused_run_id`
+- 提示词模板固定本地化管理（可直接改文档，不改代码）：
+  - `数据端/文档/event-description-polish.prompt.md`（多段正文润色）
+  - `数据端/文档/event-one-liner.prompt.md`（一句话简述）
+- 输出基线：
+  - `数据端/HANABI/data/content/<run_id>/`、`数据端/OMATSURI/data/content/<run_id>/`
+  - 必须产出 `events_content.jsonl`、`events_content.csv`、`content_enrich_log.csv`、`content_summary.json`
+  - 可选图片本地落盘目录：`data/content_assets/<run_id>/`
+- 运行后允许回写 `latest_run.json` 的内容增强指针（如 `content_run_id`、`content_summary` 等），用于后续导出与运营追溯。
+- 维护要求（强制）：
+  - 若内容抓取脚本入口、提示词路径、润色策略（模型/开关）、输出结构发生变化，必须在同一次工作中同步更新 `AGENTS.md` 与 `记录/项目变更记录.md`。

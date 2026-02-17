@@ -9,35 +9,43 @@ struct MarkerActionBubbleView: View {
     let onFavoriteTap: () -> Void
     let onCheckedInTap: () -> Void
     private let menuClockwiseDegrees: Double = 33
-    private let menuRadius: CGFloat = 52
+    private let menuRadius: CGFloat = 44
+    private let menuContainerSize: CGFloat = 140
 
     var body: some View {
-        ZStack {
+        Color.clear
+        .frame(width: menuContainerSize, height: menuContainerSize)
+        .overlay(alignment: .bottom) {
+            ZStack {
             actionButton(
                 active: placeState.isFavorite,
                 label: L10n.Marker.favoriteA11y,
                 action: onFavoriteTap,
                 radius: menuRadius,
-                angleDegrees: -150
+                angleDegrees: -50,
+                buttonSize: 26
             ) {
-                FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 27)
+                FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 22)
             }
 
-            actionButton(
-                active: placeState.isCheckedIn,
-                label: L10n.Marker.checkedInA11y,
-                action: onCheckedInTap,
-                radius: menuRadius,
-                angleDegrees: -45
-            ) {
-                StampIconView(
-                    stamp: stamp,
-                    isColorized: placeState.isCheckedIn,
-                    size: 41
-                )
+                if !placeState.isCheckedIn {
+                    actionButton(
+                        active: false,
+                        label: L10n.Marker.checkedInA11y,
+                        action: onCheckedInTap,
+                        radius: menuRadius,
+                        angleDegrees: -150
+                    ) {
+                        StampIconView(
+                            stamp: stamp,
+                            isColorized: false,
+                            size: 41
+                        )
+                    }
+                }
             }
+            .frame(width: 1, height: 1)
         }
-        .frame(width: 1, height: 1)
         .transaction { transaction in
             transaction.animation = nil
             transaction.disablesAnimations = true
@@ -45,25 +53,27 @@ struct MarkerActionBubbleView: View {
     }
 
     private func actionButton<Icon: View>(
-        active: Bool,
+        active _: Bool,
         label: String,
         action: @escaping () -> Void,
         radius: CGFloat,
         angleDegrees: Double,
+        buttonSize: CGFloat = 30,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
         let finalAngle = angleDegrees + menuClockwiseDegrees
         let orbit = polarOffset(radius: isVisible ? radius : 0, angleDegrees: finalAngle)
+        let hitDiameter = max(buttonSize + 12, 44)
 
         return Button(action: action) {
             icon()
-                .frame(width: 30, height: 30)
+                .frame(width: buttonSize, height: buttonSize)
                 .background(
                     Circle()
                         .fill(Color.white.opacity(0.94))
                 )
                 .tsugieActiveGlow(
-                    isActive: active,
+                    isActive: false,
                     glowGradient: activeGradient,
                     glowColor: activeGlowColor,
                     cornerRadius: 15,
@@ -78,6 +88,8 @@ struct MarkerActionBubbleView: View {
                     secondaryYOffset: 6
                 )
         }
+        .frame(width: hitDiameter, height: hitDiameter)
+        .contentShape(Circle())
         .offset(orbit)
         .opacity(isVisible ? 1 : 0)
         .buttonStyle(.plain)

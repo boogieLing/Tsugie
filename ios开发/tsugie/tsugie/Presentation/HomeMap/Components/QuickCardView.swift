@@ -28,8 +28,17 @@ struct QuickCardView: View {
 
             HStack(alignment: .center, spacing: 10) {
                 Text(L10n.QuickCard.fastPlanTitle)
-                    .font(.system(size: 17, weight: .heavy))
-                    .foregroundStyle(Color(red: 0.06, green: 0.75, blue: 0.62))
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.00, green: 0.48, blue: 0.87),
+                                Color(red: 0.00, green: 0.93, blue: 0.74)
+                            ],
+                            startPoint: UnitPoint(x: 0.05, y: 0.02),
+                            endPoint: UnitPoint(x: 0.95, y: 0.98)
+                        )
+                    )
 
                 Spacer()
 
@@ -40,25 +49,31 @@ struct QuickCardView: View {
                 }
             }
 
-            HStack(alignment: .lastTextBaseline, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 Text(place.name)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: quickTitleFontSize, weight: .bold))
                     .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-                    .lineLimit(1)
+                    .lineLimit(quickTitleLineLimit)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer()
 
                 Text(timeRangeText)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color(red: 0.33, green: 0.45, blue: 0.51))
+                    .lineLimit(1)
+                    .padding(.top, 3)
             }
-            .padding(.top, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 14)
 
             TsugieStatusTrackView(
                 snapshot: snapshot,
                 variant: .quick,
                 progress: progress ?? 0.08,
-                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
+                endpointIconName: TsugieSmallIcon.assetName(for: place.heType),
+                endpointIconIsColorized: placeState.isFavorite
             )
             .padding(.top, 8)
 
@@ -108,7 +123,12 @@ struct QuickCardView: View {
         .padding(.horizontal, 14)
         .padding(.bottom, 16)
         .background(alignment: .bottomTrailing) {
-            PlaceStampBackgroundView(stamp: stamp, size: 173, loadMode: .immediate)
+            PlaceStampBackgroundView(
+                stamp: stamp,
+                size: 208,
+                loadMode: .immediate,
+                rotationDegrees: stamp?.rotationDegrees ?? 0
+            )
                 .offset(x: 18, y: 20)
         }
         .background(
@@ -152,5 +172,19 @@ struct QuickCardView: View {
     private var timeRangeText: String {
         guard snapshot.status != .unknown else { return L10n.Common.unknownTime }
         return L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
+    }
+
+    private var quickTitleLineLimit: Int {
+        place.name.count >= 16 ? 2 : 1
+    }
+
+    private var quickTitleFontSize: CGFloat {
+        if place.name.count >= 26 {
+            return 18
+        }
+        if place.name.count >= 16 {
+            return 20
+        }
+        return 22
     }
 }

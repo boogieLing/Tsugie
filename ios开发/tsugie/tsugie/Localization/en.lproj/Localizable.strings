@@ -23,7 +23,7 @@
 "home.menu.open_a11y" = "Open menu";
 "home.quick.date_today_soon" = "Today, starting soon!";
 
-"quickcard.fast_plan" = "⚡ Fastest Plan";
+"quickcard.fast_plan" = "✨ Fastest Plan";
 "quickcard.close_a11y" = "Close quick card";
 "quickcard.view_details" = "View details";
 "quickcard.start_route" = "Start route";
@@ -100,6 +100,8 @@
 "calendar.category.all" = "All";
 "calendar.category.hanabi" = "Hanabi";
 "calendar.category.matsuri" = "Festival";
+"calendar.category.sakura" = "Sakura";
+"calendar.category.momiji" = "Momiji";
 "calendar.category.nature" = "Scenery";
 "calendar.category.other" = "Other";
 

@@ -25,6 +25,8 @@ struct DetailPanelView: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color(red: 0.42, green: 0.55, blue: 0.60))
 
+                FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 30)
+
                 Spacer()
 
                 TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.Detail.closeA11y)
@@ -36,11 +38,11 @@ struct DetailPanelView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
                         Text(place.name)
-                            .font(.system(size: 30, weight: .bold))
+                            .font(.system(size: detailTitleFontSize, weight: .bold))
                             .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-                            .lineLimit(2)
-                        Spacer()
-                        FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 20)
+                            .lineLimit(detailTitleLineLimit)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     HStack {
@@ -63,10 +65,10 @@ struct DetailPanelView: View {
                     miniMapBlock
                         .padding(.top, 14)
 
-                    introBlock
+                    statsBlock
                         .padding(.top, 14)
 
-                    statsBlock
+                    introBlock
                         .padding(.top, 14)
                 }
                 .padding(.horizontal, 16)
@@ -80,7 +82,13 @@ struct DetailPanelView: View {
                     .fill(Color(red: 0.72, green: 1.0, blue: 0.90, opacity: 0.3))
                     .frame(width: 360, height: 360)
                     .offset(x: -140, y: -220)
-                PlaceStampBackgroundView(stamp: stamp, size: 216)
+                PlaceStampBackgroundView(
+                    stamp: stamp,
+                    size: 260,
+                    loadMode: .immediate,
+                    rotationDegrees: stamp?.rotationDegrees ?? 0
+                )
+                    .opacity(0.76)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .offset(x: 16, y: 20)
             }
@@ -108,7 +116,8 @@ struct DetailPanelView: View {
                 snapshot: snapshot,
                 variant: .detail,
                 progress: progressValue,
-                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
+                endpointIconName: TsugieSmallIcon.assetName(for: place.heType),
+                endpointIconIsColorized: placeState.isFavorite
             )
                 .padding(.top, 8)
 
@@ -121,6 +130,7 @@ struct DetailPanelView: View {
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
             }
+            .padding(.top, 9)
         }
     }
 
@@ -187,6 +197,7 @@ struct DetailPanelView: View {
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(12)
         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -227,24 +238,16 @@ struct DetailPanelView: View {
             .padding(.bottom, 7)
 
             Capsule()
-                .fill(Color(red: 0.79, green: 0.89, blue: 0.92, opacity: 0.58))
+                .fill(activeGlowColor.opacity(0.20))
                 .frame(height: 8)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(red: 0.16, green: 0.83, blue: 0.77), Color(red: 0.45, green: 0.73, blue: 1.00)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .mask(
-                            GeometryReader { proxy in
-                                Rectangle()
-                                    .frame(width: proxy.size.width * CGFloat(safe) / 100)
-                            }
-                        )
+                .overlay {
+                    GeometryReader { proxy in
+                        let width = max(8, proxy.size.width * CGFloat(safe) / 100)
+                        Capsule()
+                            .fill(activeGradient)
+                            .frame(width: width, height: 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
         }
     }
@@ -317,5 +320,19 @@ struct DetailPanelView: View {
         }
 
         return LinearGradient(colors: [from, to], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var detailTitleLineLimit: Int {
+        place.name.count >= 20 ? 3 : 2
+    }
+
+    private var detailTitleFontSize: CGFloat {
+        if place.name.count >= 30 {
+            return 24
+        }
+        if place.name.count >= 20 {
+            return 27
+        }
+        return 30
     }
 }
