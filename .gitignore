@@ -4,6 +4,7 @@ r0-review/
 
 .DS_Store
 **/.DS_Store
+.module-cache/
 
 ios开发/tsugie/.derivedData/
 ios开发/tsugie/tsugie.xcodeproj/xcuserdata/
