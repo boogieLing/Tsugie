@@ -24,6 +24,7 @@
 "home.quick.date_today_soon" = "Today, starting soon!";
 
 "quickcard.fast_plan" = "✨ Fastest Plan";
+"quickcard.expired_title" = "Ended";
 "quickcard.close_a11y" = "Close quick card";
 "quickcard.view_details" = "View details";
 "quickcard.start_route" = "Start route";
@@ -61,17 +62,26 @@
 "detail.end_at" = "End %@";
 
 "drawer.title" = "Tsugie Nav";
-"drawer.menu.favorites" = "Wishmarks";
+"drawer.menu.favorites" = "Wana go";
 "drawer.menu.notifications" = "Notifications";
 "drawer.menu.contact" = "Contact";
 "drawer.favorites.subtitle" = "Keep places you want to go and places you've visited.";
 "drawer.favorites.empty" = "No wishmarks yet.";
 "drawer.favorites.open" = "Open favorites drawer";
+"drawer.favorites.cancel_action" = "Remove";
+"drawer.favorites.fastest_title" = "Soonest from wishmarks";
+"drawer.favorites.fastest.empty" = "No favorites starting soon.";
+
+"drawer.favorites.fastest.hint.today" = "Today available: leave now!";
+"drawer.favorites.fastest.hint.within_week" = "Within a week: in %d day(s)...";
+"drawer.favorites.fastest.hint.within_month" = "Within a month: in %d week(s)...";
+"drawer.favorites.fastest.hint.other" = "Any other places you want to visit?";
 "drawer.notifications.title" = "Notification settings";
 "drawer.notifications.start_reminder.title" = "Before-start reminder";
 "drawer.notifications.start_reminder.hint" = "Notify right before it starts";
 "drawer.notifications.nearby.title" = "Nearby spot alerts";
 "drawer.notifications.nearby.hint" = "Also notify slightly farther options";
+"notification.starting_soon_title" = "Starting soon...";
 "drawer.contact.title" = "Contact";
 "drawer.contact.mail_action" = "Email us";
 "drawer.contact.copy_mail" = "Copy email address";

@@ -1,6 +1,11 @@
 import SwiftUI
 
 struct QuickCardView: View {
+    enum Mode {
+        case quick
+        case expired
+    }
+
     let place: HePlace
     let snapshot: EventStatusSnapshot
     let progress: Double?
@@ -10,6 +15,7 @@ struct QuickCardView: View {
     let stamp: PlaceStampPresentation?
     let activeGradient: LinearGradient
     let activeGlowColor: Color
+    var mode: Mode = .quick
     let onClose: () -> Void
     let onOpenDetail: () -> Void
     let onExpandDetailBySwipe: () -> Void
@@ -27,18 +33,7 @@ struct QuickCardView: View {
                 .padding(.bottom, 8)
 
             HStack(alignment: .center, spacing: 10) {
-                Text(L10n.QuickCard.fastPlanTitle)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.00, green: 0.48, blue: 0.87),
-                                Color(red: 0.00, green: 0.93, blue: 0.74)
-                            ],
-                            startPoint: UnitPoint(x: 0.05, y: 0.02),
-                            endPoint: UnitPoint(x: 0.95, y: 0.98)
-                        )
-                    )
+                titleView
 
                 Spacer()
 
@@ -172,6 +167,65 @@ struct QuickCardView: View {
     private var timeRangeText: String {
         guard snapshot.status != .unknown else { return L10n.Common.unknownTime }
         return L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
+    }
+
+    @ViewBuilder
+    private var titleView: some View {
+        switch mode {
+        case .quick:
+            Text(L10n.QuickCard.fastPlanTitle)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(quickTitleGradient)
+        case .expired:
+            let titleText = "☁️ \(L10n.QuickCard.expiredTitle)"
+            Text(titleText)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(expiredTitleLinearGradient)
+                .overlay {
+                    Text(titleText)
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(expiredTitleRadialGradient)
+                        .blendMode(.screen)
+                        .mask(
+                            Text(titleText)
+                                .font(.system(size: 15, weight: .heavy))
+                        )
+                }
+        }
+    }
+
+    private var quickTitleGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.00, green: 0.48, blue: 0.87),
+                Color(red: 0.00, green: 0.93, blue: 0.74)
+            ],
+            startPoint: UnitPoint(x: 0.05, y: 0.02),
+            endPoint: UnitPoint(x: 0.95, y: 0.98)
+        )
+    }
+
+    private var expiredTitleLinearGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 188.0 / 255.0, green: 197.0 / 255.0, blue: 206.0 / 255.0),
+                Color(red: 146.0 / 255.0, green: 158.0 / 255.0, blue: 173.0 / 255.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var expiredTitleRadialGradient: RadialGradient {
+        RadialGradient(
+            colors: [
+                Color.white.opacity(0.30),
+                Color.black.opacity(0.30)
+            ],
+            center: .topLeading,
+            startRadius: 0,
+            endRadius: 120
+        )
     }
 
     private var quickTitleLineLimit: Int {

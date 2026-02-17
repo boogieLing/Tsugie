@@ -606,9 +606,12 @@ struct CalendarPageView: View {
                         Text(item.snapshot.leftLabel)
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.31, green: 0.43, blue: 0.48))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .minimumScaleFactor(0.86)
+                            .layoutPriority(2)
                     }
-
-                    Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(alignment: .trailing, spacing: 5) {
                         HStack(spacing: 6) {

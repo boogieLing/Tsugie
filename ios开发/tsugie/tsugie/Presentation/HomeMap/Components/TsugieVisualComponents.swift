@@ -560,14 +560,16 @@ struct TsugieStatusTrackView: View {
     @ViewBuilder
     private var endpointBubbleContent: some View {
         if let endpointIconName {
+            let isHanabiEndpoint = endpointIconName == TsugieSmallIcon.hanabiAsset
+            let endpointScale: CGFloat = (1.65 * 1.3) * (isHanabiEndpoint ? 0.8 : 1.0)
             if endpointIconIsColorized {
-                if endpointIconName == TsugieSmallIcon.hanabiAsset {
+                if isHanabiEndpoint {
                     Image(endpointIconName)
                         .resizable()
                         .renderingMode(.template)
                         .scaledToFit()
                         .frame(width: 13, height: 13)
-                        .scaleEffect(1.65 * 1.3)
+                        .scaleEffect(endpointScale)
                         .rotationEffect(.degrees(23))
                         .foregroundStyle(hanabiEndpointGradient)
                 } else {
@@ -576,18 +578,18 @@ struct TsugieStatusTrackView: View {
                         .renderingMode(.original)
                         .scaledToFit()
                         .frame(width: 13, height: 13)
-                        .scaleEffect(1.65 * 1.3)
+                        .scaleEffect(endpointScale)
                         .saturation(1.18)
                         .contrast(1.05)
                 }
             } else {
                 Image(endpointIconName)
                     .resizable()
-                    .renderingMode(endpointIconName == TsugieSmallIcon.hanabiAsset ? .template : .original)
+                    .renderingMode(isHanabiEndpoint ? .template : .original)
                     .scaledToFit()
                     .frame(width: 13, height: 13)
-                    .scaleEffect(1.65 * 1.3)
-                    .rotationEffect(.degrees(endpointIconName == TsugieSmallIcon.hanabiAsset ? 23 : 0))
+                    .scaleEffect(endpointScale)
+                    .rotationEffect(.degrees(isHanabiEndpoint ? 23 : 0))
                     .saturation(0)
                     .contrast(0.95)
                     .foregroundStyle(Color(red: 0.54, green: 0.61, blue: 0.67))

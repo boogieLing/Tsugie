@@ -5,12 +5,39 @@ import os
 import SwiftUI
 import UIKit
 import Darwin
+import UserNotifications
 
 enum SideDrawerMenu: String, CaseIterable {
     case none
     case favorites
     case notifications
     case contact
+}
+
+private extension UNUserNotificationCenter {
+    func notificationSettingsAsync() async -> UNNotificationSettings {
+        await withCheckedContinuation { continuation in
+            getNotificationSettings { settings in
+                continuation.resume(returning: settings)
+            }
+        }
+    }
+
+    func pendingNotificationIDs() async -> Set<String> {
+        await withCheckedContinuation { continuation in
+            getPendingNotificationRequests { requests in
+                continuation.resume(returning: Set(requests.map(\.identifier)))
+            }
+        }
+    }
+
+    func deliveredNotificationIDs() async -> Set<String> {
+        await withCheckedContinuation { continuation in
+            getDeliveredNotifications { notifications in
+                continuation.resume(returning: Set(notifications.map(\.request.identifier)))
+            }
+        }
+    }
 }
 
 enum FavoriteDrawerFilter: String, CaseIterable {
@@ -43,6 +70,7 @@ final class HomeMapViewModel: ObservableObject {
         let selectedPlaceID: UUID?
         let markerActionPlaceID: UUID?
         let forcedExpandedPlaceID: UUID?
+        let temporaryExpiredMarkerPlaceID: UUID?
         let isDetailVisible: Bool
         let visibleMenuState: PlaceState?
         let overlapCenterLatE3: Int
@@ -75,6 +103,12 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
+    private struct LocalNotificationCandidate {
+        let identifier: String
+        let triggerDate: Date
+        let body: String
+    }
+
     private var mapCameraPosition: MapCameraPosition
     @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
@@ -82,6 +116,8 @@ final class HomeMapViewModel: ObservableObject {
     private var _selectedPlaceID: UUID?
     private var _markerActionPlaceID: UUID?
     private var _quickCardPlaceID: UUID?
+    private var _expiredCardPlaceID: UUID?
+    private var _temporaryExpiredMarkerPlaceID: UUID?
     private var _detailPlaceID: UUID?
     private var _forcedExpandedPlaceID: UUID?
     @Published private(set) var isCalendarPresented = false
@@ -97,7 +133,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published var themeGlowRatio: Double = 1
     @Published var selectedLanguageCode: String = L10n.languageCode
     @Published var worldMode = false
-    @Published var startNotificationEnabled = true
+    @Published var startNotificationEnabled = false
     @Published var nearbyNotificationEnabled = false
 
     private let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "HomeMapViewModel")
@@ -183,6 +219,15 @@ final class HomeMapViewModel: ObservableObject {
     private var suppressMapInteractionUpdatesUntil: Date = .distantPast
     private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
     private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
+    private let startReminderNotificationPrefix = "tsugie.notify.start."
+    private let nearbyReminderNotificationPrefix = "tsugie.notify.nearby."
+    private let startReminderLeadTime: TimeInterval = 97 * 60
+    private let nearbyReminderLookahead: TimeInterval = 24 * 60 * 60
+    private let minimumNotificationLeadTime: TimeInterval = 8
+    private let maxStartReminderCount = 36
+    private let maxNearbyReminderCount = 16
+    private var startReminderSyncTask: Task<Void, Never>?
+    private var nearbyReminderSyncTask: Task<Void, Never>?
 
     init(
         places: [HePlace]? = nil,
@@ -244,6 +289,13 @@ final class HomeMapViewModel: ObservableObject {
         return place(for: quickCardPlaceID)
     }
 
+    var expiredCardPlace: HePlace? {
+        guard let expiredCardPlaceID = _expiredCardPlaceID else {
+            return nil
+        }
+        return place(for: expiredCardPlaceID)
+    }
+
     var detailPlace: HePlace? {
         guard let detailPlaceID = _detailPlaceID else {
             return nil
@@ -261,6 +313,10 @@ final class HomeMapViewModel: ObservableObject {
 
     var quickCardPlaceID: UUID? {
         _quickCardPlaceID
+    }
+
+    var expiredCardPlaceID: UUID? {
+        _expiredCardPlaceID
     }
 
     var detailPlaceID: UUID? {
@@ -329,6 +385,12 @@ final class HomeMapViewModel: ObservableObject {
         debugLog("onViewAppear allPlaces=\(self.places.count) renderedPlaces=\(self.renderedPlaces.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
         bootstrapNearbyPlacesIfNeeded()
         scheduleAutoOpenIfNeeded()
+        if startNotificationEnabled {
+            scheduleStartReminderSync()
+        }
+        if nearbyNotificationEnabled {
+            scheduleNearbyReminderSync()
+        }
     }
 
     func onViewDisappear() {
@@ -345,6 +407,10 @@ final class HomeMapViewModel: ObservableObject {
         nearbyLoadTask?.cancel()
         nearbyLoadTask = nil
         activeNearbyQueryToken = nil
+        startReminderSyncTask?.cancel()
+        startReminderSyncTask = nil
+        nearbyReminderSyncTask?.cancel()
+        nearbyReminderSyncTask = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
@@ -383,7 +449,7 @@ final class HomeMapViewModel: ObservableObject {
                 objectWillChange.send()
             }
             withAnimation(quickCardDismissAnimation) {
-                closeQuickCard(restoreMapZoom: false)
+                closeActiveBottomCard(restoreMapZoom: false)
             }
             return
         }
@@ -411,9 +477,9 @@ final class HomeMapViewModel: ObservableObject {
         if let until = ignoreMapTapUntil, Date() < until {
             return
         }
-        if _quickCardPlaceID != nil {
+        if _quickCardPlaceID != nil || _expiredCardPlaceID != nil {
             withAnimation(quickCardDismissAnimation) {
-                closeQuickCard(restoreMapZoom: true)
+                closeActiveBottomCard(restoreMapZoom: true)
             }
             return
         }
@@ -470,6 +536,8 @@ final class HomeMapViewModel: ObservableObject {
             _markerActionPlaceID = keepMarkerActions ? placeID : nil
             _detailPlaceID = nil
             _quickCardPlaceID = showPanel ? placeID : nil
+            _expiredCardPlaceID = nil
+            _temporaryExpiredMarkerPlaceID = nil
             _forcedExpandedPlaceID = shouldForceExpandedMarker ? placeID : nil
             if let focusedRegion,
                let normalizedFocusedRegion = normalizedRegion(focusedRegion) {
@@ -505,6 +573,39 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
+    func closeExpiredCard(restoreMapZoom: Bool = true) {
+        cancelPendingQuickCardPresentation()
+        let focusedPlaceID = _selectedPlaceID
+        let shouldDismissMarkerSelection = _detailPlaceID == nil
+
+        if shouldDismissMarkerSelection {
+            cancelPendingMapFocus()
+        }
+        mutateInteractionState {
+            _expiredCardPlaceID = nil
+            _temporaryExpiredMarkerPlaceID = nil
+            _forcedExpandedPlaceID = nil
+            if shouldDismissMarkerSelection {
+                _markerActionPlaceID = nil
+                _selectedPlaceID = nil
+            }
+        }
+
+        if shouldDismissMarkerSelection, restoreMapZoom {
+            scheduleMapZoomRestoreAfterQuickDismiss(focusedPlaceID: focusedPlaceID)
+        }
+    }
+
+    private func closeActiveBottomCard(restoreMapZoom: Bool) {
+        if _expiredCardPlaceID != nil {
+            closeExpiredCard(restoreMapZoom: restoreMapZoom)
+            return
+        }
+        if _quickCardPlaceID != nil {
+            closeQuickCard(restoreMapZoom: restoreMapZoom)
+        }
+    }
+
     func selectPlaceFromCarousel(placeID: UUID) {
         guard _detailPlaceID == nil else { return }
         cancelPendingQuickCardPresentation()
@@ -525,12 +626,14 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func openDetailForCurrentQuickCard() {
-        guard let quickCardPlaceID = _quickCardPlaceID else {
+        guard let currentBottomCardPlaceID = _quickCardPlaceID ?? _expiredCardPlaceID else {
             return
         }
-        guard placeForInteraction(quickCardPlaceID) != nil else {
+        guard placeForInteraction(currentBottomCardPlaceID) != nil else {
             mutateInteractionState {
                 _quickCardPlaceID = nil
+                _expiredCardPlaceID = nil
+                _temporaryExpiredMarkerPlaceID = nil
                 _selectedPlaceID = nil
                 _markerActionPlaceID = nil
                 _detailPlaceID = nil
@@ -539,9 +642,12 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         mutateInteractionState {
-            _detailPlaceID = quickCardPlaceID
-            _selectedPlaceID = quickCardPlaceID
+            _detailPlaceID = currentBottomCardPlaceID
+            _selectedPlaceID = currentBottomCardPlaceID
             _markerActionPlaceID = nil
+            _quickCardPlaceID = nil
+            _expiredCardPlaceID = nil
+            _temporaryExpiredMarkerPlaceID = nil
         }
     }
 
@@ -677,6 +783,7 @@ final class HomeMapViewModel: ObservableObject {
             selectedPlaceID: _selectedPlaceID,
             markerActionPlaceID: _markerActionPlaceID,
             forcedExpandedPlaceID: _forcedExpandedPlaceID,
+            temporaryExpiredMarkerPlaceID: _temporaryExpiredMarkerPlaceID,
             isDetailVisible: isDetailVisible,
             visibleMenuState: visibleMenuState,
             overlapCenterLatE3: Int((overlapRegion.center.latitude * 1_000).rounded()),
@@ -699,7 +806,7 @@ final class HomeMapViewModel: ObservableObject {
         let clusters = markerClusters(from: places, region: overlapRegion)
         let forcedExpandedPlaceID = _forcedExpandedPlaceID
         let forcedPlace = forcedExpandedPlaceID.flatMap { placeForInteraction($0) }
-        let entries = clusters.compactMap { cluster -> MapMarkerEntry? in
+        var entries = clusters.compactMap { cluster -> MapMarkerEntry? in
             let renderedPlace: HePlace
             let clusterCount: Int
             if let forcedExpandedPlaceID,
@@ -723,10 +830,12 @@ final class HomeMapViewModel: ObservableObject {
                 isSelected: _selectedPlaceID == renderedPlace.id,
                 isCluster: isCluster,
                 clusterCount: clusterCount,
+                isTemporary: false,
                 isMenuVisible: isMenuVisible,
                 menuPlaceState: isMenuVisible ? placeState(for: renderedPlace.id) : nil
             )
         }
+        appendTemporaryExpiredMarkerIfNeeded(to: &entries, isDetailVisible: isDetailVisible)
 
         markerEntriesCacheKey = cacheKey
         markerEntriesCache = entries
@@ -753,7 +862,8 @@ final class HomeMapViewModel: ObservableObject {
         // Selection/menu/forced-expanded target changes may alter overlap rendering ownership.
         guard previousKey.selectedPlaceID == nextKey.selectedPlaceID,
               previousKey.markerActionPlaceID == nextKey.markerActionPlaceID,
-              previousKey.forcedExpandedPlaceID == nextKey.forcedExpandedPlaceID else {
+              previousKey.forcedExpandedPlaceID == nextKey.forcedExpandedPlaceID,
+              previousKey.temporaryExpiredMarkerPlaceID == nextKey.temporaryExpiredMarkerPlaceID else {
             return nil
         }
 
@@ -795,11 +905,38 @@ final class HomeMapViewModel: ObservableObject {
                 isSelected: nextIsSelected,
                 isCluster: previousEntry.isCluster,
                 clusterCount: previousEntry.clusterCount,
+                isTemporary: previousEntry.isTemporary,
                 isMenuVisible: nextIsMenuVisible,
                 menuPlaceState: nextMenuState
             )
         }
         return updated
+    }
+
+    private func appendTemporaryExpiredMarkerIfNeeded(
+        to entries: inout [MapMarkerEntry],
+        isDetailVisible: Bool
+    ) {
+        guard let temporaryMarkerPlaceID = _temporaryExpiredMarkerPlaceID,
+              entries.contains(where: { $0.id == temporaryMarkerPlaceID }) == false,
+              let place = place(for: temporaryMarkerPlaceID) else {
+            return
+        }
+        let isMenuVisible = _markerActionPlaceID == temporaryMarkerPlaceID && !isDetailVisible
+        entries.append(
+            MapMarkerEntry(
+                id: place.id,
+                name: place.name,
+                coordinate: place.coordinate,
+                heType: place.heType,
+                isSelected: _selectedPlaceID == place.id,
+                isCluster: false,
+                clusterCount: 1,
+                isTemporary: true,
+                isMenuVisible: isMenuVisible,
+                menuPlaceState: isMenuVisible ? placeState(for: place.id) : nil
+            )
+        )
     }
 
     func filteredFavoritePlaces() -> [HePlace] {
@@ -866,19 +1003,122 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func openQuickFromDrawer(placeID: UUID) {
-        guard placeForInteraction(placeID) != nil else {
-            return
-        }
-        closeSideDrawerPanel()
-        openQuickCard(placeID: placeID, keepMarkerActions: true)
+        openQuickFromExternalNavigation(placeID: placeID, closeDrawer: true)
+    }
+
+    func openQuickFromCalendar(placeID: UUID) {
+        openQuickFromExternalNavigation(placeID: placeID, closeDrawer: false)
     }
 
     func toggleStartNotification() {
-        startNotificationEnabled.toggle()
+        if startNotificationEnabled {
+            startNotificationEnabled = false
+            startReminderSyncTask?.cancel()
+            startReminderSyncTask = nil
+            let prefix = startReminderNotificationPrefix
+            Task { [weak self] in
+                await self?.removePendingNotifications(withPrefix: prefix)
+            }
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            let granted = await self.ensureNotificationAuthorization()
+            guard !Task.isCancelled else { return }
+            guard granted else {
+                await MainActor.run {
+                    self.startNotificationEnabled = false
+                }
+                return
+            }
+            await MainActor.run {
+                self.startNotificationEnabled = true
+                self.scheduleStartReminderSync()
+            }
+        }
+    }
+
+    private func openQuickFromExternalNavigation(placeID: UUID, closeDrawer: Bool) {
+        guard let place = placeForInteraction(placeID) else {
+            return
+        }
+        cancelPendingQuickCardPresentation()
+        cancelPendingMapZoomRestore()
+        cancelPendingMapFocus()
+        markAnnotationTapCooldown(0.45)
+        if closeDrawer {
+            closeSideDrawerPanel()
+        }
+        if eventStatus(for: place) == .ended {
+            withAnimation(quickCardPresentationAnimation) {
+                openExpiredCard(place: place)
+            }
+            return
+        }
+        withAnimation(quickCardPresentationAnimation) {
+            openQuickCard(placeID: placeID, keepMarkerActions: true, showPanel: true)
+        }
+    }
+
+    private func openExpiredCard(place: HePlace) {
+        resetMapCategoryFilterIfNeeded(for: place)
+        ensureRenderedContains(place)
+        let currentPlaceState = placeStateStore.state(for: place.id)
+        if !currentPlaceState.isFavorite && !currentPlaceState.isCheckedIn {
+            placeStampStore.refreshTransientStamp(for: place.id, heType: place.heType)
+        }
+        cancelPendingMapZoomRestore()
+        let overlapRegion = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) ?? MKCoordinateRegion(
+            center: resolvedCenter,
+            span: defaultMapSpan
+        )
+        let shouldForceExpandedMarker = isNonPrimaryOverlapPlace(place, region: overlapRegion)
+        let focusedRegion = nonExpandingFocusedRegion(for: place)
+        mutateInteractionState {
+            _selectedPlaceID = place.id
+            _markerActionPlaceID = nil
+            _detailPlaceID = nil
+            _quickCardPlaceID = nil
+            _expiredCardPlaceID = place.id
+            _temporaryExpiredMarkerPlaceID = place.id
+            _forcedExpandedPlaceID = shouldForceExpandedMarker ? place.id : nil
+            if let normalizedFocusedRegion = normalizedRegion(focusedRegion) {
+                mapCameraPosition = .region(normalizedFocusedRegion)
+                lastKnownMapRegion = normalizedFocusedRegion
+                registerProgrammaticCameraChangeTarget(
+                    normalizedFocusedRegion,
+                    source: "openExpiredCardFocus"
+                )
+            }
+        }
     }
 
     func toggleNearbyNotification() {
-        nearbyNotificationEnabled.toggle()
+        if nearbyNotificationEnabled {
+            nearbyNotificationEnabled = false
+            nearbyReminderSyncTask?.cancel()
+            nearbyReminderSyncTask = nil
+            let prefix = nearbyReminderNotificationPrefix
+            Task { [weak self] in
+                await self?.removePendingNotifications(withPrefix: prefix)
+            }
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            let granted = await self.ensureNotificationAuthorization()
+            guard !Task.isCancelled else { return }
+            guard granted else {
+                await MainActor.run {
+                    self.nearbyNotificationEnabled = false
+                }
+                return
+            }
+            await MainActor.run {
+                self.nearbyNotificationEnabled = true
+                self.scheduleNearbyReminderSync()
+            }
+        }
     }
 
     func resetToCurrentLocation() {
@@ -886,10 +1126,216 @@ final class HomeMapViewModel: ObservableObject {
         reloadNearbyPlacesAroundCurrentLocation(userInitiated: true)
     }
 
+    private func scheduleStartReminderSync() {
+        startReminderSyncTask?.cancel()
+        startReminderSyncTask = Task { [weak self] in
+            await self?.syncStartReminderNotifications()
+        }
+    }
+
+    private func scheduleNearbyReminderSync() {
+        nearbyReminderSyncTask?.cancel()
+        nearbyReminderSyncTask = Task { [weak self] in
+            await self?.syncNearbyReminderNotifications()
+        }
+    }
+
+    private func syncStartReminderNotifications() async {
+        guard startNotificationEnabled else {
+            return
+        }
+        let now = Date()
+        let candidates = startReminderCandidates(now: now)
+        await syncNotificationCandidates(
+            candidates,
+            prefix: startReminderNotificationPrefix,
+            title: L10n.Notification.startingSoonTitle
+        )
+    }
+
+    private func syncNearbyReminderNotifications() async {
+        guard nearbyNotificationEnabled else {
+            return
+        }
+        let now = Date()
+        let candidates = nearbyReminderCandidates(now: now)
+        await syncNotificationCandidates(
+            candidates,
+            prefix: nearbyReminderNotificationPrefix,
+            title: L10n.Notification.startingSoonTitle
+        )
+    }
+
+    private func startReminderCandidates(now: Date) -> [LocalNotificationCandidate] {
+        var seen = Set<String>()
+        let sorted = favoritePlaces().compactMap { place -> LocalNotificationCandidate? in
+            let snapshot = eventSnapshot(for: place, now: now)
+            guard snapshot.status == .upcoming,
+                  let startDate = snapshot.startDate else {
+                return nil
+            }
+            let identifier = notificationIdentifier(
+                prefix: startReminderNotificationPrefix,
+                placeID: place.id,
+                startDate: startDate
+            )
+            guard seen.insert(identifier).inserted else {
+                return nil
+            }
+            return LocalNotificationCandidate(
+                identifier: identifier,
+                triggerDate: resolvedReminderTriggerDate(startDate: startDate, now: now),
+                body: place.name
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.triggerDate < rhs.triggerDate
+        }
+
+        return Array(sorted.prefix(maxStartReminderCount))
+    }
+
+    private func nearbyReminderCandidates(now: Date) -> [LocalNotificationCandidate] {
+        var seen = Set<String>()
+        let sorted = nearbyPlaces(now: now, limit: maxNearbyReminderCount * 3).compactMap { place -> LocalNotificationCandidate? in
+            if placeState(for: place.id).isFavorite {
+                return nil
+            }
+            let snapshot = eventSnapshot(for: place, now: now)
+            guard snapshot.status == .upcoming,
+                  let startDate = snapshot.startDate else {
+                return nil
+            }
+            let startDelta = startDate.timeIntervalSince(now)
+            guard startDelta <= nearbyReminderLookahead else {
+                return nil
+            }
+            let identifier = notificationIdentifier(
+                prefix: nearbyReminderNotificationPrefix,
+                placeID: place.id,
+                startDate: startDate
+            )
+            guard seen.insert(identifier).inserted else {
+                return nil
+            }
+            return LocalNotificationCandidate(
+                identifier: identifier,
+                triggerDate: resolvedReminderTriggerDate(startDate: startDate, now: now),
+                body: place.name
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.triggerDate < rhs.triggerDate
+        }
+
+        return Array(sorted.prefix(maxNearbyReminderCount))
+    }
+
+    private func resolvedReminderTriggerDate(startDate: Date, now: Date) -> Date {
+        let target = startDate.addingTimeInterval(-startReminderLeadTime)
+        let minimum = now.addingTimeInterval(minimumNotificationLeadTime)
+        return target > minimum ? target : minimum
+    }
+
+    private func notificationIdentifier(prefix: String, placeID: UUID, startDate: Date) -> String {
+        "\(prefix)\(placeID.uuidString).\(Int(startDate.timeIntervalSince1970.rounded()))"
+    }
+
+    private func syncNotificationCandidates(
+        _ candidates: [LocalNotificationCandidate],
+        prefix: String,
+        title: String
+    ) async {
+        let center = UNUserNotificationCenter.current()
+        let pendingIDs = await center.pendingNotificationIDs()
+        let deliveredIDs = await center.deliveredNotificationIDs()
+        let pendingForPrefix = pendingIDs.filter { $0.hasPrefix(prefix) }
+        let desiredIDs = Set(candidates.map(\.identifier))
+        let stalePending = pendingForPrefix.subtracting(desiredIDs)
+        if !stalePending.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: Array(stalePending))
+        }
+        let existing = pendingIDs.union(deliveredIDs)
+        for candidate in candidates where !existing.contains(candidate.identifier) {
+            await scheduleLocalNotification(candidate, title: title)
+        }
+    }
+
+    private func scheduleLocalNotification(_ candidate: LocalNotificationCandidate, title: String) async {
+        let center = UNUserNotificationCenter.current()
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = candidate.body
+        content.sound = .default
+        let triggerDateComponents = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: candidate.triggerDate
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDateComponents, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: candidate.identifier,
+            content: content,
+            trigger: trigger
+        )
+        do {
+            try await center.add(request)
+        } catch {
+            debugLog("scheduleLocalNotification failed id=\(candidate.identifier) error=\(error.localizedDescription)")
+        }
+    }
+
+    private func removePendingNotifications(withPrefix prefix: String) async {
+        guard !prefix.isEmpty else {
+            return
+        }
+        let center = UNUserNotificationCenter.current()
+        let pending = (await center.pendingNotificationIDs()).filter { $0.hasPrefix(prefix) }
+        if !pending.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: Array(pending))
+        }
+    }
+
+    private func ensureNotificationAuthorization() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettingsAsync()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined:
+            do {
+                return try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            } catch {
+                debugLog("requestNotificationAuthorization failed error=\(error.localizedDescription)")
+                return false
+            }
+        case .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     func focus(on place: HePlace) {
         let targetRegion = nonExpandingFocusedRegion(for: place)
         withAnimation(.easeInOut(duration: 0.25)) {
             setProgrammaticMapPosition(.region(targetRegion))
+        }
+    }
+
+    func handleDetailFocusTap(on place: HePlace) {
+        if eventStatus(for: place) == .ended {
+            cancelPendingQuickCardPresentation()
+            cancelPendingMapZoomRestore()
+            cancelPendingMapFocus()
+            markAnnotationTapCooldown(0.45)
+            withAnimation(quickCardPresentationAnimation) {
+                openExpiredCard(place: place)
+            }
+            return
+        }
+        focus(on: place)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
+            closeDetail()
         }
     }
 
@@ -975,6 +1421,12 @@ final class HomeMapViewModel: ObservableObject {
             placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
         }
         objectWillChange.send()
+        if startNotificationEnabled {
+            scheduleStartReminderSync()
+        }
+        if nearbyNotificationEnabled {
+            scheduleNearbyReminderSync()
+        }
     }
 
     func toggleCheckedIn(for placeID: UUID) {
@@ -991,6 +1443,70 @@ final class HomeMapViewModel: ObservableObject {
             .filter { isPlaceInteractionEnabled($0) }
             .filter { placeState(for: $0.id).isFavorite }
             .sorted(by: isHigherPriority)
+    }
+
+    func fastestFavoritePlaces(now: Date = Date(), limit: Int = 2) -> [HePlace] {
+        let clampedLimit = max(1, limit)
+        let ranked = favoritePlaces().compactMap { place -> (place: HePlace, statusRank: Int, startDelta: TimeInterval)? in
+            let snapshot = eventSnapshot(for: place, now: now)
+            switch snapshot.status {
+            case .ongoing:
+                return (place, 0, 0)
+            case .upcoming:
+                guard let startDate = snapshot.startDate else {
+                    return nil
+                }
+                return (place, 1, max(startDate.timeIntervalSince(now), 0))
+            case .ended, .unknown:
+                return nil
+            }
+        }
+
+        return ranked
+            .sorted { lhs, rhs in
+                if lhs.statusRank != rhs.statusRank {
+                    return lhs.statusRank < rhs.statusRank
+                }
+                if lhs.startDelta != rhs.startDelta {
+                    return lhs.startDelta < rhs.startDelta
+                }
+                if lhs.place.distanceMeters != rhs.place.distanceMeters {
+                    return lhs.place.distanceMeters < rhs.place.distanceMeters
+                }
+                return lhs.place.name.localizedStandardCompare(rhs.place.name) == .orderedAscending
+            }
+            .prefix(clampedLimit)
+            .map(\.place)
+    }
+
+    func fastestFavoriteIntroText(now: Date = Date()) -> String {
+        guard let firstPlace = fastestFavoritePlaces(now: now, limit: 1).first else {
+            return L10n.SideDrawer.favoritesFastestHintOther
+        }
+
+        let snapshot = eventSnapshot(for: firstPlace, now: now)
+        switch snapshot.status {
+        case .ongoing:
+            return L10n.SideDrawer.favoritesFastestHintToday
+        case .upcoming:
+            guard let startDate = snapshot.startDate else {
+                return L10n.SideDrawer.favoritesFastestHintOther
+            }
+            if Calendar.current.isDateInToday(startDate) {
+                return L10n.SideDrawer.favoritesFastestHintToday
+            }
+            let dayGap = daysUntil(date: startDate, from: now)
+            if dayGap <= 7 {
+                return L10n.SideDrawer.favoritesFastestHintWithinWeek(days: max(dayGap, 1))
+            }
+            if dayGap <= 30 {
+                let weeks = max(Int(ceil(Double(dayGap) / 7.0)), 1)
+                return L10n.SideDrawer.favoritesFastestHintWithinMonth(weeks: weeks)
+            }
+            return L10n.SideDrawer.favoritesFastestHintOther
+        case .ended, .unknown:
+            return L10n.SideDrawer.favoritesFastestHintOther
+        }
     }
 
     func place(for placeID: UUID) -> HePlace? {
@@ -1099,16 +1615,22 @@ final class HomeMapViewModel: ObservableObject {
         let visiblePlaceIDs = Set(mapPlaces().map(\.id))
         let nextDetailPlaceID = _detailPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
         let nextQuickCardPlaceID = _quickCardPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
+        let nextExpiredCardPlaceID = _expiredCardPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
         let nextMarkerActionPlaceID = _markerActionPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
         let nextSelectedPlaceID = _selectedPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
         let nextForcedExpandedPlaceID = _forcedExpandedPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
+        let nextTemporaryExpiredMarkerPlaceID = _temporaryExpiredMarkerPlaceID.flatMap {
+            visiblePlaceIDs.contains($0) ? $0 : nil
+        }
 
         let changed =
             nextDetailPlaceID != _detailPlaceID ||
             nextQuickCardPlaceID != _quickCardPlaceID ||
+            nextExpiredCardPlaceID != _expiredCardPlaceID ||
             nextMarkerActionPlaceID != _markerActionPlaceID ||
             nextSelectedPlaceID != _selectedPlaceID ||
-            nextForcedExpandedPlaceID != _forcedExpandedPlaceID
+            nextForcedExpandedPlaceID != _forcedExpandedPlaceID ||
+            nextTemporaryExpiredMarkerPlaceID != _temporaryExpiredMarkerPlaceID
 
         guard changed else {
             return
@@ -1117,9 +1639,11 @@ final class HomeMapViewModel: ObservableObject {
         mutateInteractionState {
             _detailPlaceID = nextDetailPlaceID
             _quickCardPlaceID = nextQuickCardPlaceID
+            _expiredCardPlaceID = nextExpiredCardPlaceID
             _markerActionPlaceID = nextMarkerActionPlaceID
             _selectedPlaceID = nextSelectedPlaceID
             _forcedExpandedPlaceID = nextForcedExpandedPlaceID
+            _temporaryExpiredMarkerPlaceID = nextTemporaryExpiredMarkerPlaceID
         }
     }
 
@@ -1141,6 +1665,13 @@ final class HomeMapViewModel: ObservableObject {
         )
     }
 
+    private func daysUntil(date: Date, from referenceDate: Date) -> Int {
+        let calendar = Calendar.current
+        let startDay = calendar.startOfDay(for: referenceDate)
+        let targetDay = calendar.startOfDay(for: date)
+        return max(calendar.dateComponents([.day], from: startDay, to: targetDay).day ?? 0, 0)
+    }
+
     private func scheduleAutoOpenIfNeeded() {
         guard autoOpenTask == nil, !hasAutoOpened else {
             return
@@ -1150,6 +1681,7 @@ final class HomeMapViewModel: ObservableObject {
             guard let self else { return }
             self.autoOpenTask = nil
             guard self._quickCardPlaceID == nil,
+                  self._expiredCardPlaceID == nil,
                   self._detailPlaceID == nil,
                   !self.isCalendarPresented,
                   let target = self.recommendedPlace() else {
@@ -1800,6 +2332,9 @@ final class HomeMapViewModel: ObservableObject {
         if places.isEmpty, !rendered.isEmpty {
             replaceAllPlaces(rendered)
         }
+        if nearbyNotificationEnabled, reason != "cameraMove", reason != "cameraMoveContained" {
+            scheduleNearbyReminderSync()
+        }
         if !rendered.isEmpty {
             scheduleAutoOpenIfNeeded()
         }
@@ -1860,8 +2395,10 @@ final class HomeMapViewModel: ObservableObject {
         let activeIDs = Set([
             _detailPlaceID,
             _quickCardPlaceID,
+            _expiredCardPlaceID,
             _selectedPlaceID,
-            _markerActionPlaceID
+            _markerActionPlaceID,
+            _temporaryExpiredMarkerPlaceID
         ].compactMap { $0 })
         guard !activeIDs.isEmpty else {
             return result
@@ -1956,9 +2493,26 @@ final class HomeMapViewModel: ObservableObject {
         let activeIDs = Set([
             _detailPlaceID,
             _quickCardPlaceID,
+            _expiredCardPlaceID,
             _selectedPlaceID,
-            _markerActionPlaceID
+            _markerActionPlaceID,
+            _temporaryExpiredMarkerPlaceID
         ].compactMap { $0 })
+        let preservedRepresentativeByKey: [String: UUID] = grouped.compactMapValues { group in
+            guard group.count >= suspectCoordinateClusterThreshold,
+                  group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) else {
+                return nil
+            }
+            return group.max { lhs, rhs in
+                if lhs.scaleScore != rhs.scaleScore {
+                    return lhs.scaleScore < rhs.scaleScore
+                }
+                if lhs.heatScore != rhs.heatScore {
+                    return lhs.heatScore < rhs.heatScore
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+            }?.id
+        }
         var filtered: [HePlace] = []
         filtered.reserveCapacity(source.count)
         var dropped = 0
@@ -1971,7 +2525,8 @@ final class HomeMapViewModel: ObservableObject {
             }
             if group.count >= suspectCoordinateClusterThreshold &&
                 !activeIDs.contains(place.id) &&
-                group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) {
+                group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) &&
+                preservedRepresentativeByKey[key] != place.id {
                 dropped += 1
                 continue
             }
@@ -2220,6 +2775,8 @@ final class HomeMapViewModel: ObservableObject {
             guard self._selectedPlaceID == nil,
                   self._markerActionPlaceID == nil,
                   self._quickCardPlaceID == nil,
+                  self._expiredCardPlaceID == nil,
+                  self._temporaryExpiredMarkerPlaceID == nil,
                   self._detailPlaceID == nil else {
                 return
             }
@@ -2470,5 +3027,7 @@ final class HomeMapViewModel: ObservableObject {
         activeNearbyQueryToken = nil
         mapZoomRestoreTask?.cancel()
         quickCardPresentationTask?.cancel()
+        startReminderSyncTask?.cancel()
+        nearbyReminderSyncTask?.cancel()
     }
 }

@@ -14,12 +14,6 @@ struct DetailPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Color(red: 0.33, green: 0.47, blue: 0.52, opacity: 0.35))
-                .frame(width: 50, height: 5)
-                .padding(.top, 18)
-                .padding(.bottom, 8)
-
             HStack {
                 Text(L10n.Detail.title)
                     .font(.system(size: 13, weight: .bold))
@@ -32,6 +26,7 @@ struct DetailPanelView: View {
                 TsugieClosePillButton(action: onClose, accessibilityLabel: L10n.Detail.closeA11y)
             }
             .padding(.horizontal, 16)
+            .padding(.top, 18)
             .padding(.bottom, 8)
 
             ScrollView {

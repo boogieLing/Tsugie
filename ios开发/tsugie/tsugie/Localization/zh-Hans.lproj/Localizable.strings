@@ -24,6 +24,7 @@
 "home.quick.date_today_soon" = "今日開催！まもなく！";
 
 "quickcard.fast_plan" = "✨ 最速攻略";
+"quickcard.expired_title" = "已结束";
 "quickcard.close_a11y" = "关闭快速卡片";
 "quickcard.view_details" = "查看详情";
 "quickcard.start_route" = "开始导航";
@@ -34,13 +35,13 @@
 "nearby.starts_at" = "%@ 开始";
 "nearby.ended_at" = "终了 %@";
 
-"marker.favorite_a11y" = "标记为想访问";
+"marker.favorite_a11y" = "标记为向往";
 "marker.quick_a11y" = "打开快速卡片";
-"marker.checked_in_a11y" = "标记为已访问";
+"marker.checked_in_a11y" = "标记为走过";
 "marker.place_action_a11y" = "地点操作";
 
-"place_state.favorite_a11y" = "想访问";
-"place_state.checked_in_a11y" = "已访问";
+"place_state.favorite_a11y" = "向往";
+"place_state.checked_in_a11y" = "走过";
 
 "detail.title" = "へ 详情";
 "detail.close_a11y" = "关闭详情";
@@ -61,25 +62,36 @@
 "detail.end_at" = "终了 %@";
 
 "drawer.title" = "Tsugie 导航";
-"drawer.menu.favorites" = "想去收藏";
+"drawer.menu.favorites" = "心之所往";
 "drawer.menu.notifications" = "通知";
 "drawer.menu.contact" = "联系我们";
 "drawer.favorites.subtitle" = "想去的余韵和已走过的足迹都在这里。";
-"drawer.favorites.empty" = "收藏夹还是空白。";
+"drawer.favorites.subtitle.variant_a" = "下一次，再次，走去心跳生长的地方";
+"drawer.favorites.subtitle.variant_b" = "下一次，再次，听着花火打响的夜晚";
+"drawer.favorites.empty" = "期待，会慢慢堆积。";
 "drawer.favorites.open" = "打开收藏抽屉";
+"drawer.favorites.cancel_action" = "取消收藏";
+"drawer.favorites.fastest_title" = "最快能去收藏";
+"drawer.favorites.fastest.empty" = "暂无可立即出发的收藏。";
+
+"drawer.favorites.fastest.hint.today" = "今天就有：马上出发！";
+"drawer.favorites.fastest.hint.within_week" = "一周内：再过%d天...";
+"drawer.favorites.fastest.hint.within_month" = "一个月内：再过%d周...";
+"drawer.favorites.fastest.hint.other" = "还有其他想去的吗？";
 "drawer.notifications.title" = "通知设置";
 "drawer.notifications.start_reminder.title" = "开始前提醒";
 "drawer.notifications.start_reminder.hint" = "活动开始前提醒你";
 "drawer.notifications.nearby.title" = "附近地点提醒";
 "drawer.notifications.nearby.hint" = "稍远一点的候选也会提醒";
+"notification.starting_soon_title" = "即将开始...";
 "drawer.contact.title" = "联系我们";
 "drawer.contact.mail_action" = "邮件联系";
 "drawer.contact.copy_mail" = "复制邮箱地址";
 "drawer.contact.mail_subject" = "Tsugie 咨询";
 "drawer.none_hint" = "选择一个项目后，这里会安静展开。";
 "drawer.filter.all" = "全部";
-"drawer.filter.planned" = "想访问";
-"drawer.filter.checked" = "已访问";
+"drawer.filter.planned" = "向往";
+"drawer.filter.checked" = "走过";
 "drawer.slider.alpha" = "透明度";
 "drawer.slider.saturation" = "饱和度";
 "drawer.slider.glow" = "光晕";

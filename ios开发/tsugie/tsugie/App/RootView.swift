@@ -31,7 +31,7 @@ struct RootView: View {
                 onSelectPlace: { placeID in
                     viewModel.setCalendarPresented(false)
                     isCalendarPresented = false
-                    viewModel.openQuickCard(placeID: placeID)
+                    viewModel.openQuickFromCalendar(placeID: placeID)
                 },
                 now: viewModel.now,
                 activeGradient: viewModel.activePillGradient,

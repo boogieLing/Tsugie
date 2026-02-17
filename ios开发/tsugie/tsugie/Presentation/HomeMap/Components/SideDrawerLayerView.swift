@@ -3,6 +3,7 @@ import UIKit
 
 struct SideDrawerLayerView: View {
     @ObservedObject var viewModel: HomeMapViewModel
+    @State private var favoriteSubtitle = L10n.SideDrawer.favoritesSubtitle
     private let drawerItemFillColor = Color.white
     private let drawerItemBorderColor = Color(red: 0.84, green: 0.92, blue: 0.95)
     private let languageOptions: [(code: String, label: String)] = [
@@ -69,6 +70,28 @@ struct SideDrawerLayerView: View {
             }
             .allowsHitTesting(isLayerOpen)
             .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.isSideDrawerOpen)
+            .onAppear {
+                refreshFavoriteSubtitle()
+            }
+            .onChange(of: viewModel.isFavoriteDrawerOpen) { _, isOpen in
+                if isOpen {
+                    refreshFavoriteSubtitle()
+                }
+            }
+            .onChange(of: viewModel.selectedLanguageCode) { _, _ in
+                refreshFavoriteSubtitle()
+            }
+        }
+    }
+
+    private func refreshFavoriteSubtitle() {
+        switch viewModel.selectedLanguageCode {
+        case "zh-Hans", "ja":
+            favoriteSubtitle = Bool.random()
+                ? L10n.SideDrawer.favoritesSubtitleVariantA
+                : L10n.SideDrawer.favoritesSubtitleVariantB
+        default:
+            favoriteSubtitle = L10n.SideDrawer.favoritesSubtitle
         }
     }
 
@@ -150,7 +173,7 @@ struct SideDrawerLayerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(L10n.SideDrawer.favoritesSubtitle)
+                    Text(favoriteSubtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
 
@@ -286,23 +309,15 @@ struct SideDrawerLayerView: View {
             switch viewModel.sideDrawerMenu {
             case .favorites:
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(L10n.SideDrawer.menuFavorites)
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
-
-                    Button(L10n.SideDrawer.favoritesOpen) {
-                        viewModel.openFavoriteDrawer()
+                    HStack {
+                        Text(L10n.SideDrawer.menuFavorites)
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
+                        Spacer()
+                        openFavoriteDrawerCapsuleButton
                     }
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 32)
-                    .drawerRoundedSurface(
-                        cornerRadius: 10,
-                        fillColor: drawerItemFillColor,
-                        borderColor: drawerItemBorderColor,
-                        borderOpacity: 0.88
-                    )
-                    .foregroundStyle(Color(red: 0.30, green: 0.42, blue: 0.46))
+
+                    fastestFavoriteQuickBrowse
                 }
             case .notifications:
                 VStack(alignment: .leading, spacing: 8) {
@@ -363,8 +378,61 @@ struct SideDrawerLayerView: View {
         }
     }
 
-    private func favoriteCard(_ place: HePlace) -> some View {
-        let snapshot = viewModel.eventSnapshot(for: place)
+    private var openFavoriteDrawerCapsuleButton: some View {
+        Button(action: viewModel.openFavoriteDrawer) {
+            HStack(spacing: 6) {
+                FavoriteStateIconView(isFavorite: true, size: 17)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(red: 0.45, green: 0.55, blue: 0.60))
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .drawerRoundedSurface(
+                cornerRadius: 999,
+                fillColor: drawerItemFillColor,
+                borderColor: drawerItemBorderColor,
+                borderOpacity: 0.88
+            )
+            .shadow(color: Color(red: 0.24, green: 0.42, blue: 0.48, opacity: 0.12), radius: 6, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.SideDrawer.favoritesOpen)
+    }
+
+    private var fastestFavoriteQuickBrowse: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let fastestPlaces = viewModel.fastestFavoritePlaces(now: context.date, limit: 2)
+            let introText = viewModel.fastestFavoriteIntroText(now: context.date)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(introText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(red: 0.35, green: 0.48, blue: 0.54))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                if fastestPlaces.isEmpty {
+                    Text(L10n.SideDrawer.favoritesFastestEmpty)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(fastestPlaces) { place in
+                            favoriteCard(place, now: context.date, forceProgress: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func favoriteCard(
+        _ place: HePlace,
+        now: Date = Date(),
+        forceProgress: Bool = false
+    ) -> some View {
+        let snapshot = viewModel.eventSnapshot(for: place, now: now)
         let range = L10n.Common.timeRange(snapshot.startLabel, snapshot.endLabel)
         let startDateText = snapshot.startDate?.formatted(
             Date.FormatStyle()
@@ -374,60 +442,86 @@ struct SideDrawerLayerView: View {
         ) ?? L10n.Common.dateUnknown
         let placeState = viewModel.placeState(for: place.id)
         let stamp = viewModel.stampPresentation(for: place)
+        let cardBody = favoriteCardBody(
+            place: place,
+            snapshot: snapshot,
+            startDateText: startDateText,
+            range: range,
+            placeState: placeState,
+            stamp: stamp,
+            forceProgress: forceProgress
+        )
 
         return Button {
             viewModel.openQuickFromDrawer(placeID: place.id)
         } label: {
-            VStack(spacing: 6) {
-                HStack {
-                    Text(place.name)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-                        .lineLimit(1)
-                    Spacer()
-                    Text(viewModel.distanceText(for: place))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
-                }
-                HStack {
-                    Text("\(startDateText) \(range)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer()
-                    HStack(spacing: 6) {
-                        FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 17)
-                        StampIconView(
-                            stamp: stamp,
-                            isColorized: placeState.isCheckedIn,
-                            size: 18
-                        )
-                    }
-                }
-                if snapshot.status == .ongoing {
-                    TsugieMiniProgressView(snapshot: snapshot)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .drawerRoundedSurface(
-                cornerRadius: 14,
-                fillColor: drawerItemFillColor,
-                borderColor: drawerItemBorderColor,
-                borderOpacity: 0
-            )
-            .overlay(alignment: .bottomTrailing) {
-                PlaceStampBackgroundView(
-                    stamp: stamp,
-                    size: 82,
-                    isCompact: true,
-                    rotationDegrees: stamp?.rotationDegrees ?? 0
-                )
-                    .offset(x: 8, y: 10)
-            }
+            cardBody
         }
         .buttonStyle(.plain)
+    }
+
+    private func favoriteCardBody(
+        place: HePlace,
+        snapshot: EventStatusSnapshot,
+        startDateText: String,
+        range: String,
+        placeState: PlaceState,
+        stamp: PlaceStampPresentation?,
+        forceProgress: Bool
+    ) -> some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(place.name)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
+                    .lineLimit(1)
+                Spacer()
+                Text(viewModel.distanceText(for: place))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
+            }
+            HStack {
+                Text("\(startDateText) \(range)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                HStack(spacing: 6) {
+                    FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 17)
+                    StampIconView(
+                        stamp: stamp,
+                        isColorized: placeState.isCheckedIn,
+                        size: 18
+                    )
+                }
+            }
+            if snapshot.status == .ongoing || (forceProgress && snapshot.status == .upcoming) {
+                TsugieMiniProgressView(
+                    snapshot: snapshot,
+                    glowBoost: 1.7,
+                    endpointIconName: TsugieSmallIcon.assetName(for: place.heType),
+                    endpointIconIsColorized: placeState.isFavorite
+                )
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .drawerRoundedSurface(
+            cornerRadius: 14,
+            fillColor: drawerItemFillColor,
+            borderColor: drawerItemBorderColor,
+            borderOpacity: 0
+        )
+        .overlay(alignment: .bottomTrailing) {
+            PlaceStampBackgroundView(
+                stamp: stamp,
+                size: 82,
+                isCompact: true,
+                rotationDegrees: stamp?.rotationDegrees ?? 0
+            )
+                .offset(x: 8, y: 10)
+        }
     }
 
     private var favoriteStatusFilters: some View {
@@ -569,11 +663,11 @@ struct SideDrawerLayerView: View {
                             ? AnyShapeStyle(viewModel.activePillGradient)
                             : AnyShapeStyle(Color(red: 0.77, green: 0.84, blue: 0.87, opacity: 0.55))
                         )
-                        .frame(width: 50, height: 30)
+                        .frame(width: 44, height: 26)
                         .overlay(Capsule().stroke(Color(red: 0.74, green: 0.83, blue: 0.87, opacity: 0.95), lineWidth: isOn ? 0 : 1))
                     Circle()
                         .fill(.white)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 20, height: 20)
                         .padding(3)
                 }
             }

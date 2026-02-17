@@ -27,16 +27,19 @@ struct HomeMapView: View {
             glowColor: TsugieVisuals.markerGlowColor(for: .other)
         )
         let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
+        let locationLogoGradient = LinearGradient(
+            colors: [
+                Color(red: 34.0 / 255.0, green: 225.0 / 255.0, blue: 1.0),
+                Color(red: 29.0 / 255.0, green: 143.0 / 255.0, blue: 225.0 / 255.0),
+                Color(red: 98.0 / 255.0, green: 94.0 / 255.0, blue: 177.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
         let locationIconColor = Color(
             red: 81.0 / 255.0,
             green: 81.0 / 255.0,
             blue: 81.0 / 255.0
-        )
-        // Fixed to explicit brand color, no longer follows active theme switching.
-        let locationMarkerColor = Color(
-            red: 253.0 / 255.0,
-            green: 203.0 / 255.0,
-            blue: 110.0 / 255.0
         )
         let sidebarIconColor = locationIconColor
 
@@ -48,7 +51,7 @@ struct HomeMapView: View {
                 Map(position: mapPositionBinding) {
                     Annotation("CurrentLocation", coordinate: viewModel.currentLocationCoordinate, anchor: .center) {
                         CurrentLocationMarkerView(
-                            pinColor: locationMarkerColor,
+                            pinGradient: locationLogoGradient,
                             glowColor: viewModel.activeMapGlowColor
                         )
                             .allowsHitTesting(false)
@@ -90,6 +93,7 @@ struct HomeMapView: View {
                                 }
                             )
                             .equatable()
+                            .zIndex(markerAnnotationZIndex(for: entry))
                         }
                         .annotationTitles(.hidden)
                     }
@@ -120,10 +124,7 @@ struct HomeMapView: View {
                             activeGradient: viewModel.activePillGradient,
                             activeGlowColor: viewModel.activeMapGlowColor,
                             onFocusTap: {
-                                viewModel.focus(on: detailPlace)
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
-                                    viewModel.closeDetail()
-                                }
+                                viewModel.handleDetailFocusTap(on: detailPlace)
                             },
                             onClose: {
                                 withAnimation(.spring(response: 0.28, dampingFraction: 0.92)) {
@@ -136,6 +137,45 @@ struct HomeMapView: View {
                     .padding(.horizontal, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(15)
+                } else if let place = viewModel.expiredCardPlace {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        QuickCardView(
+                            place: place,
+                            snapshot: viewModel.eventSnapshot(for: place, now: context.date),
+                            progress: viewModel.quickProgress(for: place, now: context.date),
+                            metaText: viewModel.quickMetaText(for: place, now: context.date),
+                            hintText: viewModel.quickHintText(for: place),
+                            placeState: viewModel.placeState(for: place.id),
+                            stamp: viewModel.stampPresentation(for: place),
+                            activeGradient: viewModel.activePillGradient,
+                            activeGlowColor: viewModel.activeMapGlowColor,
+                            mode: .expired,
+                            onClose: {
+                                withAnimation(quickCardDismissAnimation) {
+                                    viewModel.closeExpiredCard()
+                                }
+                            },
+                            onOpenDetail: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                                    viewModel.openDetailForCurrentQuickCard()
+                                }
+                            },
+                            onExpandDetailBySwipe: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                                    viewModel.openDetailForCurrentQuickCard()
+                                }
+                            },
+                            onDismissBySwipe: {
+                                withAnimation(quickCardDismissAnimation) {
+                                    viewModel.closeExpiredCard()
+                                }
+                            }
+                        )
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(14)
                 } else if let place = viewModel.quickCardPlace {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         QuickCardView(
@@ -258,6 +298,7 @@ struct HomeMapView: View {
             viewModel.onViewDisappear()
         }
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
+        .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
     }
 
     private var mapAmbientGlowLayer: some View {
@@ -322,6 +363,22 @@ struct HomeMapView: View {
             return fallback
         }
     }
+
+    private func markerAnnotationZIndex(for entry: MapMarkerEntry) -> Double {
+        if entry.isMenuVisible {
+            return 30
+        }
+        if entry.isTemporary {
+            return 21
+        }
+        if entry.isSelected {
+            return 20
+        }
+        if entry.isCluster {
+            return 10
+        }
+        return 0
+    }
 }
 
 struct MapMarkerEntry: Identifiable, Equatable {
@@ -332,6 +389,7 @@ struct MapMarkerEntry: Identifiable, Equatable {
     let isSelected: Bool
     let isCluster: Bool
     let clusterCount: Int
+    let isTemporary: Bool
     let isMenuVisible: Bool
     let menuPlaceState: PlaceState?
 
@@ -342,6 +400,7 @@ struct MapMarkerEntry: Identifiable, Equatable {
         lhs.isSelected == rhs.isSelected &&
         lhs.isCluster == rhs.isCluster &&
         lhs.clusterCount == rhs.clusterCount &&
+        lhs.isTemporary == rhs.isTemporary &&
         lhs.isMenuVisible == rhs.isMenuVisible &&
         lhs.menuPlaceState == rhs.menuPlaceState &&
         lhs.coordinate.latitude == rhs.coordinate.latitude &&
@@ -555,7 +614,7 @@ private struct MarkerDecorationPhaseModifier: ViewModifier {
 }
 
 private struct CurrentLocationMarkerView: View {
-    let pinColor: Color
+    let pinGradient: LinearGradient
     let glowColor: Color
 
     var body: some View {
@@ -586,7 +645,7 @@ private struct CurrentLocationMarkerView: View {
                 .renderingMode(.template)
                 .scaledToFit()
                 .frame(width: 22, height: 22)
-                .foregroundStyle(pinColor)
+                .foregroundStyle(pinGradient)
                 .shadow(color: glowColor.opacity(0.34), radius: 3.6, x: 0, y: 1.4)
                 .overlay {
                     Image("CurrentLocationPinIcon")

@@ -24,6 +24,7 @@
 "home.quick.date_today_soon" = "本日開催！まもなく！";
 
 "quickcard.fast_plan" = "✨ 最速攻略";
+"quickcard.expired_title" = "終了済み";
 "quickcard.close_a11y" = "クイック表示を閉じる";
 "quickcard.view_details" = "詳細を見る";
 "quickcard.start_route" = "ルートを開始";
@@ -34,13 +35,13 @@
 "nearby.starts_at" = "%@ 開始";
 "nearby.ended_at" = "終了 %@";
 
-"marker.favorite_a11y" = "行きたいに留める";
+"marker.favorite_a11y" = "「いつか」として記録";
 "marker.quick_a11y" = "クイック表示を開く";
-"marker.checked_in_a11y" = "訪問ずみとして記録";
+"marker.checked_in_a11y" = "「かつて」として記録";
 "marker.place_action_a11y" = "地点操作";
 
-"place_state.favorite_a11y" = "想要访问";
-"place_state.checked_in_a11y" = "已经访问";
+"place_state.favorite_a11y" = "いつか";
+"place_state.checked_in_a11y" = "かつて";
 
 "detail.title" = "へ 詳細";
 "detail.close_a11y" = "詳細を閉じる";
@@ -61,25 +62,36 @@
 "detail.end_at" = "終了 %@";
 
 "drawer.title" = "つぎへ ナビ";
-"drawer.menu.favorites" = "行きたい栞";
-"drawer.menu.notifications" = "知らせの灯";
-"drawer.menu.contact" = "ことづて";
+"drawer.menu.favorites" = "つぎへ、一緒に";
+"drawer.menu.notifications" = "しらせの灯り";
+"drawer.menu.contact" = "ことばの便り";
 "drawer.favorites.subtitle" = "行きたい余韻と、歩いた足あとをここに。";
-"drawer.favorites.empty" = "まだ栞は白紙です。";
+"drawer.favorites.subtitle.variant_a" = "次も、また、鼓動の芽吹く場所へ";
+"drawer.favorites.subtitle.variant_b" = "次も、また、花火の響く夜へ";
+"drawer.favorites.empty" = "ときめきは、ゆっくり積もっていく。";
 "drawer.favorites.open" = "栞ドロワーをひらく";
-"drawer.notifications.title" = "通知設定";
+"drawer.favorites.cancel_action" = "お気に入り解除";
+"drawer.favorites.fastest_title" = "すぐ行ける栞";
+"drawer.favorites.fastest.empty" = "いま向かえる栞はまだありません。";
+
+"drawer.favorites.fastest.hint.today" = "今日行ける：いま出発！";
+"drawer.favorites.fastest.hint.within_week" = "一週間以内：あと%d日...";
+"drawer.favorites.fastest.hint.within_month" = "一か月以内：あと%d週...";
+"drawer.favorites.fastest.hint.other" = "ほかに行きたい場所はある？";
+"drawer.notifications.title" = "しらせのしつらえ";
 "drawer.notifications.start_reminder.title" = "開始前リマインド";
 "drawer.notifications.start_reminder.hint" = "開催直前にお知らせ";
 "drawer.notifications.nearby.title" = "周辺スポット通知";
 "drawer.notifications.nearby.hint" = "少し遠めの候補も通知";
-"drawer.contact.title" = "お問い合わせ";
-"drawer.contact.mail_action" = "メールで連絡する";
-"drawer.contact.copy_mail" = "メールアドレスをコピー";
+"notification.starting_soon_title" = "まもなく開始...";
+"drawer.contact.title" = "ことばの便り";
+"drawer.contact.mail_action" = "便りを送る";
+"drawer.contact.copy_mail" = "宛先を写す";
 "drawer.contact.mail_subject" = "Tsugie 問い合わせ";
 "drawer.none_hint" = "項目をひとつ選ぶと、ここに静かにひらきます。";
 "drawer.filter.all" = "すべて";
-"drawer.filter.planned" = "まだ訪れず";
-"drawer.filter.checked" = "足あと済み";
+"drawer.filter.planned" = "いつか";
+"drawer.filter.checked" = "かつて";
 "drawer.slider.alpha" = "透過比率";
 "drawer.slider.saturation" = "彩度";
 "drawer.slider.glow" = "光彩";

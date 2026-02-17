@@ -126,6 +126,7 @@ enum L10n {
 
     enum QuickCard {
         static var fastPlanTitle: String { text("quickcard.fast_plan") }
+        static var expiredTitle: String { text("quickcard.expired_title") }
         static var closeA11y: String { text("quickcard.close_a11y") }
         static var viewDetails: String { text("quickcard.view_details") }
         static var startRoute: String { text("quickcard.start_route") }
@@ -201,8 +202,15 @@ enum L10n {
         static var menuNotifications: String { text("drawer.menu.notifications") }
         static var menuContact: String { text("drawer.menu.contact") }
         static var favoritesSubtitle: String { text("drawer.favorites.subtitle") }
+        static var favoritesSubtitleVariantA: String { text("drawer.favorites.subtitle.variant_a") }
+        static var favoritesSubtitleVariantB: String { text("drawer.favorites.subtitle.variant_b") }
         static var favoritesEmpty: String { text("drawer.favorites.empty") }
         static var favoritesOpen: String { text("drawer.favorites.open") }
+        static var favoritesCancelAction: String { text("drawer.favorites.cancel_action") }
+        static var favoritesFastestTitle: String { text("drawer.favorites.fastest_title") }
+        static var favoritesFastestEmpty: String { text("drawer.favorites.fastest.empty") }
+        static var favoritesFastestHintToday: String { text("drawer.favorites.fastest.hint.today") }
+        static var favoritesFastestHintOther: String { text("drawer.favorites.fastest.hint.other") }
         static var notificationsTitle: String { text("drawer.notifications.title") }
         static var startReminderTitle: String { text("drawer.notifications.start_reminder.title") }
         static var startReminderHint: String { text("drawer.notifications.start_reminder.hint") }
@@ -231,6 +239,18 @@ enum L10n {
             let encoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
             return URL(string: "mailto:contact@tsugie.app?subject=\(encoded)")!
         }
+
+        static func favoritesFastestHintWithinWeek(days: Int) -> String {
+            format("drawer.favorites.fastest.hint.within_week", days)
+        }
+
+        static func favoritesFastestHintWithinMonth(weeks: Int) -> String {
+            format("drawer.favorites.fastest.hint.within_month", weeks)
+        }
+    }
+
+    enum Notification {
+        static var startingSoonTitle: String { text("notification.starting_soon_title") }
     }
 
     enum Calendar {

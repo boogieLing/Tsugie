@@ -508,20 +508,29 @@ def resolve_fused_jsonl(project: SourceProject, latest_run: dict[str, Any]) -> t
     return fused, run_id
 
 
-def read_jsonl(path: Path, max_rows: int) -> list[dict[str, Any]]:
+def read_jsonl(path: Path, max_rows: int, start_index: int = 0) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    start = max(0, int(start_index))
+    idx = 0
     with path.open("r", encoding="utf-8") as f:
         for line in f:
+            if idx < start:
+                idx += 1
+                continue
             text = line.strip()
             if not text:
+                idx += 1
                 continue
             try:
                 row = json.loads(text)
             except json.JSONDecodeError:
+                idx += 1
                 continue
             if not isinstance(row, dict):
+                idx += 1
                 continue
             rows.append(row)
+            idx += 1
             if max_rows > 0 and len(rows) >= max_rows:
                 break
     return rows
@@ -759,7 +768,15 @@ def run_project(
             "rows": 0,
         }
 
-    rows = read_jsonl(fused_jsonl, max_rows=args.max_events)
+    rows = read_jsonl(
+        fused_jsonl,
+        max_rows=args.max_events,
+        start_index=args.start_index,
+    )
+    print(
+        f"[batch] project={project.name} run_id={args.run_id} start_index={args.start_index} "
+        f"max_events={args.max_events} selected_rows={len(rows)}"
+    )
     previous = load_previous_records(project, latest_run)
 
     run_dir = project.root / "data" / "content" / args.run_id
@@ -908,6 +925,11 @@ def run_project(
                 str(len(downloaded_rel)),
             ]
         )
+        if args.progress_every > 0 and (idx % args.progress_every == 0 or idx == len(rows)):
+            print(
+                f"[progress] project={project.name} run_id={args.run_id} "
+                f"processed={idx}/{len(rows)}"
+            )
 
     client.close()
     if polisher:
@@ -1006,7 +1028,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--project", choices=["all", "hanabi", "omatsuri"], default="all")
     parser.add_argument("--run-id", default=datetime.now().strftime("%Y%m%d_%H%M%S") + "_content")
+    parser.add_argument("--start-index", type=int, default=0, help="Start index (0-based) in fused JSONL")
     parser.add_argument("--max-events", type=int, default=0, help="0 means all rows")
+    parser.add_argument("--progress-every", type=int, default=20, help="Print progress every N events")
     parser.add_argument("--min-refresh-days", type=int, default=DEFAULT_MIN_REFRESH_DAYS)
     parser.add_argument("--qps", type=float, default=DEFAULT_QPS, help="Global request QPS (low by default)")
     parser.add_argument("--request-timeout-sec", type=float, default=DEFAULT_TIMEOUT_SEC)

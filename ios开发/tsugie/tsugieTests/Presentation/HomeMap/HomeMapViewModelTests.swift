@@ -63,7 +63,7 @@ final class HomeMapViewModelTests: XCTestCase {
     }
 
     func testNearbyCarouselUsesScoredRecommendationOrder() {
-        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let now = Date()
         let ongoing = makePlace(
             name: "ongoing",
             heType: .matsuri,
@@ -102,7 +102,7 @@ final class HomeMapViewModelTests: XCTestCase {
     }
 
     func testNearbyCarouselPrioritizesHanabi() {
-        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let now = Date()
         let hanabi = makePlace(
             name: "hanabi-priority",
             heType: .hanabi,
@@ -131,11 +131,61 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(ordered.first, "hanabi-priority")
     }
 
+    func testFastestFavoritePlacesPrefersOngoingThenSoonestUpcoming() {
+        let now = Date()
+        let ongoing = makePlace(
+            name: "ongoing",
+            heType: .hanabi,
+            startAt: now.addingTimeInterval(-30 * 60),
+            endAt: now.addingTimeInterval(90 * 60),
+            distanceMeters: 2_000
+        )
+        let upcomingSoon = makePlace(
+            name: "upcoming-soon",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(20 * 60),
+            endAt: now.addingTimeInterval(120 * 60),
+            distanceMeters: 800
+        )
+        let upcomingLater = makePlace(
+            name: "upcoming-later",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(80 * 60),
+            endAt: now.addingTimeInterval(180 * 60),
+            distanceMeters: 400
+        )
+        let ended = makePlace(
+            name: "ended",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(-4 * 60 * 60),
+            endAt: now.addingTimeInterval(-1 * 60 * 60),
+            distanceMeters: 300
+        )
+        let unknown = makePlace(
+            name: "unknown",
+            heType: .matsuri,
+            startAt: nil,
+            endAt: nil,
+            distanceMeters: 200
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [upcomingLater, unknown, ongoing, ended, upcomingSoon],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        [ongoing, upcomingSoon, upcomingLater, ended, unknown].forEach { place in
+            viewModel.toggleFavorite(for: place.id)
+        }
+
+        let fastest = viewModel.fastestFavoritePlaces(now: now, limit: 2).map(\.name)
+        XCTAssertEqual(fastest, ["ongoing", "upcoming-soon"])
+    }
+
     private func makePlace(
         name: String,
         heType: HeType,
-        startAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
-        endAt: Date = Date(timeIntervalSince1970: 1_700_003_600),
+        startAt: Date? = Date().addingTimeInterval(10 * 60),
+        endAt: Date? = Date().addingTimeInterval(110 * 60),
         distanceMeters: Double = 500,
         scaleScore: Int = 80,
         heatScore: Int = 60

@@ -65,10 +65,10 @@ struct MarkerBubbleView: View {
                     )
             }
             .frame(width: 30, height: 30)
-            .overlay(alignment: .bottomLeading) {
+            .background(alignment: .bottomTrailing) {
                 if isCluster {
                     clusterCountBadge
-                        .offset(x: -11, y: 9)
+                        .offset(x: 11, y: 9)
                 }
             }
         }
