@@ -455,7 +455,11 @@ final class HomeMapViewModel: ObservableObject {
                 objectWillChange.send()
             }
             withAnimation(quickCardDismissAnimation) {
-                closeActiveBottomCard(restoreMapZoom: false)
+                if _quickCardPlaceID != nil || _expiredCardPlaceID != nil {
+                    closeActiveBottomCard(restoreMapZoom: true)
+                } else {
+                    dismissMarkerSelection(restoreMapZoom: true)
+                }
             }
             return
         }
@@ -2168,11 +2172,24 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         maybeHardRecycleMapForMemoryPressure(region: region, trigger: "periodicTick")
+        guard !hasActiveMapInteractionState else {
+            debugLog("skipPeriodicHardRecycle reason=activeInteraction")
+            return
+        }
         let now = Date()
         guard now.timeIntervalSince(lastHardRecycleAt) >= periodicHardRecycleInterval else {
             return
         }
         forceMapViewRebuild(reason: "periodicTick", pinnedRegion: region)
+    }
+
+    private var hasActiveMapInteractionState: Bool {
+        _selectedPlaceID != nil ||
+        _markerActionPlaceID != nil ||
+        _quickCardPlaceID != nil ||
+        _expiredCardPlaceID != nil ||
+        _temporaryExpiredMarkerPlaceID != nil ||
+        _detailPlaceID != nil
     }
 
     private func forceEmergencyMemoryRecovery(

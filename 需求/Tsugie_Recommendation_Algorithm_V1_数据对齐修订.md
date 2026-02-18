@@ -1,7 +1,7 @@
 # Tsugie Recommendation Algorithm V1 数据对齐修订（iOS 接入版）
 
-更新日期：2026-02-16  
-适用范围：`ios开发/tsugie` 当前内置数据包链路（`he_places.index.json` + `he_places.payload.bin`）
+更新日期：2026-02-19  
+适用范围：`ios开发/tsugie` 当前内置数据包链路（`he_places.index.json` + `he_places.payload.bin` + `he_images.payload.bin`）
 
 ## 1. 原始 V1 算法（来自 docx）
 
@@ -141,6 +141,93 @@
 
 1. nearby 推荐重排仅在用户地图移动结束后触发，不在拖动过程中连续触发。
 2. marker 点击、quickCard 聚焦、定位重置等程序化相机变化不触发 nearby 推荐重排。
+
+### 4.7 当前实现快照（2026-02-19，代码真值）
+
+以下以 `ios开发/tsugie/tsugie/Presentation/HomeMap/HomeMapViewModel.swift` 当前实现为准：
+
+#### 4.7.1 候选池与范围
+
+1. 地图渲染池 `renderedPlaces`：
+   - 使用 `mapBufferScale = 1.8` 的扩展视野；
+   - 上限 `maxRenderedPlaces = 240`；
+   - 用于地图 marker 渲染与 `mapPlaces()`。
+2. 推荐候选池 `nearbyRecommendationPlaces`：
+   - 使用更大推荐包络 `nearbyRecommendationBufferScale = 3.2`；
+   - 上限 `maxNearbyRecommendationPlaces = 420`；
+   - 当推荐包络无点位时回退到 `sourcePlaces`。
+3. nearby 推荐不再被“严格视野内”约束，允许视野外但周边可达点位进入候选。
+4. 类别筛选在推荐阶段与地图保持一致：`mapCategoryFilter != all` 时仅保留对应 `heType`。
+
+#### 4.7.2 预过滤与数据质量处理
+
+1. 推荐前统一走 `interactivePlaces`，会过滤“结束超过 31 天”的活动（`interactionRetentionDaysAfterEnded = 31`）。
+2. nearby 粗排显式过滤 `ended`：
+   - `eventStatus(for: place) != .ended` 才进入打分。
+3. 坐标脏数据收敛：
+   - 同坐标簇在数量 `>= 6` 且全部低置信度来源时，仅保留代表点；
+   - 低置信度来源定义：`missing` / `pref_center_fallback` / `network_geocode*`。
+
+#### 4.7.3 打分公式（当前在线）
+
+1. 空间分：`SpaceScore = exp(-distance_km / 5)`
+2. 时间分：
+   - `ongoing = 1.0`
+   - `upcoming`：
+     - `<3h = 0.8`
+     - `<12h = 0.6`
+     - `<24h = 0.3`
+     - `>24h = max(0.03, 0.3 / (1 + (delta_days - 1) / 14))`
+   - `ended = 0.05`
+   - `unknown = 0.08`
+3. 热度分：`HeatScore = clamp(heat_score / 100, 0, 1)`
+4. 类别权重：
+   - `hanabi = 1.2`
+   - `matsuri = 1.0`
+   - `nature = 0.8`
+   - `other = 1.0`
+5. 地理置信度惩罚：
+   - `geo_source in {missing, pref_center_fallback}` 时乘 `0.85`，否则乘 `1.0`
+6. 最终分：
+   - `FinalScore = (0.45 * SpaceScore + 0.45 * TimeScore + 0.10 * HeatScore) * CategoryWeight * GeoPenalty`
+
+#### 4.7.4 排序同分规则（nearby）
+
+按以下顺序比较：
+
+1. `FinalScore` 降序
+2. `heType`：`hanabi` 优先
+3. 时间阶段：`ongoing(0) < upcoming(1) < ended(2) < unknown(3)`
+4. 阶段内 delta（`stageDelta`）升序
+5. 距离 `distanceMeters` 升序
+6. `scaleScore` 降序
+7. `name` 字典序升序
+
+补充：
+
+1. 地图首屏自动推荐（`recommendedPlace`）直接取 `nearbyPlaces(limit: 1)`。
+2. 因此地图首推与 nearby 轮播排序完全同源。
+
+#### 4.7.5 触发与生命周期（当前实现）
+
+1. 用户手势相机变更路径：
+   - `handleMapCameraChange` -> `scheduleViewportReload(reason: "cameraMove", debounce: 220ms)`。
+2. 程序化相机变更抑制：
+   - 在中心点/缩放容差窗口内命中 programmatic target 时，直接 `skipViewportReload`。
+3. 包络内移动优化：
+   - `cameraMove` 且仍在已加载包络内时，走 `cameraMoveContained` 轻量裁剪，不触发完整重载。
+4. 生命周期与内存：
+   - `onViewDisappear` 会取消相关异步任务，并主动清空 `nearbyRecommendationPlaces`；
+   - 推荐池采用上限裁剪与整池替换，避免长会话无界增长。
+
+#### 4.7.6 回归测试锚点
+
+1. 时间权重案例：
+   - `ios开发/tsugie/tsugieTests/Presentation/HomeMap/HomeMapViewModelTests.swift`
+   - `testNearbyCarouselPrefersSoonerStartWhenDistanceGapIsSmall`
+2. 视野外推荐案例：
+   - `ios开发/tsugie/tsugieTests/Presentation/HomeMap/HomeMapViewModelTests.swift`
+   - `testNearbyCarouselCanIncludePlacesOutsideCurrentViewportEnvelope`
 
 ## 5. 待后续数据端补齐后可恢复的 V1 原设定
 

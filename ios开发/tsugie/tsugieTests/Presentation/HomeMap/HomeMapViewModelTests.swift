@@ -51,6 +51,38 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.favoriteFilterCount(.checked), 1)
     }
 
+    func testTapSelectedMarkerClosesQuickCardAndClearsSelection() {
+        let place = makePlace(name: "hanabi", heType: .hanabi)
+        let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
+
+        viewModel.openQuickCard(placeID: place.id, keepMarkerActions: true)
+        XCTAssertEqual(viewModel.selectedPlaceID, place.id)
+        XCTAssertEqual(viewModel.quickCardPlaceID, place.id)
+        XCTAssertEqual(viewModel.markerActionPlaceID, place.id)
+
+        viewModel.tapMarker(placeID: place.id)
+
+        XCTAssertNil(viewModel.selectedPlaceID)
+        XCTAssertNil(viewModel.quickCardPlaceID)
+        XCTAssertNil(viewModel.markerActionPlaceID)
+    }
+
+    func testTapSelectedMarkerWithoutCardDismissesSelection() {
+        let place = makePlace(name: "matsuri", heType: .matsuri)
+        let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
+
+        viewModel.openQuickCard(placeID: place.id, keepMarkerActions: true, showPanel: false)
+        XCTAssertEqual(viewModel.selectedPlaceID, place.id)
+        XCTAssertNil(viewModel.quickCardPlaceID)
+        XCTAssertEqual(viewModel.markerActionPlaceID, place.id)
+
+        viewModel.tapMarker(placeID: place.id)
+
+        XCTAssertNil(viewModel.selectedPlaceID)
+        XCTAssertNil(viewModel.quickCardPlaceID)
+        XCTAssertNil(viewModel.markerActionPlaceID)
+    }
+
     func testMapCategoryFilterCountUsesFullSet() {
         let first = makePlace(name: "A", heType: .hanabi)
         let second = makePlace(name: "B", heType: .matsuri)

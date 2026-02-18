@@ -162,7 +162,9 @@ struct SideDrawerLayerView: View {
     }
 
     private func favoriteDrawer(width: CGFloat) -> some View {
-        VStack(spacing: 12) {
+        let favorites = viewModel.filteredFavoritePlaces()
+
+        return VStack(spacing: 12) {
             HStack {
                 Text(L10n.SideDrawer.menuFavorites)
                     .font(.system(size: 13, weight: .heavy))
@@ -171,31 +173,32 @@ struct SideDrawerLayerView: View {
                 TsugieClosePillButton(action: viewModel.closeFavoriteDrawer)
             }
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text(favoriteSubtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+
+                favoriteStatusFilters
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(favoriteSubtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
-
-                    favoriteStatusFilters
-
-                    VStack(spacing: 8) {
-                        if viewModel.filteredFavoritePlaces().isEmpty {
-                            Text(L10n.SideDrawer.favoritesEmpty)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            ForEach(viewModel.filteredFavoritePlaces()) { place in
-                                favoriteCard(place)
-                            }
+                VStack(spacing: 8) {
+                    if favorites.isEmpty {
+                        Text(L10n.SideDrawer.favoritesEmpty)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(favorites) { place in
+                            favoriteCard(place)
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
         }
         .padding(12)
         .frame(width: width)

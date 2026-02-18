@@ -363,7 +363,9 @@ struct CalendarPageView: View {
         let isToday = dayKey == dayKeyOf(now)
         let hasEvents = bucket != nil
         let isWeekend: Int = date.map { Calendar.current.component(.weekday, from: $0) } ?? 0
-        let dayColor: Color = isWeekend == 1 ? Color(red: 0.88, green: 0.47, blue: 0.53) : (isWeekend == 7 ? Color(red: 0.35, green: 0.53, blue: 0.79) : Color(red: 0.24, green: 0.38, blue: 0.44))
+        let dayColor: Color = isWeekend == 1
+            ? Color(red: 0.88, green: 0.47, blue: 0.53)
+            : (isWeekend == 7 ? Color(red: 0.35, green: 0.53, blue: 0.79) : Color(red: 0.24, green: 0.38, blue: 0.44))
 
         return Button {
             guard bucket != nil else { return }
@@ -418,16 +420,6 @@ struct CalendarPageView: View {
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(cellBackground(isToday: isToday, hasEvents: hasEvents))
-                    .overlay {
-                        if isToday {
-                            ImmediateStampImageView(resourceName: "tsugie-logo-anime.png", maxPixelSize: 256)
-                                .scaledToFill()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .opacity(0.26)
-                                .clipped()
-                                .allowsHitTesting(false)
-                        }
-                    }
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             )
             .overlay(
@@ -435,18 +427,21 @@ struct CalendarPageView: View {
                     .stroke(
                         hasEvents
                         ? (isToday
-                           ? activeGlowColor.opacity(0.46)
+                           ? Color(red: 0.72, green: 0.82, blue: 0.87, opacity: 0.98)
                            : Color(red: 0.77, green: 0.87, blue: 0.92, opacity: 0.96))
                         : .clear,
                         lineWidth: hasEvents ? (isToday ? 1.4 : 1.1) : 0
                     )
             )
             .shadow(
-                color: hasEvents ? activeGlowColor.opacity(isToday ? 0.22 : 0.10) : .clear,
+                color: hasEvents
+                    ? Color(red: 0.13, green: 0.25, blue: 0.31, opacity: isToday ? 0.13 : 0.08)
+                    : .clear,
                 radius: hasEvents ? (isToday ? 8 : 4) : 0,
                 x: 0,
                 y: hasEvents ? (isToday ? 4 : 2) : 0
             )
+            .opacity(isToday ? 1.0 : 0.62)
         }
         .buttonStyle(.plain)
         .disabled(bucket == nil)

@@ -451,7 +451,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
                 activeGlowColor: activeGlowColor,
                 onTap: onTap
             )
-            .allowsHitTesting(!entry.isMenuVisible)
+            .allowsHitTesting(true)
             .zIndex(1)
 
             MarkerActionBubbleView(
@@ -467,7 +467,8 @@ private struct MapMarkerAnnotationView: View, Equatable {
             .allowsHitTesting(entry.isMenuVisible)
             .zIndex(2)
         }
-        .frame(width: 220, height: 170, alignment: .bottom)
+        // Keep radial menu hit targets inside annotation bounds; otherwise upper taps may fall through to map.
+        .frame(width: 220, height: 196, alignment: .bottom)
     }
 }
 
