@@ -20,4 +20,12 @@ final class AppLocationProviderTests: XCTestCase {
             accuracy: 0.000_001
         )
     }
+
+    func testIsInJapanReturnsTrueForTokyoSkytree() {
+        XCTAssertTrue(DefaultAppLocationProvider.isInJapan(.init(latitude: 35.7101, longitude: 139.8107)))
+    }
+
+    func testIsInJapanReturnsFalseForOutsideJapanCoordinate() {
+        XCTAssertFalse(DefaultAppLocationProvider.isInJapan(.init(latitude: 37.5665, longitude: 126.9780)))
+    }
 }

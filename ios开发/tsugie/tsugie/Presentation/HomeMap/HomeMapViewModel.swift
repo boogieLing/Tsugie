@@ -109,6 +109,14 @@ final class HomeMapViewModel: ObservableObject {
         let body: String
     }
 
+    struct LocationFallbackNotice: Identifiable {
+        let reason: AppLocationFallbackReason
+
+        var id: String {
+            reason.rawValue
+        }
+    }
+
     private var mapCameraPosition: MapCameraPosition
     @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
@@ -124,6 +132,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var isCalendarPresented = false
     @Published private(set) var isSideDrawerOpen = false
     @Published private(set) var isFavoriteDrawerOpen = false
+    @Published private(set) var locationFallbackNotice: LocationFallbackNotice?
     @Published private(set) var sideDrawerMenu: SideDrawerMenu = .none
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
     @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
@@ -214,6 +223,7 @@ final class HomeMapViewModel: ObservableObject {
     private var markerEntriesCache: [MapMarkerEntry] = []
     private var markerEntriesIndexByID: [UUID: Int] = [:]
     private var hasAutoOpened = false
+    private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
     private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
@@ -276,6 +286,19 @@ final class HomeMapViewModel: ObservableObject {
 
     var currentLocationCoordinate: CLLocationCoordinate2D {
         resolvedCenter
+    }
+
+    var locationFallbackAlertTitle: String {
+        L10n.Home.locationFallbackTitle
+    }
+
+    func locationFallbackAlertMessage(for notice: LocationFallbackNotice) -> String {
+        switch notice.reason {
+        case .outsideJapan:
+            return L10n.Home.locationFallbackOutsideJapanMessage
+        case .permissionDenied:
+            return L10n.Home.locationFallbackPermissionDeniedMessage
+        }
     }
 
     var now: Date {
@@ -417,6 +440,10 @@ final class HomeMapViewModel: ObservableObject {
         startReminderSyncTask = nil
         nearbyReminderSyncTask?.cancel()
         nearbyReminderSyncTask = nil
+    }
+
+    func dismissLocationFallbackNotice() {
+        locationFallbackNotice = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
@@ -1890,13 +1917,19 @@ final class HomeMapViewModel: ObservableObject {
         bootstrapTask = Task { [weak self] in
             guard let self else { return }
 
-            let center = await self.locationProvider.currentCoordinate(fallback: self.initialCenter)
+            let locationResolution = await self.locationProvider.resolveCurrentLocation(
+                fallback: self.initialCenter
+            )
 
             guard !Task.isCancelled else {
                 return
             }
 
             self.bootstrapTask = nil
+            if let fallbackReason = locationResolution.fallbackReason {
+                self.presentLocationFallbackNoticeIfNeeded(for: fallbackReason)
+            }
+            let center = locationResolution.coordinate
             let previousCenter = self.resolvedCenter
             self.resolvedCenter = center
             if self.distanceKm(from: previousCenter, to: center) >= 0.02 {
@@ -1921,6 +1954,14 @@ final class HomeMapViewModel: ObservableObject {
             )
             self.shouldBootstrapFromBundled = false
         }
+    }
+
+    private func presentLocationFallbackNoticeIfNeeded(for reason: AppLocationFallbackReason) {
+        guard shownLocationFallbackReasons.contains(reason) == false else {
+            return
+        }
+        shownLocationFallbackReasons.insert(reason)
+        locationFallbackNotice = LocationFallbackNotice(reason: reason)
     }
 
     private func debugLog(_ message: String) {

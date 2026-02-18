@@ -122,6 +122,13 @@ enum L10n {
         static var resetLocationA11y: String { text("home.location.reset_a11y") }
         static var openMenuA11y: String { text("home.menu.open_a11y") }
         static var quickDateTodaySoon: String { text("home.quick.date_today_soon") }
+        static var locationFallbackTitle: String { text("home.location_fallback.title") }
+        static var locationFallbackOutsideJapanMessage: String {
+            text("home.location_fallback.outside_japan")
+        }
+        static var locationFallbackPermissionDeniedMessage: String {
+            text("home.location_fallback.permission_denied")
+        }
     }
 
     enum QuickCard {

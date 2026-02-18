@@ -297,6 +297,20 @@ struct HomeMapView: View {
         .onDisappear {
             viewModel.onViewDisappear()
         }
+        .alert(
+            item: Binding(
+                get: { viewModel.locationFallbackNotice },
+                set: { _ in viewModel.dismissLocationFallbackNotice() }
+            )
+        ) { notice in
+            Alert(
+                title: Text(viewModel.locationFallbackAlertTitle),
+                message: Text(viewModel.locationFallbackAlertMessage(for: notice)),
+                dismissButton: .default(Text(L10n.Common.close)) {
+                    viewModel.dismissLocationFallbackNotice()
+                }
+            )
+        }
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
     }

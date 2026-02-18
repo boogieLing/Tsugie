@@ -22,6 +22,9 @@
 "home.location.reset_a11y" = "現在地へ戻る";
 "home.menu.open_a11y" = "メニューを開く";
 "home.quick.date_today_soon" = "本日開催！まもなく！";
+"home.location_fallback.title" = "位置情報はデフォルト地点を使用";
+"home.location_fallback.outside_japan" = "現在地が日本国外のため、デフォルト地点の東京スカイツリー（Tokyo Sky Tree）を使用します。";
+"home.location_fallback.permission_denied" = "位置情報の許可がないため、デフォルト地点の東京スカイツリー（Tokyo Sky Tree）を使用します。";
 
 "quickcard.fast_plan" = "✨ 最速攻略";
 "quickcard.expired_title" = "終了済み";

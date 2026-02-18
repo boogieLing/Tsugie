@@ -22,6 +22,9 @@
 "home.location.reset_a11y" = "Return to current location";
 "home.menu.open_a11y" = "Open menu";
 "home.quick.date_today_soon" = "Today, starting soon!";
+"home.location_fallback.title" = "Using default location";
+"home.location_fallback.outside_japan" = "Current location is outside Japan. Using the default location: Tokyo Sky Tree.";
+"home.location_fallback.permission_denied" = "Location permission is off. Using the default location: Tokyo Sky Tree.";
 
 "quickcard.fast_plan" = "✨ Fastest Plan";
 "quickcard.expired_title" = "Ended";
