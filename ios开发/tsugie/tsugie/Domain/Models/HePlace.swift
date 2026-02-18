@@ -8,6 +8,12 @@ enum HeType: String, CaseIterable, Codable {
     case other
 }
 
+struct HePlaceImageRef {
+    let payloadOffset: UInt64
+    let payloadLength: Int
+    let payloadSHA256: String?
+}
+
 struct HePlace: Identifiable {
     let id: UUID
     let name: String
@@ -22,6 +28,11 @@ struct HePlace: Identifiable {
     let openHours: String?
     let mapSpot: String
     let detailDescription: String
+    let oneLiner: String?
+    let sourceURLs: [String]
+    let descriptionSourceURL: String?
+    let imageSourceURL: String?
+    let imageRef: HePlaceImageRef?
     let imageTag: String
     let imageHint: String
     let heatScore: Int
@@ -41,6 +52,11 @@ struct HePlace: Identifiable {
         openHours: String?,
         mapSpot: String,
         detailDescription: String,
+        oneLiner: String? = nil,
+        sourceURLs: [String] = [],
+        descriptionSourceURL: String? = nil,
+        imageSourceURL: String? = nil,
+        imageRef: HePlaceImageRef? = nil,
         imageTag: String,
         imageHint: String,
         heatScore: Int,
@@ -59,6 +75,11 @@ struct HePlace: Identifiable {
         self.openHours = openHours
         self.mapSpot = mapSpot
         self.detailDescription = detailDescription
+        self.oneLiner = oneLiner
+        self.sourceURLs = sourceURLs
+        self.descriptionSourceURL = descriptionSourceURL
+        self.imageSourceURL = imageSourceURL
+        self.imageRef = imageRef
         self.imageTag = imageTag
         self.imageHint = imageHint
         self.heatScore = heatScore
@@ -67,6 +88,11 @@ struct HePlace: Identifiable {
 
     var isApproximateCoordinate: Bool {
         geoSource == "pref_center_fallback" || geoSource == "missing"
+    }
+
+    var hasImageAsset: Bool {
+        guard let imageRef else { return false }
+        return imageRef.payloadLength > 0
     }
 }
     

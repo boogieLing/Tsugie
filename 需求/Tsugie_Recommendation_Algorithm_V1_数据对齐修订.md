@@ -108,23 +108,23 @@
 
 ### 4.4 评分规则（修订后）
 
-在当前数据质量下，热度与规模建议优先使用已数值化字段，而不是稀疏原始字段：
+在当前数据质量下，热度建议优先使用已数值化字段，并按原始 V1（docx）回调权重：
 
 1. `SpaceScore = exp(-distance_km / 5)`
-2. `TimeScore` 继续沿用 V1 阶梯规则（ongoing=1.0；<3h=0.8；<12h=0.6；<24h=0.3；else=0.1）
+2. `TimeScore`：`ongoing=1.0`；`<3h=0.8`；`<12h=0.6`；`<24h=0.3`；`>24h` 按 `delta_start` 连续衰减（不使用固定常数）
 3. `HeatScore = clamp(heat_score / 100, 0, 1)`
-4. `ScaleBoost = clamp(scale_score / 100, 0, 1)`（替代 `scale_level`）
-5. `CategoryWeight` 当前仅定义：`hanabi=1.35`，`matsuri=1.0`，其他=1.0（当前阶段优先花火）
+4. `CategoryWeight` 当前定义：`hanabi=1.2`，`matsuri=1.0`，`nature=0.8`，其他=1.0
 
-建议总分（V1.1）：
+建议总分（V1 回调）：
 
-`FinalScore = (0.40 * SpaceScore + 0.35 * TimeScore + 0.15 * HeatScore + 0.10 * ScaleBoost) * CategoryWeight`
+`FinalScore = (0.45 * SpaceScore + 0.45 * TimeScore + 0.10 * HeatScore) * CategoryWeight`
 
 说明：
 
 1. 保留“空间+时间主导”原则
 2. 避免依赖稀疏字段（`expected_visitors`、`launch_scale`）
-3. 与当前 iOS 可用字段 100% 对齐，可直接落地
+3. 通过 `>24h` 连续衰减避免“微小距离差压过显著时间差”
+4. 与当前 iOS 可用字段对齐，可直接落地
 
 ### 4.5 排序与输出（修订后）
 
@@ -132,10 +132,10 @@
 2. 输出 Top N（首页默认 Top1 作为最速攻略）
 3. 当评分相同：`hanabi` 优先 -> 距离近优先 -> 开始时间早优先 -> `heat_score` 高优先
 
-当前 App（未改动代码）排序实现说明：
+当前 App（2026-02-19）排序实现说明：
 
-1. 地图主推荐：今日优先 -> 距离优先 -> 规模优先（`ios开发/tsugie/tsugie/Presentation/HomeMap/HomeMapViewModel.swift:1106`）
-2. 日历日抽屉：距离优先 -> 开始时间优先 -> 热度兜底（`ios开发/tsugie/tsugie/Presentation/Calendar/CalendarPageView.swift:830`）
+1. 地图主推荐与 nearby 轮播统一使用 `FinalScore` 排序（由 `HomeMapViewModel.nearbyRecommendationSignal` 输出）。
+2. 日历日抽屉保持“距离优先 -> 开始时间优先 -> 热度兜底”（`ios开发/tsugie/tsugie/Presentation/Calendar/CalendarPageView.swift:830`）。
 
 ### 4.6 触发策略（修订后）
 

@@ -131,6 +131,73 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(ordered.first, "hanabi-priority")
     }
 
+    func testNearbyCarouselPrefersSoonerStartWhenDistanceGapIsSmall() {
+        let now = Date()
+        let placeA = makePlace(
+            name: "later-75d",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(75 * 24 * 60 * 60),
+            endAt: now.addingTimeInterval((75 * 24 + 2) * 60 * 60),
+            distanceMeters: 1_200,
+            scaleScore: 80,
+            heatScore: 70
+        )
+        let placeB = makePlace(
+            name: "sooner-27d",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(27 * 24 * 60 * 60),
+            endAt: now.addingTimeInterval((27 * 24 + 2) * 60 * 60),
+            distanceMeters: 1_400,
+            scaleScore: 80,
+            heatScore: 70
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [placeA, placeB],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        let ordered = viewModel.nearbyCarouselItems(now: now, limit: 2).map(\.name)
+
+        XCTAssertEqual(ordered.first, "sooner-27d")
+    }
+
+    func testNearbyCarouselCanIncludePlacesOutsideCurrentViewportEnvelope() async {
+        let now = Date()
+        let inViewport = makePlace(
+            name: "in-viewport",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(12 * 60 * 60),
+            endAt: now.addingTimeInterval(14 * 60 * 60),
+            distanceMeters: 900,
+            scaleScore: 70,
+            heatScore: 65,
+            coordinate: CLLocationCoordinate2D(latitude: 35.7103, longitude: 139.8108)
+        )
+        let outOfViewportButNearby = makePlace(
+            name: "out-viewport-nearby",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(2 * 60 * 60),
+            endAt: now.addingTimeInterval(4 * 60 * 60),
+            distanceMeters: 1_300,
+            scaleScore: 70,
+            heatScore: 65,
+            coordinate: CLLocationCoordinate2D(latitude: 35.7560, longitude: 139.8108)
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [inViewport, outOfViewportButNearby],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        viewModel.onViewAppear()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        let visibleIDs = Set(viewModel.mapPlaces().map(\.id))
+        XCTAssertFalse(visibleIDs.contains(outOfViewportButNearby.id))
+
+        let nearbyNames = viewModel.nearbyCarouselItems(now: now, limit: 2).map(\.name)
+        XCTAssertEqual(nearbyNames.first, "out-viewport-nearby")
+    }
+
     func testFastestFavoritePlacesPrefersOngoingThenSoonestUpcoming() {
         let now = Date()
         let ongoing = makePlace(
@@ -188,13 +255,14 @@ final class HomeMapViewModelTests: XCTestCase {
         endAt: Date? = Date().addingTimeInterval(110 * 60),
         distanceMeters: Double = 500,
         scaleScore: Int = 80,
-        heatScore: Int = 60
+        heatScore: Int = 60,
+        coordinate: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 35.7, longitude: 139.8)
     ) -> HePlace {
         HePlace(
             id: UUID(),
             name: name,
             heType: heType,
-            coordinate: CLLocationCoordinate2D(latitude: 35.7, longitude: 139.8),
+            coordinate: coordinate,
             startAt: startAt,
             endAt: endAt,
             distanceMeters: distanceMeters,

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct DetailPanelView: View {
+    @Environment(\.openURL) private var openURL
+
     let place: HePlace
     let snapshot: EventStatusSnapshot
     let placeState: PlaceState
@@ -40,6 +42,15 @@ struct DetailPanelView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
+                    if let oneLiner = place.oneLiner?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !oneLiner.isEmpty {
+                        Text(oneLiner)
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(Color(red: 0.30, green: 0.44, blue: 0.50))
+                            .lineSpacing(2)
+                            .padding(.top, 8)
+                    }
+
                     HStack {
                         Text(distanceText)
                             .font(.system(size: 13, weight: .bold))
@@ -54,8 +65,10 @@ struct DetailPanelView: View {
                     detailProgressBlock
                         .padding(.top, 12)
 
-                    heroBlock
-                        .padding(.top, 14)
+                    if place.hasImageAsset {
+                        heroImageBlock
+                            .padding(.top, 14)
+                    }
 
                     miniMapBlock
                         .padding(.top, 14)
@@ -65,6 +78,11 @@ struct DetailPanelView: View {
 
                     introBlock
                         .padding(.top, 14)
+
+                    if preferredSourceURL != nil {
+                        sourceBlock
+                            .padding(.top, 14)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
@@ -129,29 +147,15 @@ struct DetailPanelView: View {
         }
     }
 
-    private var heroBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(place.imageTag)
-                .font(.system(size: 12, weight: .heavy))
-                .foregroundStyle(Color(red: 0.18, green: 0.38, blue: 0.46))
-                .padding(.horizontal, 10)
-                .frame(height: 26)
-                .background(Color.white.opacity(0.72), in: Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1))
-
-            Text(place.imageHint)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color(red: 0.20, green: 0.42, blue: 0.50))
-                .lineSpacing(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(14)
-        .frame(height: 166, alignment: .bottomLeading)
-        .background(heroGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.9), lineWidth: 1)
-        )
+    private var heroImageBlock: some View {
+        HePlaceDetailImageView(place: place, height: 196)
+            .frame(maxWidth: .infinity)
+            .frame(height: 196)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.9), lineWidth: 1)
+            )
     }
 
     private var miniMapBlock: some View {
@@ -200,6 +204,43 @@ struct DetailPanelView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.85), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var sourceBlock: some View {
+        if let sourceText = preferredSourceURL,
+           let sourceURL = URL(string: sourceText) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.Detail.sourceTitle)
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
+
+                Button {
+                    openURL(sourceURL)
+                } label: {
+                    Text(sourceText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(Color(red: 0.22, green: 0.43, blue: 0.56))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.85), lineWidth: 1)
+            )
+        }
+    }
+
+    private var preferredSourceURL: String? {
+        if let primary = place.descriptionSourceURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !primary.isEmpty {
+            return primary
+        }
+        return place.sourceURLs.first
     }
 
     private var statsBlock: some View {
@@ -296,27 +337,6 @@ struct DetailPanelView: View {
         }
     }
 
-    private var heroGradient: some ShapeStyle {
-        let from: Color
-        let to: Color
-        switch place.heType {
-        case .hanabi:
-            from = Color(red: 0.78, green: 0.93, blue: 1.00)
-            to = Color(red: 0.86, green: 0.93, blue: 1.00)
-        case .matsuri:
-            from = Color(red: 1.00, green: 0.92, blue: 0.82)
-            to = Color(red: 1.00, green: 0.87, blue: 0.82)
-        case .nature:
-            from = Color(red: 0.82, green: 0.96, blue: 0.90)
-            to = Color(red: 0.83, green: 0.92, blue: 0.99)
-        case .other:
-            from = Color(red: 0.88, green: 0.91, blue: 1.00)
-            to = Color(red: 0.88, green: 0.95, blue: 1.00)
-        }
-
-        return LinearGradient(colors: [from, to], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
     private var detailTitleLineLimit: Int {
         place.name.count >= 20 ? 3 : 2
     }
@@ -329,5 +349,53 @@ struct DetailPanelView: View {
             return 27
         }
         return 30
+    }
+}
+
+private struct HePlaceDetailImageView: View {
+    let place: HePlace
+    let height: CGFloat
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
+    var body: some View {
+        ZStack {
+            if let image {
+                GeometryReader { proxy in
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                }
+            } else if isLoading {
+                ProgressView()
+                    .tint(Color(red: 0.24, green: 0.43, blue: 0.52))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: height)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .clipped()
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.89, green: 0.95, blue: 0.98),
+                    Color(red: 0.95, green: 0.98, blue: 1.00),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .task(id: place.id) {
+            isLoading = true
+            image = HePlaceImageRepository.loadImage(for: place)
+            isLoading = false
+        }
+        .onDisappear {
+            image = nil
+            isLoading = false
+        }
     }
 }

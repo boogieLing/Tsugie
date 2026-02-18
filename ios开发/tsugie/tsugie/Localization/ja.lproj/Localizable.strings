@@ -48,6 +48,7 @@
 "detail.map_location" = "マップ上の位置";
 "detail.focus" = "フォーカス";
 "detail.intro" = "紹介";
+"detail.source_title" = "元ページ";
 "detail.atmosphere" = "いまの空気感";
 "detail.heat" = "熱気";
 "detail.surprise" = "驚き";

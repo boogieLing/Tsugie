@@ -567,18 +567,22 @@ enum EncodedHePlaceRepository {
             return nil
         }
 
-        let name = item.record.eventName?.nonEmpty ?? item.record.venueName?.nonEmpty ?? "Unknown"
+        let name = cleanDisplayText(item.record.eventName)
+            ?? cleanDisplayText(item.record.venueName)
+            ?? "Unknown"
         let type = HeType(rawValue: item.category) ?? .other
         let placeID = UUID(uuidString: item.iosPlaceID) ?? UUID()
         let startAt = SeedDateParser.startAt(item)
         let endAt = SeedDateParser.endAt(item, startAt: startAt)
-        let mapSpot = item.record.venueName?.nonEmpty
-            ?? item.record.venueAddress?.nonEmpty
-            ?? item.record.city?.nonEmpty
-            ?? item.record.prefecture?.nonEmpty
+        let mapSpot = cleanDisplayText(item.record.venueName)
+            ?? cleanDisplayText(item.record.venueAddress)
+            ?? cleanDisplayText(item.record.city)
+            ?? cleanDisplayText(item.record.prefecture)
             ?? name
-        let hint = item.hint?.nonEmpty ?? "\(mapSpot)・おすすめ"
-        let detail = makeDetailDescription(from: item.record)
+        let hint = cleanDisplayText(item.hint) ?? "\(mapSpot)・おすすめ"
+        let detail = makeDetailDescription(item: item)
+        let sourceURLs = makeSourceURLs(item: item)
+        let imageRef = makeImageRef(item: item)
         let openHours = makeOpenHours(start: item.normalizedStartTime, end: item.normalizedEndTime)
         let realDistance = center.distance(to: coordinate)
 
@@ -596,8 +600,13 @@ enum EncodedHePlaceRepository {
             openHours: openHours,
             mapSpot: mapSpot,
             detailDescription: detail,
+            oneLiner: cleanDisplayText(item.contentOneLiner),
+            sourceURLs: sourceURLs,
+            descriptionSourceURL: cleanDisplayText(item.contentDescriptionSourceURL) ?? sourceURLs.first,
+            imageSourceURL: cleanDisplayText(item.contentImageSourceURL),
+            imageRef: imageRef,
             imageTag: type == .hanabi ? "花火" : (type == .matsuri ? "祭典" : "へ"),
-            imageHint: item.record.eventName?.nonEmpty ?? name,
+            imageHint: cleanDisplayText(item.record.eventName) ?? name,
             heatScore: item.heatScore ?? 72,
             surpriseScore: item.surpriseScore ?? 66
         )
@@ -625,7 +634,12 @@ enum EncodedHePlaceRepository {
         return nil
     }
 
-    private nonisolated static func makeDetailDescription(from record: FusedEventRecord) -> String {
+    private nonisolated static func makeDetailDescription(item: EncodedHePlaceItem) -> String {
+        if let polished = cleanDisplayText(item.contentDescription) {
+            return polished
+        }
+
+        let record = item.record
         let candidates = [
             record.eventName,
             record.venueName,
@@ -634,8 +648,47 @@ enum EncodedHePlaceRepository {
             record.contact,
             record.sourceNotes,
         ]
-        let kept = candidates.compactMap { $0?.nonEmpty }
+        let kept = candidates.compactMap(cleanDisplayText)
         return kept.isEmpty ? "詳細情報準備中" : kept.joined(separator: " / ")
+    }
+
+    private nonisolated static func makeSourceURLs(item: EncodedHePlaceItem) -> [String] {
+        let candidates = item.contentSourceURLs ?? item.record.sourceURLs ?? []
+        var output: [String] = []
+        output.reserveCapacity(candidates.count)
+        var seen = Set<String>()
+        for value in candidates {
+            guard let text = cleanDisplayText(value) else { continue }
+            if seen.insert(text).inserted {
+                output.append(text)
+            }
+        }
+        return output
+    }
+
+    private nonisolated static func makeImageRef(item: EncodedHePlaceItem) -> HePlaceImageRef? {
+        guard let payloadOffset = item.imagePayloadOffset,
+              let payloadLength = item.imagePayloadLength,
+              payloadLength > 0 else {
+            return nil
+        }
+        return HePlaceImageRef(
+            payloadOffset: payloadOffset,
+            payloadLength: payloadLength,
+            payloadSHA256: item.imagePayloadSHA256?.nonEmpty
+        )
+    }
+
+    private nonisolated static func cleanDisplayText(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        // Drop mojibake replacement characters to avoid broken text in UI.
+        guard !trimmed.contains("\u{FFFD}") else {
+            return nil
+        }
+        return trimmed
     }
 }
 
@@ -702,6 +755,14 @@ nonisolated private struct EncodedHePlaceItem: Decodable {
     let normalizedStartTime: String?
     let normalizedEndTime: String?
     let geohash: String?
+    let contentDescription: String?
+    let contentOneLiner: String?
+    let contentSourceURLs: [String]?
+    let contentDescriptionSourceURL: String?
+    let contentImageSourceURL: String?
+    let imagePayloadOffset: UInt64?
+    let imagePayloadLength: Int?
+    let imagePayloadSHA256: String?
     let record: FusedEventRecord
 
     enum CodingKeys: String, CodingKey {
@@ -717,6 +778,14 @@ nonisolated private struct EncodedHePlaceItem: Decodable {
         case normalizedStartTime = "normalized_start_time"
         case normalizedEndTime = "normalized_end_time"
         case geohash
+        case contentDescription = "content_description"
+        case contentOneLiner = "content_one_liner"
+        case contentSourceURLs = "content_source_urls"
+        case contentDescriptionSourceURL = "content_description_source_url"
+        case contentImageSourceURL = "content_image_source_url"
+        case imagePayloadOffset = "image_payload_offset"
+        case imagePayloadLength = "image_payload_length"
+        case imagePayloadSHA256 = "image_payload_sha256"
         case record
     }
 }
@@ -734,6 +803,7 @@ nonisolated private struct FusedEventRecord: Decodable {
     let contact: String?
     let sourceNotes: String?
     let geoSource: String?
+    let sourceURLs: [String]?
 
     enum CodingKeys: String, CodingKey {
         case eventName = "event_name"
@@ -748,6 +818,7 @@ nonisolated private struct FusedEventRecord: Decodable {
         case contact
         case sourceNotes = "source_notes"
         case geoSource = "geo_source"
+        case sourceURLs = "source_urls"
     }
 
     init(from decoder: Decoder) throws {
@@ -764,6 +835,7 @@ nonisolated private struct FusedEventRecord: Decodable {
         contact = Self.decodeString(container, key: .contact)
         sourceNotes = Self.decodeString(container, key: .sourceNotes)
         geoSource = Self.decodeString(container, key: .geoSource)
+        sourceURLs = Self.decodeStringList(container, key: .sourceURLs)
     }
 
     var coordinate: CLLocationCoordinate2D? {
@@ -802,6 +874,23 @@ nonisolated private struct FusedEventRecord: Decodable {
         if let text = try? container.decodeIfPresent(String.self, forKey: key),
            let value = Double(text) {
             return value
+        }
+        return nil
+    }
+
+    private nonisolated static func decodeStringList(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> [String]? {
+        if let values = try? container.decodeIfPresent([String].self, forKey: key) {
+            return values
+        }
+        if let value = try? container.decodeIfPresent(String.self, forKey: key),
+           let text = value.nonEmpty {
+            if text.contains("|") {
+                return text.split(separator: "|").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            }
+            return [text]
         }
         return nil
     }

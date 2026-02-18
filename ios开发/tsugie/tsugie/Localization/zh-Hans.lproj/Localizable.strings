@@ -48,6 +48,7 @@
 "detail.map_location" = "地图位置";
 "detail.focus" = "聚焦";
 "detail.intro" = "介绍";
+"detail.source_title" = "来源页面";
 "detail.atmosphere" = "当前氛围";
 "detail.heat" = "热度";
 "detail.surprise" = "惊喜";

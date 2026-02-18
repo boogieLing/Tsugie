@@ -216,13 +216,14 @@
   3. 产物写入：
      - `ios开发/tsugie/tsugie/Resources/he_places.index.json`（空间索引）
      - `ios开发/tsugie/tsugie/Resources/he_places.payload.bin`（二进制分片 payload）
-  4. iOS 端通过 `ios开发/tsugie/tsugie/Infrastructure/EncodedHePlaceRepository.swift` 读取索引并按 `offset/length` 随机读取附近 bucket 的 payload；启动按当前位置实时检索附近 Geohash 桶并解码
+     - `ios开发/tsugie/tsugie/Resources/he_images.payload.bin`（活动单图二进制 payload）
+  4. iOS 端通过 `ios开发/tsugie/tsugie/Infrastructure/EncodedHePlaceRepository.swift` 读取索引并按 `offset/length` 随机读取附近 bucket 的 payload；通过 `ios开发/tsugie/tsugie/Infrastructure/HePlaceImageRepository.swift` 按活动图片偏移按需解码单图；启动按当前位置实时检索附近 Geohash 桶并解码
 
 - 数据包编解码基线（强制）：
   - 无损压缩：`zlib`
   - 混淆：`xor_sha256_stream_v1`
-  - 帧编码：`binary_frame_v1`（索引记录分片偏移，payload 以二进制存储）
-  - 解码顺序必须与编码顺序完全逆向一致（`按 offset/length 读取二进制分片 -> 去混淆 -> zlib 解压 -> JSON decode`）
+  - 帧编码：`binary_frame_v1`（索引记录分片偏移，payload 以二进制存储；活动数据与图片 payload 一致）
+  - 解码顺序必须与编码顺序完全逆向一致（`按 offset/length 读取二进制分片 -> 去混淆 -> zlib 解压 -> JSON decode/图片二进制`）
 
 - 维护要求：
   - 编解码算法、密钥策略、资源路径、脚本入口任一变化，必须在同一次工作中同步更新 `AGENTS.md` 与 `记录/项目变更记录.md`。
@@ -248,8 +249,10 @@
 
 ## 15. 推荐算法数据对齐基线（新增）
 
-- 推荐算法文档基线新增：`需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md`（2026-02-16）。
-- iOS 推荐逻辑在“数据字段定义、时间解析回退、过滤规则、评分权重”四部分，默认以该文档为准。
+- 推荐算法文档基线：`需求/Tsugie_Recommendation_Algorithm_V1.docx`（原始）+ `需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md`（字段落地）（2026-02-19）。
+- iOS 推荐逻辑在“数据字段定义、时间解析回退、过滤规则、评分权重”四部分，默认以以上两份文档共同约束为准。
+- 评分权重默认回调为 V1：`0.45 * SpaceScore + 0.45 * TimeScore + 0.10 * HeatScore`；类别权重默认：`hanabi=1.2`、`matsuri=1.0`、`nature=0.8`、`other=1.0`。
+- `upcoming` 的 `TimeScore` 在 `<24h` 保持阶梯规则，`>24h` 必须按 `delta_start` 连续衰减，禁止固定常数，避免“微小距离差”压过“显著时间差”。
 - 在数据覆盖率未达标前，`expected_visitors` 与 `launch_scale` 不得作为主排序强依赖；优先使用 `distance/时间状态/scale_score/heat_score`。
 - nearby 轮播推荐粗排阶段必须过滤 `ended` 活动，不允许过期活动进入轮播候选池。
 - nearby 轮播推荐当前阶段默认优先 `hanabi`（花火大会），并通过类别权重与同分排序共同保证优先级。
@@ -270,6 +273,12 @@
 - 提示词模板固定本地化管理（可直接改文档，不改代码）：
   - `数据端/文档/event-description-polish.prompt.md`（多段正文润色）
   - `数据端/文档/event-one-liner.prompt.md`（一句话简述）
+- 文本润色模式基线：
+  - `--polish-mode auto|openai|codex|none`（默认 `auto`）
+  - `codex` 模式允许本地逐条生成（通过本机 Codex CLI），用于无 OpenAI API key 场景的一次性批处理。
+- 抓取质量基线（新增）：
+  - 对 `text/html` 且未声明 charset 的页面，必须执行编码探测（含 `Shift_JIS/CP932`）后再解析，避免日文乱码落盘。
+  - 对 `omatsuri.com/sch/*.html#...` 月历锚点页，必须优先抽取“活动行级文本”；若仅能命中页面通用头图/OGP 图（如 `header.jpg`），则该活动视为无图，不写入通用图占位。
 - 输出基线：
   - `数据端/HANABI/data/content/<run_id>/`、`数据端/OMATSURI/data/content/<run_id>/`
   - 必须产出 `events_content.jsonl`、`events_content.csv`、`content_enrich_log.csv`、`content_summary.json`

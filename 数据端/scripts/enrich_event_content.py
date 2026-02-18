@@ -5,8 +5,10 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -150,6 +152,83 @@ class OpenAITextPolisher:
         return clean_text_block(text)
 
 
+class CodexTextPolisher:
+    def __init__(
+        self,
+        *,
+        repo_root: Path,
+        model: str,
+        timeout_sec: float,
+        description_template: str,
+        one_liner_template: str,
+    ) -> None:
+        self.repo_root = repo_root
+        self.model = clean_text(model)
+        self.timeout_sec = max(20.0, float(timeout_sec))
+        self.description_template = description_template
+        self.one_liner_template = one_liner_template
+
+    def close(self) -> None:
+        return
+
+    def polish_pair(self, raw_text: str) -> tuple[str, str]:
+        desc_prompt = self.description_template.replace("{原始文本}", raw_text)
+        one_liner_prompt = self.one_liner_template.replace("{原始文本}", raw_text)
+        prompt = (
+            f"{desc_prompt}\n\n"
+            f"{one_liner_prompt}\n\n"
+            "请仅返回 JSON，格式如下：\n"
+            "{\"polished_description\":\"...\",\"one_liner\":\"...\"}\n"
+            "不要输出额外说明、不要输出 markdown 代码块。"
+        )
+        out = self._call(prompt)
+        data = parse_json_object(out)
+        if not isinstance(data, dict):
+            return "", ""
+        polished = clean_text_block(str(data.get("polished_description") or ""))
+        one_liner = clean_text_block(str(data.get("one_liner") or ""))
+        return polished, one_liner
+
+    def _call(self, prompt: str) -> str:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            output_path = tmp.name
+        try:
+            cmd = [
+                "codex",
+                "exec",
+                "--skip-git-repo-check",
+                "-C",
+                str(self.repo_root),
+                "--sandbox",
+                "read-only",
+                "--output-last-message",
+                output_path,
+            ]
+            if self.model:
+                cmd.extend(["-m", self.model])
+            cmd.append(prompt)
+
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_sec,
+                check=False,
+            )
+            if proc.returncode != 0:
+                return ""
+            if not Path(output_path).exists():
+                return ""
+            return Path(output_path).read_text(encoding="utf-8").strip()
+        finally:
+            try:
+                Path(output_path).unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+
 def extract_openai_output_text(data: dict[str, Any]) -> str:
     direct = data.get("output_text")
     if isinstance(direct, str) and direct.strip():
@@ -267,6 +346,24 @@ def safe_json_loads(raw: str) -> Any:
         return None
 
 
+def parse_json_object(raw: str) -> dict[str, Any] | None:
+    text = clean_text_block(raw)
+    if not text:
+        return None
+    direct = safe_json_loads(text)
+    if isinstance(direct, dict):
+        return direct
+
+    m = re.search(r"\{[\s\S]*\}", text)
+    if not m:
+        return None
+    candidate = m.group(0).strip()
+    parsed = safe_json_loads(candidate)
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
 def iter_jsonld_objects(soup: BeautifulSoup) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for tag in soup.select('script[type="application/ld+json"]'):
@@ -344,6 +441,217 @@ def normalize_url(raw_url: str | None, base_url: str) -> str:
     if parsed.scheme not in {"http", "https"}:
         return ""
     return abs_url
+
+
+def detect_declared_encoding(raw_html: bytes, content_type: str) -> list[str]:
+    candidates: list[str] = []
+
+    def add_encoding(value: str | None) -> None:
+        if not value:
+            return
+        text = clean_text(value).lower()
+        if not text:
+            return
+        mapping = {
+            "shift-jis": "cp932",
+            "shift_jis": "cp932",
+            "sjis": "cp932",
+            "x-sjis": "cp932",
+            "ms932": "cp932",
+            "windows-31j": "cp932",
+            "cp932": "cp932",
+            "utf8": "utf-8",
+        }
+        normalized = mapping.get(text, text)
+        if normalized not in candidates:
+            candidates.append(normalized)
+
+    # HTTP header charset, if present.
+    m = re.search(r"charset\s*=\s*([^\s;]+)", content_type or "", flags=re.IGNORECASE)
+    if m:
+        add_encoding(m.group(1).strip("\"'"))
+
+    head = raw_html[:4096]
+    try:
+        head_ascii = head.decode("ascii", errors="ignore")
+    except Exception:  # noqa: BLE001
+        head_ascii = ""
+
+    # XML declaration, e.g. <?xml version="1.0" encoding="Shift_JIS"?>
+    m = re.search(r'encoding\s*=\s*["\']\s*([A-Za-z0-9._-]+)\s*["\']', head_ascii, flags=re.IGNORECASE)
+    if m:
+        add_encoding(m.group(1))
+
+    # HTML meta charset
+    m = re.search(r'<meta[^>]+charset\s*=\s*["\']?\s*([A-Za-z0-9._-]+)', head_ascii, flags=re.IGNORECASE)
+    if m:
+        add_encoding(m.group(1))
+
+    # HTML meta content-type with charset
+    m = re.search(r'content\s*=\s*["\'][^"\']*charset\s*=\s*([A-Za-z0-9._-]+)', head_ascii, flags=re.IGNORECASE)
+    if m:
+        add_encoding(m.group(1))
+
+    return candidates
+
+
+def decode_response_html(response: httpx.Response) -> str:
+    raw = response.content or b""
+    if not raw:
+        return ""
+
+    candidates = detect_declared_encoding(raw, str(response.headers.get("content-type") or ""))
+
+    # httpx inferred encoding as additional hint.
+    if response.encoding:
+        candidates.append(response.encoding.lower())
+
+    # Stable fallbacks for JP sites.
+    candidates.extend(["utf-8", "cp932", "shift_jis", "euc_jp"])
+
+    tried: set[str] = set()
+    for enc in candidates:
+        if not enc or enc in tried:
+            continue
+        tried.add(enc)
+        try:
+            return raw.decode(enc)
+        except Exception:  # noqa: BLE001
+            continue
+
+    return raw.decode("utf-8", errors="replace")
+
+
+def is_schedule_anchor_url(source_url: str) -> bool:
+    parsed = urlparse(source_url)
+    return parsed.netloc.endswith("omatsuri.com") and "/sch/" in parsed.path and bool(parsed.fragment)
+
+
+def is_generic_image_url(url: str) -> bool:
+    low = url.lower()
+    if low.endswith("/img/header.jpg") or low.endswith("/img/header.jpeg") or low.endswith("/img/header.png"):
+        return True
+    if "ogp0.png" in low:
+        return True
+    return False
+
+
+def find_anchor_node(soup: BeautifulSoup, source_url: str) -> Any:
+    fragment = clean_text(urlparse(source_url).fragment)
+    if not fragment:
+        return None
+    node = soup.find(id=fragment)
+    if node is not None:
+        return node
+    node = soup.find(attrs={"name": fragment})
+    if node is not None:
+        return node
+    return None
+
+
+def find_anchor_container(node: Any) -> Any:
+    if node is None:
+        return None
+    for tag in ("tr", "li", "p", "section", "article", "div"):
+        parent = node.find_parent(tag)
+        if parent is None:
+            continue
+        txt = clean_text_block(parent.get_text(" "))
+        if len(txt) >= 6:
+            return parent
+    return node
+
+
+def collect_anchor_description(soup: BeautifulSoup, source_url: str, max_chars: int) -> str:
+    node = find_anchor_node(soup, source_url)
+    if node is None:
+        return ""
+    container = find_anchor_container(node)
+    if container is None:
+        return ""
+    text = clean_text_block(container.get_text(" "))
+    if not text:
+        return ""
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return text
+
+
+def collect_event_context_description(soup: BeautifulSoup, event_name: str, max_chars: int) -> str:
+    name = clean_text(event_name)
+    if not name:
+        return ""
+
+    def norm_for_match(text: str) -> str:
+        return re.sub(r"[\s　・･（）()［］\[\]【】「」『』,，、。~〜～\-]", "", text)
+
+    normalized_name = norm_for_match(name)
+    if not normalized_name:
+        return ""
+
+    lines = [clean_text(line) for line in soup.get_text("\n").splitlines() if clean_text(line)]
+    candidates: list[str] = []
+    seen: set[str] = set()
+    skip_markers = (
+        "今日は何の祭り",
+        "一覧形式で紹介",
+        "ご注意",
+        "メルマガ",
+        "トップページ",
+    )
+
+    for idx, line in enumerate(lines):
+        line_norm = norm_for_match(line)
+        if normalized_name not in line_norm:
+            continue
+        if any(marker in line for marker in skip_markers):
+            continue
+
+        merged = clean_text_block(re.sub(r"^[■□◆◇●○・]+\s*", "", line))
+        if not merged:
+            continue
+        if merged in seen:
+            continue
+        seen.add(merged)
+        candidates.append(merged)
+
+    if not candidates:
+        return ""
+
+    # Prefer concise event lines over large page-level blocks.
+    candidates.sort(key=lambda x: (len(x), x))
+    best = candidates[0]
+    if len(best) > max_chars:
+        best = best[:max_chars].rstrip()
+    return best
+
+
+def collect_anchor_image_urls(soup: BeautifulSoup, source_url: str, base_url: str, max_images: int) -> list[str]:
+    node = find_anchor_node(soup, source_url)
+    if node is None:
+        return []
+    container = find_anchor_container(node)
+    if container is None:
+        return []
+
+    urls: list[str] = []
+    for img in container.select("img[src], img[data-src]"):
+        src = img.get("src") or img.get("data-src")
+        u = normalize_url(src, base_url)
+        if not u or not looks_like_image_url(u):
+            continue
+        urls.append(u)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for u in urls:
+        if u in seen:
+            continue
+        seen.add(u)
+        deduped.append(u)
+        if len(deduped) >= max_images:
+            break
+    return deduped
 
 
 def collect_description_from_selectors(soup: BeautifulSoup, max_chars: int) -> str:
@@ -616,13 +924,45 @@ def fetch_page_with_retries(
     return None, last_error
 
 
-def extract_from_page(url: str, final_url: str, html: str, *, max_desc_chars: int, max_images: int) -> PageExtract:
+def extract_from_page(
+    source_url: str,
+    final_url: str,
+    html: str,
+    *,
+    event_name: str,
+    max_desc_chars: int,
+    max_images: int,
+) -> PageExtract:
     soup = BeautifulSoup(html, "lxml")
-    raw_description = choose_raw_description(soup, max_chars=max_desc_chars)
-    image_urls = collect_image_urls(soup, base_url=final_url or url, max_images=max_images)
+    event_description = collect_event_context_description(soup, event_name=event_name, max_chars=max_desc_chars)
+    anchor_description = collect_anchor_description(soup, source_url=source_url, max_chars=max_desc_chars)
+    if event_description:
+        raw_description = event_description
+    elif is_schedule_anchor_url(source_url):
+        # Month schedule pages are generic; if event line cannot be resolved, keep empty.
+        raw_description = anchor_description
+    else:
+        raw_description = anchor_description or choose_raw_description(soup, max_chars=max_desc_chars)
+
+    anchor_images = collect_anchor_image_urls(
+        soup,
+        source_url=source_url,
+        base_url=final_url or source_url,
+        max_images=max_images,
+    )
+    if anchor_images:
+        image_urls = anchor_images
+    else:
+        image_urls = collect_image_urls(soup, base_url=final_url or source_url, max_images=max_images)
+        # For omatsuri month-schedule anchors, page-level header/OGP is generic and should not be reused.
+        if is_schedule_anchor_url(source_url):
+            image_urls = [u for u in image_urls if not is_generic_image_url(u)]
+            if image_urls:
+                image_urls = image_urls[:max_images]
+
     return PageExtract(
-        url=url,
-        final_url=final_url or url,
+        url=source_url,
+        final_url=final_url or source_url,
         raw_description=raw_description,
         image_urls=image_urls,
     )
@@ -742,6 +1082,8 @@ def read_template(path: Path) -> str:
 
 
 def should_use_openai(mode: str, has_api_key: bool) -> bool:
+    if mode == "codex":
+        return False
     if mode == "openai":
         return True
     if mode == "none":
@@ -785,6 +1127,7 @@ def run_project(
     api_key = str(args.openai_api_key or "").strip()
     openai_enabled = should_use_openai(args.polish_mode, bool(api_key))
     polisher: OpenAITextPolisher | None = None
+    codex_polisher: CodexTextPolisher | None = None
 
     if openai_enabled and api_key:
         polisher = OpenAITextPolisher(
@@ -792,6 +1135,14 @@ def run_project(
             model=args.openai_model,
             base_url=args.openai_base_url,
             timeout_sec=safe_float(args.request_timeout_sec, DEFAULT_TIMEOUT_SEC),
+            description_template=description_template,
+            one_liner_template=one_liner_template,
+        )
+    elif args.polish_mode == "codex":
+        codex_polisher = CodexTextPolisher(
+            repo_root=repo_root,
+            model=args.codex_model,
+            timeout_sec=safe_float(args.codex_timeout_sec, 120.0),
             description_template=description_template,
             one_liner_template=one_liner_template,
         )
@@ -841,9 +1192,10 @@ def run_project(
                 fetch_error = err or fetch_error
                 continue
             extract = extract_from_page(
-                url=url,
+                source_url=url,
                 final_url=str(response.url),
-                html=response.text,
+                html=decode_response_html(response),
+                event_name=event_name,
                 max_desc_chars=max(300, int(args.max_description_chars)),
                 max_images=max(1, int(args.max_images)),
             )
@@ -867,6 +1219,17 @@ def run_project(
                 polish_model_used = args.openai_model
             except Exception as exc:  # noqa: BLE001
                 polish_mode_used = "openai_failed"
+                fetch_error = f"{fetch_error}; polish_error:{exc}" if fetch_error else f"polish_error:{exc}"
+        elif raw_description and codex_polisher:
+            try:
+                polished, one = codex_polisher.polish_pair(raw_description)
+                if polished:
+                    polished_description = polished
+                one_liner = one
+                polish_mode_used = "codex"
+                polish_model_used = args.codex_model
+            except Exception as exc:  # noqa: BLE001
+                polish_mode_used = "codex_failed"
                 fetch_error = f"{fetch_error}; polish_error:{exc}" if fetch_error else f"polish_error:{exc}"
 
         if not one_liner and raw_description:
@@ -934,6 +1297,8 @@ def run_project(
     client.close()
     if polisher:
         polisher.close()
+    if codex_polisher:
+        codex_polisher.close()
 
     run_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = run_dir / "events_content.jsonl"
@@ -1051,10 +1416,12 @@ def parse_args() -> argparse.Namespace:
         "--one-liner-prompt",
         default=str(repo_root / "数据端/文档/event-one-liner.prompt.md"),
     )
-    parser.add_argument("--polish-mode", choices=["auto", "openai", "none"], default="auto")
+    parser.add_argument("--polish-mode", choices=["auto", "openai", "codex", "none"], default="auto")
     parser.add_argument("--openai-model", default="gpt-5-mini")
     parser.add_argument("--openai-base-url", default="https://api.openai.com/v1/responses")
-    parser.add_argument("--openai-api-key", default="")
+    parser.add_argument("--openai-api-key", default=os.getenv("OPENAI_API_KEY", ""))
+    parser.add_argument("--codex-model", default="")
+    parser.add_argument("--codex-timeout-sec", type=float, default=120.0)
     parser.add_argument(
         "--user-agent",
         default=(

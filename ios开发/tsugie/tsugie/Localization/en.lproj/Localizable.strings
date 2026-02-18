@@ -48,6 +48,7 @@
 "detail.map_location" = "Map location";
 "detail.focus" = "Focus";
 "detail.intro" = "Intro";
+"detail.source_title" = "Source page";
 "detail.atmosphere" = "Current vibe";
 "detail.heat" = "Heat";
 "detail.surprise" = "Surprise";

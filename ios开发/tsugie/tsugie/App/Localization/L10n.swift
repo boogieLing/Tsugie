@@ -170,6 +170,7 @@ enum L10n {
         static var mapLocation: String { text("detail.map_location") }
         static var focus: String { text("detail.focus") }
         static var intro: String { text("detail.intro") }
+        static var sourceTitle: String { text("detail.source_title") }
         static var atmosphere: String { text("detail.atmosphere") }
         static var heat: String { text("detail.heat") }
         static var surprise: String { text("detail.surprise") }

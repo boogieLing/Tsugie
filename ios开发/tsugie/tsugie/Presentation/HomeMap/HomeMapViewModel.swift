@@ -113,6 +113,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
     @Published private(set) var renderedPlaces: [HePlace]
+    private var nearbyRecommendationPlaces: [HePlace]
     private var _selectedPlaceID: UUID?
     private var _markerActionPlaceID: UUID?
     private var _quickCardPlaceID: UUID?
@@ -172,8 +173,10 @@ final class HomeMapViewModel: ObservableObject {
     private let minimumViewportRadiusKm: Double
     private let nearbyLimit: Int
     private let mapBufferScale: Double = 1.8
+    private let nearbyRecommendationBufferScale: Double = 3.2
     private let idleTrimScale: Double = 1.25
     private let maxRenderedPlaces = 240
+    private let maxNearbyRecommendationPlaces = 420
     private let markerCollisionPointThreshold: Double = 30
     private let minMarkerCollisionMeters: Double = 10
     private var shouldBootstrapFromBundled: Bool
@@ -242,6 +245,7 @@ final class HomeMapViewModel: ObservableObject {
             .filter { $0.heType != .nature }
         self.places = sourcePlaces
         self.renderedPlaces = sourcePlaces
+        self.nearbyRecommendationPlaces = sourcePlaces
         self.placeStateStore = placeStateStore ?? PlaceStateStore()
         self.placeStampStore = placeStampStore ?? PlaceStampStore()
         self.placeDecorationStore = placeDecorationStore ?? PlaceDecorationStore()
@@ -263,6 +267,7 @@ final class HomeMapViewModel: ObservableObject {
         self.lastMapRecycleSpan = region.span
         self.lastHardRecycleCenter = region.center
         self.renderedPlaces = interactivePlaces(from: self.renderedPlaces, now: Date())
+        self.nearbyRecommendationPlaces = interactivePlaces(from: self.nearbyRecommendationPlaces, now: Date())
     }
 
     var mapPosition: MapCameraPosition {
@@ -407,6 +412,7 @@ final class HomeMapViewModel: ObservableObject {
         nearbyLoadTask?.cancel()
         nearbyLoadTask = nil
         activeNearbyQueryToken = nil
+        nearbyRecommendationPlaces = []
         startReminderSyncTask?.cancel()
         startReminderSyncTask = nil
         nearbyReminderSyncTask?.cancel()
@@ -1514,6 +1520,7 @@ final class HomeMapViewModel: ObservableObject {
             return matched
         }
         return renderedPlaces.first(where: { $0.id == placeID })
+            ?? nearbyRecommendationPlaces.first(where: { $0.id == placeID })
     }
 
     private func placeForInteraction(_ placeID: UUID, now: Date = Date()) -> HePlace? {
@@ -1533,7 +1540,7 @@ final class HomeMapViewModel: ObservableObject {
 
     func nearbyPlaces(now: Date = Date(), limit: Int = 10) -> [HePlace] {
         // Coarse stage: expired events are excluded from nearby recommendation.
-        let coarseCandidates = mapPlaces().filter { place in
+        let coarseCandidates = nearbyRecommendationSourcePlaces().filter { place in
             eventStatus(for: place, now: now) != .ended
         }
         let ranked = coarseCandidates.map { place in
@@ -1698,8 +1705,8 @@ final class HomeMapViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: workItem)
     }
 
-    private func recommendedPlace() -> HePlace? {
-        mapPlaces().sorted(by: isHigherPriority).first
+    private func recommendedPlace(now: Date = Date()) -> HePlace? {
+        nearbyPlaces(now: now, limit: 1).first
     }
 
     private func clusterTemporalScore(_ place: HePlace, now: Date) -> (stage: Int, delta: TimeInterval) {
@@ -1774,26 +1781,24 @@ final class HomeMapViewModel: ObservableObject {
         let spaceScore = Foundation.exp(-distanceKm / 5)
         let timeScore = nearbyTimeScore(snapshot: snapshot, now: now)
         let heatScore = min(max(Double(place.heatScore) / 100, 0), 1)
-        let scaleBoost = min(max(Double(place.scaleScore) / 100, 0), 1)
 
         let categoryWeight: Double
         switch place.heType {
         case .hanabi:
-            categoryWeight = 1.35
+            categoryWeight = 1.2
         case .matsuri:
             categoryWeight = 1.0
         case .nature:
-            categoryWeight = 0.9
+            categoryWeight = 0.8
         case .other:
             categoryWeight = 1.0
         }
 
         let geoConfidencePenalty: Double = place.geoSource == "missing" || place.geoSource == "pref_center_fallback" ? 0.85 : 1.0
         let score = (
-            0.40 * spaceScore +
-            0.35 * timeScore +
-            0.15 * heatScore +
-            0.10 * scaleBoost
+            0.45 * spaceScore +
+            0.45 * timeScore +
+            0.10 * heatScore
         ) * categoryWeight * geoConfidencePenalty
 
         return (
@@ -1822,7 +1827,11 @@ final class HomeMapViewModel: ObservableObject {
             if deltaHours < 24 {
                 return 0.3
             }
-            return 0.1
+            let deltaDays = deltaHours / 24
+            let longHorizonDecayWindowDays = 14.0
+            let longHorizonFloor = 0.03
+            let decayed = 0.3 / (1 + max(deltaDays - 1, 0) / longHorizonDecayWindowDays)
+            return max(longHorizonFloor, decayed)
         case .ended:
             return 0.05
         case .unknown:
@@ -1938,6 +1947,14 @@ final class HomeMapViewModel: ObservableObject {
         markerEntriesCache = []
         markerEntriesIndexByID = [:]
         reconcileSelectionForMapFilter()
+    }
+
+    private func replaceNearbyRecommendationPlaces(_ newPlaces: [HePlace]) {
+        let limited = Array(newPlaces.prefix(maxNearbyRecommendationPlaces))
+        if sameRenderedPlaceIDs(lhs: nearbyRecommendationPlaces, rhs: limited) {
+            return
+        }
+        nearbyRecommendationPlaces = limited
     }
 
     private func sameRenderedPlaceIDs(lhs: [HePlace], rhs: [HePlace]) -> Bool {
@@ -2328,6 +2345,22 @@ final class HomeMapViewModel: ObservableObject {
         debugLog(
             "reloadRendered reason=\(reason) source=\(sourceMode) center=(\(region.center.latitude),\(region.center.longitude)) span=(\(region.span.latitudeDelta),\(region.span.longitudeDelta)) rawQueryRadiusKm=\(rawQueryRadiusKm) queryRadiusKm=\(queryRadiusKm) queryLimit=\(queryLimit) loaded=\(loadedCount) sourcePlaces=\(sourcePlaces.count) inRegion=\(inRegion.count) rendered=\(rendered.count)"
         )
+
+        let recommendationRegion = expandedMapRegion(region, scale: nearbyRecommendationBufferScale)
+        let recommendationInRegion = filteredPlacesInRegion(sourcePlaces, region: recommendationRegion)
+        let recommendationSource = recommendationInRegion.isEmpty ? sourcePlaces : recommendationInRegion
+        let recommendationNearest = nearestPlacesByDistance(
+            recommendationSource,
+            limit: maxNearbyRecommendationPlaces,
+            reference: resolvedCenter
+        )
+        let recommendationPlaces = ensureActivePlacesIncluded(
+            in: filterSuspectCoordinateClusters(recommendationNearest),
+            sourcePool: recommendationSource,
+            limit: maxNearbyRecommendationPlaces
+        )
+        replaceNearbyRecommendationPlaces(recommendationPlaces)
+
         replaceRenderedPlaces(rendered)
         if places.isEmpty, !rendered.isEmpty {
             replaceAllPlaces(rendered)
@@ -2471,6 +2504,11 @@ final class HomeMapViewModel: ObservableObject {
                     openHours: place.openHours,
                     mapSpot: place.mapSpot,
                     detailDescription: place.detailDescription,
+                    oneLiner: place.oneLiner,
+                    sourceURLs: place.sourceURLs,
+                    descriptionSourceURL: place.descriptionSourceURL,
+                    imageSourceURL: place.imageSourceURL,
+                    imageRef: place.imageRef,
                     imageTag: place.imageTag,
                     imageHint: place.imageHint,
                     heatScore: place.heatScore,
@@ -2479,6 +2517,14 @@ final class HomeMapViewModel: ObservableObject {
             )
         }
         return rebased
+    }
+
+    private func nearbyRecommendationSourcePlaces() -> [HePlace] {
+        let source = nearbyRecommendationPlaces.isEmpty ? renderedPlaces : nearbyRecommendationPlaces
+        guard mapCategoryFilter != .all else {
+            return source
+        }
+        return source.filter { $0.heType.rawValue == mapCategoryFilter.rawValue }
     }
 
     private func interactivePlaces(from source: [HePlace], now: Date) -> [HePlace] {
