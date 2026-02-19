@@ -51,6 +51,82 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.favoriteFilterCount(.checked), 1)
     }
 
+    func testToggleCheckedInBlocksUpcomingAndShowsTopNotice() {
+        let upcoming = makePlace(name: "upcoming", heType: .hanabi)
+        let viewModel = HomeMapViewModel(
+            places: [upcoming],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            checkInBlockedNoticeDurationNanoseconds: 300_000_000
+        )
+
+        viewModel.toggleCheckedIn(for: upcoming.id)
+
+        XCTAssertFalse(viewModel.placeState(for: upcoming.id).isCheckedIn)
+        XCTAssertEqual(viewModel.topNotice?.message, L10n.Home.checkInBlockedUpcoming)
+    }
+
+    func testToggleCheckedInAllowsOngoingEvent() {
+        let now = Date()
+        let ongoing = makePlace(
+            name: "ongoing",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(-20 * 60),
+            endAt: now.addingTimeInterval(40 * 60)
+        )
+        let viewModel = HomeMapViewModel(places: [ongoing], placeStateStore: PlaceStateStore(defaults: defaults))
+
+        viewModel.toggleCheckedIn(for: ongoing.id)
+
+        XCTAssertTrue(viewModel.placeState(for: ongoing.id).isCheckedIn)
+        XCTAssertNil(viewModel.topNotice)
+    }
+
+    func testTopNoticeAutoDismissesAndIsClearedOnDisappear() async {
+        let upcoming = makePlace(name: "upcoming", heType: .hanabi)
+        let viewModel = HomeMapViewModel(
+            places: [upcoming],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            checkInBlockedNoticeDurationNanoseconds: 40_000_000
+        )
+
+        viewModel.toggleCheckedIn(for: upcoming.id)
+        XCTAssertNotNil(viewModel.topNotice)
+
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        XCTAssertNil(viewModel.topNotice)
+
+        viewModel.toggleCheckedIn(for: upcoming.id)
+        XCTAssertNotNil(viewModel.topNotice)
+
+        viewModel.onViewDisappear()
+        XCTAssertNil(viewModel.topNotice)
+    }
+
+    func testResetToCurrentLocationAfterJumpUsesResolvedCoordinate() async {
+        let jumpedPlace = makePlace(
+            name: "jumped",
+            heType: .hanabi,
+            coordinate: CLLocationCoordinate2D(latitude: 34.6937, longitude: 135.5023)
+        )
+        let resolvedCoordinate = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+        let viewModel = HomeMapViewModel(
+            places: [jumpedPlace],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            locationProvider: FixedLocationProvider(coordinate: resolvedCoordinate)
+        )
+
+        viewModel.openQuickCard(placeID: jumpedPlace.id, keepMarkerActions: true)
+        viewModel.resetToCurrentLocation()
+
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        guard let region = viewModel.mapPosition.region else {
+            return XCTFail("expected map position to be region")
+        }
+
+        XCTAssertEqual(region.center.latitude, resolvedCoordinate.latitude, accuracy: 0.0001)
+        XCTAssertEqual(region.center.longitude, resolvedCoordinate.longitude, accuracy: 0.0001)
+    }
+
     func testTapSelectedMarkerClosesQuickCardAndClearsSelection() {
         let place = makePlace(name: "hanabi", heType: .hanabi)
         let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
@@ -92,6 +168,32 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.mapCategoryFilterCount(.all), 3)
         XCTAssertEqual(viewModel.mapCategoryFilterCount(.hanabi), 1)
         XCTAssertEqual(viewModel.mapCategoryFilterCount(.matsuri), 2)
+    }
+
+    func testToggleSideDrawerDefaultsToFavoritesMenuWithoutOpeningFavoriteDrawer() {
+        let place = makePlace(name: "A", heType: .hanabi)
+        let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
+
+        viewModel.toggleSideDrawerPanel()
+
+        XCTAssertTrue(viewModel.isSideDrawerOpen)
+        XCTAssertEqual(viewModel.sideDrawerMenu, .favorites)
+        XCTAssertFalse(viewModel.isFavoriteDrawerOpen)
+    }
+
+    func testCloseFavoriteDrawerKeepsFavoritesSelectedAndDrawerClosed() {
+        let place = makePlace(name: "A", heType: .hanabi)
+        let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
+
+        viewModel.openFavoriteDrawer()
+        XCTAssertTrue(viewModel.isFavoriteDrawerOpen)
+        XCTAssertEqual(viewModel.sideDrawerMenu, .favorites)
+
+        viewModel.closeFavoriteDrawer()
+
+        XCTAssertTrue(viewModel.isSideDrawerOpen)
+        XCTAssertEqual(viewModel.sideDrawerMenu, .favorites)
+        XCTAssertFalse(viewModel.isFavoriteDrawerOpen)
     }
 
     func testNearbyCarouselUsesScoredRecommendationOrder() {
@@ -308,5 +410,13 @@ final class HomeMapViewModelTests: XCTestCase {
             heatScore: heatScore,
             surpriseScore: 50
         )
+    }
+
+    private struct FixedLocationProvider: AppLocationProviding {
+        let coordinate: CLLocationCoordinate2D
+
+        func resolveCurrentLocation(fallback: CLLocationCoordinate2D) async -> AppLocationResolution {
+            AppLocationResolution(coordinate: coordinate, fallbackReason: nil)
+        }
     }
 }

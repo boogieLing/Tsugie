@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -69,7 +71,55 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--no-fuse", action="store_true")
+    parser.add_argument(
+        "--content-enrich",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run low-frequency content enrichment after fuse",
+    )
+    parser.add_argument("--content-run-id", default="", help="Override content enrichment run_id")
+    parser.add_argument("--content-min-refresh-days", type=int, default=45)
+    parser.add_argument("--content-qps", type=float, default=0.12)
+    parser.add_argument("--content-max-images", type=int, default=1)
+    parser.add_argument(
+        "--content-polish-mode",
+        choices=["auto", "openai", "codex", "none"],
+        default="auto",
+    )
+    parser.add_argument("--content-codex-timeout-sec", type=int, default=25)
     return parser.parse_args()
+
+
+def run_content_enrich(args: argparse.Namespace, run_id: str) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    enrich_script = repo_root / "scripts" / "enrich_event_content.py"
+    if not enrich_script.exists():
+        raise RuntimeError(f"content enrich script not found: {enrich_script}")
+
+    content_run_id = args.content_run_id.strip() or f"{run_id}_content"
+    cmd = [
+        sys.executable,
+        str(enrich_script),
+        "--project",
+        "hanabi",
+        "--run-id",
+        content_run_id,
+        "--min-refresh-days",
+        str(args.content_min_refresh_days),
+        "--qps",
+        str(args.content_qps),
+        "--max-images",
+        str(max(args.content_max_images, 1)),
+        "--polish-mode",
+        args.content_polish_mode,
+        "--codex-timeout-sec",
+        str(max(args.content_codex_timeout_sec, 1)),
+        "--download-images",
+        "--update-latest-run",
+    ]
+    print(f"[content] start run_id={content_run_id}")
+    subprocess.run(cmd, cwd=str(repo_root), check=True)
+    print(f"[content] done run_id={content_run_id}")
 
 
 def main() -> int:
@@ -168,6 +218,8 @@ def main() -> int:
                 f"alias_candidates={fusion['alias_candidates_count']}, "
             f"alias_map_entries={fusion['alias_map_entries']}"
         )
+        if args.content_enrich:
+            run_content_enrich(args, run_id)
     print(f"[run] run_id={run_id}, logs={args.log_dir}/{run_id}")
     return 0
 

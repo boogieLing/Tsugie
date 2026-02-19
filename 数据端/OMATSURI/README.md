@@ -62,6 +62,10 @@ python -m omatsuri_crawler \
   --run-id 20260215_full_omatsuri_01
 ```
 
+默认行为：
+- `fuse` 结束后会自动执行内容增强（`enrich_event_content.py`），输出介绍/一句话/图片（默认每活动最多 1 张图）。
+- 如需临时关闭自动内容增强，可追加 `--no-content-enrich`。
+
 4) 查看进度
 
 ```bash
@@ -78,6 +82,10 @@ PYTHONPATH=. python scripts/refresh_incomplete_events.py \
   --max-events 500 \
   --no-geocode
 ```
+
+默认行为：
+- 高频补充在 `fuse` 结束后同样会自动执行内容增强。
+- 如需临时关闭自动内容增强，可追加 `--no-content-enrich`。
 
 输出：
 - 刷新日志：`data/logs/<run_id>/refresh_incomplete_log.csv`

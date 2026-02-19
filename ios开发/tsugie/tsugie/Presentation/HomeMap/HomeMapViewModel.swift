@@ -117,6 +117,11 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
+    struct TopNotice: Identifiable, Equatable {
+        let id = UUID()
+        let message: String
+    }
+
     private var mapCameraPosition: MapCameraPosition
     @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
@@ -133,6 +138,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var isSideDrawerOpen = false
     @Published private(set) var isFavoriteDrawerOpen = false
     @Published private(set) var locationFallbackNotice: LocationFallbackNotice?
+    @Published private(set) var topNotice: TopNotice?
     @Published private(set) var sideDrawerMenu: SideDrawerMenu = .none
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
     @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
@@ -241,6 +247,8 @@ final class HomeMapViewModel: ObservableObject {
     private let maxNearbyReminderCount = 16
     private var startReminderSyncTask: Task<Void, Never>?
     private var nearbyReminderSyncTask: Task<Void, Never>?
+    private var topNoticeDismissTask: Task<Void, Never>?
+    private let checkInBlockedNoticeDurationNanoseconds: UInt64
 
     init(
         places: [HePlace]? = nil,
@@ -249,7 +257,8 @@ final class HomeMapViewModel: ObservableObject {
         placeDecorationStore: PlaceDecorationStore? = nil,
         locationProvider: AppLocationProviding? = nil,
         minimumViewportRadiusKm: Double = 1.2,
-        nearbyLimit: Int = 240
+        nearbyLimit: Int = 240,
+        checkInBlockedNoticeDurationNanoseconds: UInt64 = 2_200_000_000
     ) {
         let sourcePlaces = (places ?? [])
             .filter { $0.heType != .nature }
@@ -262,6 +271,7 @@ final class HomeMapViewModel: ObservableObject {
         self.locationProvider = locationProvider ?? DefaultAppLocationProvider()
         self.minimumViewportRadiusKm = max(0.5, minimumViewportRadiusKm)
         self.nearbyLimit = max(1, nearbyLimit)
+        self.checkInBlockedNoticeDurationNanoseconds = max(100_000_000, checkInBlockedNoticeDurationNanoseconds)
         self.shouldBootstrapFromBundled = places == nil
         self.resolvedCenter = initialCenter
         self.placesRevision = 1
@@ -440,10 +450,17 @@ final class HomeMapViewModel: ObservableObject {
         startReminderSyncTask = nil
         nearbyReminderSyncTask?.cancel()
         nearbyReminderSyncTask = nil
+        dismissTopNotice()
     }
 
     func dismissLocationFallbackNotice() {
         locationFallbackNotice = nil
+    }
+
+    func dismissTopNotice() {
+        topNoticeDismissTask?.cancel()
+        topNoticeDismissTask = nil
+        topNotice = nil
     }
 
     func setCalendarPresented(_ presented: Bool) {
@@ -703,8 +720,11 @@ final class HomeMapViewModel: ObservableObject {
         if !isSideDrawerOpen {
             isSideDrawerOpen = true
         }
-        if sideDrawerMenu != .none {
-            sideDrawerMenu = .none
+        if sideDrawerMenu != .favorites {
+            sideDrawerMenu = .favorites
+        }
+        if isFavoriteDrawerOpen {
+            isFavoriteDrawerOpen = false
         }
         if isThemePaletteOpen {
             isThemePaletteOpen = false
@@ -742,17 +762,8 @@ final class HomeMapViewModel: ObservableObject {
         if sideDrawerMenu != menu {
             sideDrawerMenu = menu
         }
-        if menu == .favorites {
-            if favoriteFilter != .all {
-                favoriteFilter = .all
-            }
-            if !isFavoriteDrawerOpen {
-                isFavoriteDrawerOpen = true
-            }
-        } else {
-            if isFavoriteDrawerOpen {
-                isFavoriteDrawerOpen = false
-            }
+        if menu != .favorites, isFavoriteDrawerOpen {
+            isFavoriteDrawerOpen = false
         }
     }
 
@@ -1159,7 +1170,9 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func resetToCurrentLocation() {
-        forceMapViewRebuild(reason: "userResetLocation")
+        cancelPendingMapZoomRestore()
+        cancelPendingQuickCardPresentation()
+        cancelPendingMapFocus()
         reloadNearbyPlacesAroundCurrentLocation(userInitiated: true)
     }
 
@@ -1467,6 +1480,13 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func toggleCheckedIn(for placeID: UUID) {
+        if let place = place(for: placeID) {
+            let snapshot = eventSnapshot(for: place, now: now)
+            if snapshot.status == .upcoming {
+                presentTopNotice(message: L10n.Home.checkInBlockedUpcoming)
+                return
+            }
+        }
         let nextState = placeStateStore.toggleCheckedIn(for: placeID)
         if nextState.isFavorite, let place = place(for: placeID) {
             placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
@@ -1944,6 +1964,10 @@ final class HomeMapViewModel: ObservableObject {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     self.setProgrammaticMapPosition(.region(targetRegion))
                 }
+                self.forceMapViewRebuild(
+                    reason: "userResetLocation",
+                    pinnedRegion: targetRegion
+                )
             }
 
             self.loadAllPlacesIfNeeded(center: center)
@@ -1962,6 +1986,25 @@ final class HomeMapViewModel: ObservableObject {
         }
         shownLocationFallbackReasons.insert(reason)
         locationFallbackNotice = LocationFallbackNotice(reason: reason)
+    }
+
+    private func presentTopNotice(message: String) {
+        topNoticeDismissTask?.cancel()
+        topNoticeDismissTask = nil
+        topNotice = TopNotice(message: message)
+        let dismissDelay = checkInBlockedNoticeDurationNanoseconds
+        topNoticeDismissTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: dismissDelay)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else {
+                return
+            }
+            self.topNotice = nil
+            self.topNoticeDismissTask = nil
+        }
     }
 
     private func debugLog(_ message: String) {
@@ -3133,5 +3176,6 @@ final class HomeMapViewModel: ObservableObject {
         quickCardPresentationTask?.cancel()
         startReminderSyncTask?.cancel()
         nearbyReminderSyncTask?.cancel()
+        topNoticeDismissTask?.cancel()
     }
 }

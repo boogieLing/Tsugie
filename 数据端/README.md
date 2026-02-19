@@ -24,6 +24,8 @@
 说明：
 - 首次运行会自动检查/创建 conda 环境 `hanabi-ops`（基于 `HANABI/environment.yml`）。
 - 可通过环境变量覆盖：`HANABI_CONDA_ENV`、`HANABI_OPS_HOST`、`HANABI_OPS_PORT`。
+- `POST /api/run/full` 与 `POST /api/run/highfreq` 默认都会在融合结束后自动执行内容增强（介绍/一句话/图片）。
+- 数据任务成功后会自动执行 `数据端/scripts/update_ios_payload.sh --pretty`，把最新内容导入 iOS 资源包。
 
 ## iOS 数据包导出（HANABI + OMATSURI）
 
@@ -96,6 +98,7 @@ python3 数据端/scripts/enrich_event_content.py \
 - 若需启用模型润色：
   - `--polish-mode openai --openai-api-key <key> --openai-model <model>`
   - 未配置 key 时可用 `--polish-mode none`（仅抓取与结构化落盘，不做模型润色）
+- 当前 full/highfreq 抓取入口默认已自动串接该步骤；如需临时关闭可在对应脚本使用 `--no-content-enrich`。
 
 ## 技术文档入口（含内存优化）
 

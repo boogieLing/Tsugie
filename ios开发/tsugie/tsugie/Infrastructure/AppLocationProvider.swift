@@ -28,8 +28,18 @@ struct DefaultAppLocationProvider: AppLocationProviding {
     }
 
     static let developmentFixedCoordinate = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
-    private static let japanLatitudeRange: ClosedRange<CLLocationDegrees> = 20.0...46.5
-    private static let japanLongitudeRange: ClosedRange<CLLocationDegrees> = 122.0...154.5
+    private static let japanMainlandRegion = (
+        latitude: 30.0...46.5,
+        longitude: 128.5...154.5
+    )
+    private static let japanRyukyuRegion = (
+        latitude: 20.0...30.0,
+        longitude: 122.0...131.0
+    )
+    private static let japanOgasawaraRegion = (
+        latitude: 20.0...30.0,
+        longitude: 136.0...154.5
+    )
 
     // 默认启用真实定位；不在日本境内或权限不可用时回退天空树。
     private static let stageDefaultMode: Mode = .live
@@ -41,7 +51,12 @@ struct DefaultAppLocationProvider: AppLocationProviding {
     }
 
     static func isInJapan(_ coordinate: CLLocationCoordinate2D) -> Bool {
-        japanLatitudeRange.contains(coordinate.latitude) && japanLongitudeRange.contains(coordinate.longitude)
+        let lat = coordinate.latitude
+        let lng = coordinate.longitude
+        let inMainland = japanMainlandRegion.latitude.contains(lat) && japanMainlandRegion.longitude.contains(lng)
+        let inRyukyu = japanRyukyuRegion.latitude.contains(lat) && japanRyukyuRegion.longitude.contains(lng)
+        let inOgasawara = japanOgasawaraRegion.latitude.contains(lat) && japanOgasawaraRegion.longitude.contains(lng)
+        return inMainland || inRyukyu || inOgasawara
     }
 
     func resolveCurrentLocation(fallback: CLLocationCoordinate2D) async -> AppLocationResolution {
@@ -62,7 +77,12 @@ private final class LiveCurrentLocationService: NSObject, CLLocationManagerDeleg
     static let shared = LiveCurrentLocationService()
 
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    private var locationContinuations: [CheckedContinuation<CLLocationCoordinate2D?, Never>] = []
+    private var locationTimeoutTask: Task<Void, Never>?
+    private var isRequestingLocation = false
+    private var authorizationContinuations: [CheckedContinuation<CLAuthorizationStatus, Never>] = []
+    private var authorizationTimeoutTask: Task<Void, Never>?
+    private var isRequestingAuthorization = false
 
     private override init() {
         super.init()
@@ -71,24 +91,23 @@ private final class LiveCurrentLocationService: NSObject, CLLocationManagerDeleg
     }
 
     func resolveCurrentLocation(fallback: CLLocationCoordinate2D) async -> AppLocationResolution {
-        guard CLLocationManager.locationServicesEnabled() else {
-            return AppLocationResolution(
-                coordinate: fallback,
-                fallbackReason: .permissionDenied
-            )
+        var status = manager.authorizationStatus
+        if status == .notDetermined {
+            status = await requestAuthorizationIfNeeded()
         }
-
-        let status = manager.authorizationStatus
         switch status {
         case .denied, .restricted:
             return AppLocationResolution(
                 coordinate: fallback,
                 fallbackReason: .permissionDenied
             )
-        case .notDetermined:
-            manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
             break
+        case .notDetermined:
+            return AppLocationResolution(
+                coordinate: fallback,
+                fallbackReason: .permissionDenied
+            )
         @unknown default:
             return AppLocationResolution(
                 coordinate: fallback,
@@ -119,30 +138,71 @@ private final class LiveCurrentLocationService: NSObject, CLLocationManagerDeleg
         return AppLocationResolution(coordinate: resolvedCoordinate, fallbackReason: nil)
     }
 
+    private func requestAuthorizationIfNeeded(timeoutSeconds: Double = 6.0) async -> CLAuthorizationStatus {
+        let currentStatus = manager.authorizationStatus
+        guard currentStatus == .notDetermined else {
+            return currentStatus
+        }
+
+        return await withCheckedContinuation { continuation in
+            authorizationContinuations.append(continuation)
+            guard !isRequestingAuthorization else {
+                return
+            }
+            isRequestingAuthorization = true
+            manager.requestWhenInUseAuthorization()
+
+            authorizationTimeoutTask?.cancel()
+            authorizationTimeoutTask = Task { [weak self] in
+                let timeoutNs = UInt64(timeoutSeconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: timeoutNs)
+                await MainActor.run {
+                    guard let self else { return }
+                    self.completeAuthorizationRequest(with: self.manager.authorizationStatus)
+                }
+            }
+        }
+    }
+
     private func requestLocationOnce(timeoutSeconds: Double = 6.0) async -> CLLocationCoordinate2D? {
         await withCheckedContinuation { continuation in
-            self.continuation = continuation
+            locationContinuations.append(continuation)
+            guard !isRequestingLocation else {
+                return
+            }
+            isRequestingLocation = true
 
             if isAuthorizedForLocation(manager.authorizationStatus) {
                 manager.requestLocation()
+            } else {
+                completeLocationRequest(with: nil)
+                return
             }
 
-            Task { [weak self] in
+            locationTimeoutTask?.cancel()
+            locationTimeoutTask = Task { [weak self] in
                 let timeoutNs = UInt64(timeoutSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: timeoutNs)
-                self?.completeLocationRequest(with: nil)
+                await MainActor.run {
+                    self?.completeLocationRequest(with: nil)
+                }
             }
         }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        guard continuation != nil else {
+        let status = manager.authorizationStatus
+        if status != .notDetermined {
+            completeAuthorizationRequest(with: status)
+        }
+
+        guard !locationContinuations.isEmpty else {
             return
         }
 
-        if isAuthorizedForLocation(manager.authorizationStatus) {
+        if isAuthorizedForLocation(status) {
             manager.requestLocation()
-        } else if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
+        } else if status == .denied || status == .restricted {
             completeLocationRequest(with: nil)
         }
     }
@@ -163,11 +223,31 @@ private final class LiveCurrentLocationService: NSObject, CLLocationManagerDeleg
         status == .authorizedWhenInUse || status == .authorizedAlways
     }
 
-    private func completeLocationRequest(with coordinate: CLLocationCoordinate2D?) {
-        guard let continuation else {
+    private func completeAuthorizationRequest(with status: CLAuthorizationStatus) {
+        guard !authorizationContinuations.isEmpty else {
             return
         }
-        self.continuation = nil
-        continuation.resume(returning: coordinate)
+        let pending = authorizationContinuations
+        authorizationContinuations.removeAll(keepingCapacity: false)
+        isRequestingAuthorization = false
+        authorizationTimeoutTask?.cancel()
+        authorizationTimeoutTask = nil
+        for continuation in pending {
+            continuation.resume(returning: status)
+        }
+    }
+
+    private func completeLocationRequest(with coordinate: CLLocationCoordinate2D?) {
+        guard !locationContinuations.isEmpty else {
+            return
+        }
+        let pending = locationContinuations
+        locationContinuations.removeAll(keepingCapacity: false)
+        isRequestingLocation = false
+        locationTimeoutTask?.cancel()
+        locationTimeoutTask = nil
+        for continuation in pending {
+            continuation.resume(returning: coordinate)
+        }
     }
 }

@@ -149,6 +149,7 @@
   - 时间状态计算同源：所有卡片/列表场景统一使用同一状态模型（`upcoming / ongoing / ended / unknown`）。
   - 进度条语义同源：详情、quick、nearby、日历抽屉、收藏抽屉保持一致规则。
   - 收藏/打卡语义固定：收藏=想访问，打卡=已访问，统一 logo 表达，不用状态文字。
+  - 打卡时间门禁固定：`upcoming`（未到开始时间）活动不允许打卡，统一显示“顶部中间下落提示气泡”并自动销毁。
   - 胶囊高亮统一：无边框 + 渐变发光 + 朦胧立体感，并跟随当前主题。
   - UI 复刻强制 1:1：以“已封板原型 + CSS”为唯一视觉基线，结构层级、尺寸间距、颜色、文案顺序、状态显隐、动效节奏必须对齐；除缺陷修复外不得擅自改视觉语义。
   - MVP 不扩边界：不引入账号/社交/支付/复杂算法等非 MVP 能力。
@@ -267,6 +268,13 @@
 
 - 每个活动的“图片 + 活动介绍”增强链路默认使用统一脚本：`数据端/scripts/enrich_event_content.py`。
 - 链路定位为“低频长跑”任务，默认低 QPS、允许长时间运行，避免高频重复抓取。
+- 抓取收尾串接基线（新增）：
+  - `hanabi_crawler/cli.py`、`omatsuri_crawler/cli.py` 的全量抓取在 `fuse` 完成后默认自动触发内容增强（可用 `--no-content-enrich` 临时关闭）。
+  - `HANABI/scripts/refresh_incomplete_events.py`、`OMATSURI/scripts/refresh_incomplete_events.py` 的高频补充在 `fuse` 完成后默认自动触发内容增强（可用 `--no-content-enrich` 临时关闭）。
+  - 默认内容增强参数基线：低 QPS、`max_images=1`、回写 `latest_run.json` 的 `content_run_id`。
+- iOS 接入收尾基线（新增）：
+  - 统一数据管理系统 `POST /api/run/full` 与 `POST /api/run/highfreq` 在任务成功后默认自动执行 `bash 数据端/scripts/update_ios_payload.sh --pretty`，将最新内容同步到 iOS 资源包。
+  - 若自动导出失败，任务状态必须标记为失败并在 job 日志中输出失败原因。
 - 默认输入基于两个子项目最新融合批次：
   - `数据端/HANABI/data/latest_run.json` 的 `fused_run_id`
   - `数据端/OMATSURI/data/latest_run.json` 的 `fused_run_id`
@@ -286,3 +294,22 @@
 - 运行后允许回写 `latest_run.json` 的内容增强指针（如 `content_run_id`、`content_summary` 等），用于后续导出与运营追溯。
 - 维护要求（强制）：
   - 若内容抓取脚本入口、提示词路径、润色策略（模型/开关）、输出结构发生变化，必须在同一次工作中同步更新 `AGENTS.md` 与 `记录/项目变更记录.md`。
+
+## 17. 数据端管理系统监控与质量分析基线（新增）
+
+- 统一管理系统默认入口：`数据端/scripts/ops_console.sh`（后端实现：`数据端/HANABI/scripts/data_ops_console.py`）。
+- 管理系统必须覆盖两类能力：
+  1. 抓取进度监控：任务列表、阶段状态、进度百分比、日志查看。
+  2. 数据质量分析：按项目输出可追溯缺口清单与计数。
+- 质量分析最小口径（强制）：
+  - 未抓取：`failed_urls.csv` + `refresh_incomplete_log.csv` 失败项汇总。
+  - 开始时间未确定：`event_date_start/event_time_start` 任一缺失即计入“待后续继续抓”。
+  - 无图片：活动内容条目缺失或条目内无图片，均计入缺口。
+  - 无介绍：活动内容条目缺失或 `polished_description` 为空，均计入缺口。
+  - 无一句话：活动内容条目缺失或 `one_liner` 为空，均计入缺口。
+- 运行批次对齐规则（强制）：
+  - 总览与质量分析默认优先以 `data/latest_run.json` 的 `fused_run_id/content_run_id` 为同一批次基线，避免 `latest` 软链接漂移导致口径不一致。
+- UI 风格要求：
+  - 管理系统页面默认对齐 macOS 视觉风格（窗口标题栏、玻璃拟态、轻量卡片层级），但不改变既有运维入口与 API 路径。
+- 维护要求（强制）：
+  - 若管理系统 API 结构、质量口径定义、任务进度推断规则、页面入口发生变化，必须在同一次工作中同步更新 `AGENTS.md` 与 `记录/项目变更记录.md`。

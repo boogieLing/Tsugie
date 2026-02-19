@@ -291,6 +291,17 @@ struct HomeMapView: View {
                 .padding(.trailing, 14)
             }
         }
+        .overlay(alignment: .top) {
+            if let notice = viewModel.topNotice {
+                TopNoticeBubbleView(message: notice.message) {
+                    viewModel.dismissTopNotice()
+                }
+                .padding(.top, 8)
+                .padding(.horizontal, 14)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(200)
+            }
+        }
         .onAppear {
             viewModel.onViewAppear()
         }
@@ -313,6 +324,7 @@ struct HomeMapView: View {
         }
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.topNotice?.id)
     }
 
     private var mapAmbientGlowLayer: some View {
@@ -687,5 +699,35 @@ private struct CurrentLocationMarkerView: View {
         .shadow(color: glowColor.opacity(0.44), radius: 10, x: 0, y: 2)
         .shadow(color: .black.opacity(0.20), radius: 6, x: 0, y: 3)
         .accessibilityHidden(true)
+    }
+}
+
+private struct TopNoticeBubbleView: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(red: 0.86, green: 0.42, blue: 0.20))
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.24))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.92), in: Capsule())
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color(red: 0.92, green: 0.95, blue: 0.98, opacity: 0.95), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityLabel(message)
+        .onTapGesture(perform: onDismiss)
     }
 }
