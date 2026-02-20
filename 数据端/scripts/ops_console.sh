@@ -12,6 +12,8 @@ LOG_FILE="${OPS_DIR}/console.out.log"
 ENV_NAME="${HANABI_CONDA_ENV:-hanabi-ops}"
 HOST="${HANABI_OPS_HOST:-127.0.0.1}"
 PORT="${HANABI_OPS_PORT:-8788}"
+CONDA_BASE=""
+ENV_PYTHON=""
 
 mkdir -p "${OPS_DIR}"
 
@@ -32,6 +34,15 @@ ensure_env() {
   fi
   echo "[ops] conda env '${ENV_NAME}' not found, creating from HANABI/environment.yml ..."
   conda env create -n "${ENV_NAME}" -f "${HANABI_DIR}/environment.yml"
+}
+
+resolve_env_python() {
+  CONDA_BASE="$(conda info --base 2>/dev/null || true)"
+  if [[ -z "${CONDA_BASE}" ]]; then
+    return 1
+  fi
+  ENV_PYTHON="${CONDA_BASE}/envs/${ENV_NAME}/bin/python"
+  [[ -x "${ENV_PYTHON}" ]]
 }
 
 is_running() {
@@ -90,7 +101,11 @@ start() {
   fi
 
   echo "[ops] starting console at http://${HOST}:${PORT} ..."
-  conda run -n "${ENV_NAME}" python "${CONSOLE_SCRIPT}" --host "${HOST}" --port "${PORT}" >"${LOG_FILE}" 2>&1 &
+  if ! resolve_env_python; then
+    echo "[ops] failed to resolve env python for '${ENV_NAME}'"
+    exit 1
+  fi
+  nohup "${ENV_PYTHON}" "${CONSOLE_SCRIPT}" --host "${HOST}" --port "${PORT}" >"${LOG_FILE}" 2>&1 &
   local launcher_pid=$!
   echo "${launcher_pid}" > "${PID_FILE}"
 

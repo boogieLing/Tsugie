@@ -2,6 +2,8 @@ import SwiftUI
 import UIKit
 
 enum TsugieVisuals {
+    static let notificationToggleAnimation: Animation = .easeInOut(duration: 0.2)
+
     struct HePalette {
         let markerFrom: Color
         let markerTo: Color

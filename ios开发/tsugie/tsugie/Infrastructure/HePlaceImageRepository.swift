@@ -10,13 +10,16 @@ enum HePlaceImageRepository {
     nonisolated private static let defaultImagePayloadName = "he_images.payload"
     nonisolated private static let defaultImagePayloadExt = "bin"
     nonisolated private static let obfuscationKey = "tsugie-ios-seed-v1"
+    nonisolated private static let imagePayloadURL: URL? = discoverImagePayloadURL()
 
     nonisolated static func loadImage(for place: HePlace, maxPixelSize: Int = 1280) -> UIImage? {
-        guard let imageRef = place.imageRef,
+        loadImage(imageRef: place.imageRef, maxPixelSize: maxPixelSize)
+    }
+
+    nonisolated static func loadImage(imageRef: HePlaceImageRef?, maxPixelSize: Int = 1280) -> UIImage? {
+        guard let imageRef,
               imageRef.payloadLength > 0,
-              let payloadURL = resolveImagePayloadURL() else {
-            return nil
-        }
+              let payloadURL = imagePayloadURL else { return nil }
 
         guard let fileHandle = try? FileHandle(forReadingFrom: payloadURL) else {
             return nil
@@ -38,11 +41,10 @@ enum HePlaceImageRepository {
         return downsampleImage(data: imageData, maxPixelSize: max(256, maxPixelSize))
     }
 
-    private nonisolated static func resolveImagePayloadURL() -> URL? {
+    private nonisolated static func discoverImagePayloadURL() -> URL? {
         if let indexURL = resolveResourceURL(resourceName: indexResourceName, resourceExtension: indexResourceExtension),
            let indexData = try? Data(contentsOf: indexURL),
-           let envelope = try? JSONDecoder().decode(HeImageIndexEnvelope.self, from: indexData),
-           let file = envelope.imagePayload?.file?.nonEmpty {
+           let file = imagePayloadFileName(from: indexData) {
             let fileName = (file as NSString).deletingPathExtension
             let ext = (file as NSString).pathExtension
             if !fileName.isEmpty,
@@ -52,6 +54,17 @@ enum HePlaceImageRepository {
         }
 
         return resolveResourceURL(resourceName: defaultImagePayloadName, resourceExtension: defaultImagePayloadExt)
+    }
+
+    private nonisolated static func imagePayloadFileName(from indexData: Data) -> String? {
+        guard let rootObject = try? JSONSerialization.jsonObject(with: indexData) as? [String: Any],
+              let imagePayload = rootObject["image_payload"] as? [String: Any],
+              let rawFileName = imagePayload["file"] as? String else {
+            return nil
+        }
+
+        let trimmed = rawFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private nonisolated static func resolveResourceURL(resourceName: String, resourceExtension: String?) -> URL? {
@@ -185,23 +198,4 @@ private final class _ImageBundleToken {}
 
 private enum HeImageCodecError: Error {
     case decompressionFailed
-}
-
-private struct HeImageIndexEnvelope: Decodable {
-    let imagePayload: HeImagePayloadMeta?
-
-    enum CodingKeys: String, CodingKey {
-        case imagePayload = "image_payload"
-    }
-}
-
-private struct HeImagePayloadMeta: Decodable {
-    let file: String?
-}
-
-private extension String {
-    var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
 }

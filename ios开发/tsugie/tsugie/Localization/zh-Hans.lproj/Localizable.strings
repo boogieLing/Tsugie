@@ -17,7 +17,7 @@
 "event.countdown.minutes_seconds" = "%d分%d秒";
 "event.countdown.seconds" = "%d秒";
 
-"home.calendar.button" = "时めぐり";
+"home.calendar.button" = "时巡";
 "home.calendar.open_a11y" = "打开时巡日历";
 "home.location.reset_a11y" = "回到当前位置";
 "home.menu.open_a11y" = "打开菜单";
@@ -32,6 +32,10 @@
 "quickcard.close_a11y" = "关闭快速卡片";
 "quickcard.view_details" = "查看详情";
 "quickcard.start_route" = "开始导航";
+"quickcard.navigation_chooser_title" = "选择导航地图";
+"quickcard.navigation_chooser_message" = "前往 %@";
+"quickcard.navigation_option.apple_maps" = "Apple 地图";
+"quickcard.navigation_option.google_maps" = "Google 地图";
 
 "nearby.preparing" = "准备中";
 "nearby.remaining" = "剩余 %@";
@@ -53,6 +57,17 @@
 "detail.focus" = "聚焦";
 "detail.intro" = "介绍";
 "detail.source_title" = "来源页面";
+"detail.extra_info" = "活动信息";
+"detail.field.launch_count" = "打上数量";
+"detail.field.launch_scale" = "打上规模";
+"detail.field.paid_seat" = "收费观览席";
+"detail.field.access_text" = "交通方式";
+"detail.field.parking_text" = "停车信息";
+"detail.field.traffic_control_text" = "交通管制";
+"detail.field.organizer" = "主办方";
+"detail.field.festival_type" = "祭典类型";
+"detail.field.admission_fee" = "费用";
+"detail.field.expected_visitors" = "预计人数";
 "detail.atmosphere" = "当前氛围";
 "detail.heat" = "热度";
 "detail.surprise" = "惊喜";
@@ -93,6 +108,13 @@
 "drawer.contact.mail_action" = "邮件联系";
 "drawer.contact.copy_mail" = "复制邮箱地址";
 "drawer.contact.mail_subject" = "Tsugie 咨询";
+"drawer.local_data.clear_hint" = "会清除收藏、打卡、图章与本地提醒。";
+"drawer.local_data.clear_action" = "清理本地数据";
+"drawer.local_data.clear_confirm_title" = "确认清理本地数据？";
+"drawer.local_data.clear_confirm_message" = "该操作不可撤销，清理后需要重新标记。";
+"drawer.local_data.clear_confirm_action" = "确认清理";
+"drawer.local_data.clear_cancel_action" = "取消";
+"drawer.local_data.cleared_notice" = "本地数据已清理";
 "drawer.none_hint" = "选择一个项目后，这里会安静展开。";
 "drawer.filter.all" = "全部";
 "drawer.filter.planned" = "向往";
@@ -105,7 +127,7 @@
 "drawer.language.ja" = "日文";
 "drawer.language.switch_a11y" = "切换语言，当前%@";
 
-"calendar.title" = "時めぐりカレンダー";
+"calendar.title" = "时巡日历";
 "calendar.subtitle" = "时间维度的へ统计（地图是位置维度）";
 "calendar.close_a11y" = "关闭日历";
 "calendar.empty" = "这个期间没有可用的へ。";
@@ -122,7 +144,7 @@
 "calendar.category.nature" = "景观";
 "calendar.category.other" = "其他";
 
-"placeholder.title" = "時めぐり";
+"placeholder.title" = "时巡";
 "placeholder.desc1" = "日历页是时间维度语义，与地图页的位置维度语义独立。";
 "placeholder.desc2" = "第一阶段仅保留独立页面占位，后续阶段接入完整月历与当日抽屉。";
 

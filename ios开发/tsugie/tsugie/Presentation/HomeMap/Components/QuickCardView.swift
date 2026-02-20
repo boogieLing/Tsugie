@@ -18,6 +18,7 @@ struct QuickCardView: View {
     var mode: Mode = .quick
     let onClose: () -> Void
     let onOpenDetail: () -> Void
+    let onStartRoute: () -> Void
     let onExpandDetailBySwipe: () -> Void
     let onDismissBySwipe: () -> Void
 
@@ -93,7 +94,7 @@ struct QuickCardView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: onOpenDetail) {
+                Button(action: onStartRoute) {
                     Text(L10n.QuickCard.startRoute)
                         .font(.system(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity)

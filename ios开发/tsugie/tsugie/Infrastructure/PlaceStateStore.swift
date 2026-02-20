@@ -36,6 +36,11 @@ final class PlaceStateStore {
         return value
     }
 
+    func clearAll() {
+        states.removeAll(keepingCapacity: false)
+        defaults.removeObject(forKey: storageKey)
+    }
+
     private func persist() {
         let payload = Dictionary(uniqueKeysWithValues: states.map { ($0.key.uuidString, $0.value) })
         guard let data = try? JSONEncoder().encode(payload) else {

@@ -215,6 +215,7 @@
 - `CategoryWeight` 默认：`hanabi=1.2`、`matsuri=1.0`、`nature=0.8`、`other=1.0`。
 - `upcoming` 的 `TimeScore` 在 `<24h` 维持阶梯规则；`>24h` 必须按 `delta_start` 连续衰减（不能固定常数），避免“仅近 100~300m 但晚很多天”的地点反超更早开始地点。
 - nearby 轮播推荐粗排阶段必须先过滤 `ended` 活动（仅保留 `upcoming/ongoing/unknown`）。
+- nearby 轮播推荐精排阶段必须保证“已知时刻优先”：`unknown` 不得排在 `ongoing/upcoming` 之前（仅在没有已知时刻候选时可上浮）。
 - nearby 轮播在当前阶段默认优先花火大会：同条件下 `hanabi` 高于 `matsuri`。
 
 ### 7.4 nearby 逻辑

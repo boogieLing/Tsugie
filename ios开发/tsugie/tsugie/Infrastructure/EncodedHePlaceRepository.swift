@@ -601,6 +601,20 @@ enum EncodedHePlaceRepository {
             mapSpot: mapSpot,
             detailDescription: detail,
             oneLiner: cleanDisplayText(item.contentOneLiner),
+            detailDescriptionZH: cleanDisplayText(item.contentDescriptionZH),
+            oneLinerZH: cleanDisplayText(item.contentOneLinerZH),
+            detailDescriptionEN: cleanDisplayText(item.contentDescriptionEN),
+            oneLinerEN: cleanDisplayText(item.contentOneLinerEN),
+            launchCount: cleanDisplayText(item.record.launchCount),
+            launchScale: cleanDisplayText(item.record.launchScale),
+            paidSeat: cleanDisplayText(item.record.paidSeat),
+            accessText: cleanDisplayText(item.record.accessText),
+            parkingText: cleanDisplayText(item.record.parkingText),
+            trafficControlText: cleanDisplayText(item.record.trafficControlText),
+            organizer: cleanDisplayText(item.record.organizer),
+            festivalType: cleanDisplayText(item.record.festivalType),
+            admissionFee: cleanDisplayText(item.record.admissionFee),
+            expectedVisitors: cleanDisplayText(item.record.expectedVisitors),
             sourceURLs: sourceURLs,
             descriptionSourceURL: cleanDisplayText(item.contentDescriptionSourceURL) ?? sourceURLs.first,
             imageSourceURL: cleanDisplayText(item.contentImageSourceURL),
@@ -757,6 +771,10 @@ nonisolated private struct EncodedHePlaceItem: Decodable {
     let geohash: String?
     let contentDescription: String?
     let contentOneLiner: String?
+    let contentDescriptionZH: String?
+    let contentOneLinerZH: String?
+    let contentDescriptionEN: String?
+    let contentOneLinerEN: String?
     let contentSourceURLs: [String]?
     let contentDescriptionSourceURL: String?
     let contentImageSourceURL: String?
@@ -780,6 +798,10 @@ nonisolated private struct EncodedHePlaceItem: Decodable {
         case geohash
         case contentDescription = "content_description"
         case contentOneLiner = "content_one_liner"
+        case contentDescriptionZH = "content_description_zh"
+        case contentOneLinerZH = "content_one_liner_zh"
+        case contentDescriptionEN = "content_description_en"
+        case contentOneLinerEN = "content_one_liner_en"
         case contentSourceURLs = "content_source_urls"
         case contentDescriptionSourceURL = "content_description_source_url"
         case contentImageSourceURL = "content_image_source_url"
@@ -798,8 +820,17 @@ nonisolated private struct FusedEventRecord: Decodable {
     let city: String?
     let lat: Double?
     let lng: Double?
+    let launchCount: String?
+    let launchScale: String?
+    let paidSeat: String?
+    let organizer: String?
+    let festivalType: String?
+    let admissionFee: String?
+    let expectedVisitors: String?
     let accessText: String?
     let rainoutPolicy: String?
+    let parkingText: String?
+    let trafficControlText: String?
     let contact: String?
     let sourceNotes: String?
     let geoSource: String?
@@ -813,8 +844,17 @@ nonisolated private struct FusedEventRecord: Decodable {
         case city
         case lat
         case lng
+        case launchCount = "launch_count"
+        case launchScale = "launch_scale"
+        case paidSeat = "paid_seat"
+        case organizer
+        case festivalType = "festival_type"
+        case admissionFee = "admission_fee"
+        case expectedVisitors = "expected_visitors"
         case accessText = "access_text"
         case rainoutPolicy = "rainout_policy"
+        case parkingText = "parking_text"
+        case trafficControlText = "traffic_control_text"
         case contact
         case sourceNotes = "source_notes"
         case geoSource = "geo_source"
@@ -830,8 +870,17 @@ nonisolated private struct FusedEventRecord: Decodable {
         city = Self.decodeString(container, key: .city)
         lat = Self.decodeDouble(container, key: .lat)
         lng = Self.decodeDouble(container, key: .lng)
+        launchCount = Self.decodeString(container, key: .launchCount)
+        launchScale = Self.decodeString(container, key: .launchScale)
+        paidSeat = Self.decodeString(container, key: .paidSeat)
+        organizer = Self.decodeString(container, key: .organizer)
+        festivalType = Self.decodeString(container, key: .festivalType)
+        admissionFee = Self.decodeString(container, key: .admissionFee)
+        expectedVisitors = Self.decodeString(container, key: .expectedVisitors)
         accessText = Self.decodeString(container, key: .accessText)
         rainoutPolicy = Self.decodeString(container, key: .rainoutPolicy)
+        parkingText = Self.decodeString(container, key: .parkingText)
+        trafficControlText = Self.decodeString(container, key: .trafficControlText)
         contact = Self.decodeString(container, key: .contact)
         sourceNotes = Self.decodeString(container, key: .sourceNotes)
         geoSource = Self.decodeString(container, key: .geoSource)

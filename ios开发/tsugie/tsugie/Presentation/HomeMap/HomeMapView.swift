@@ -2,6 +2,9 @@ import MapKit
 import SwiftUI
 
 struct HomeMapView: View {
+    @Environment(\.openURL) private var openURL
+    @State private var routeNavigationPlace: HePlace?
+
     @ObservedObject var viewModel: HomeMapViewModel
     let onOpenCalendar: () -> Void
 
@@ -26,6 +29,8 @@ struct HomeMapView: View {
             gradient: TsugieVisuals.markerGradient(for: .other),
             glowColor: TsugieVisuals.markerGlowColor(for: .other)
         )
+        let markerEntries = viewModel.mapMarkerEntries()
+        let hasVisibleMarkerMenu = markerEntries.contains(where: \.isMenuVisible)
         let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
         let locationLogoGradient = LinearGradient(
             colors: [
@@ -58,7 +63,7 @@ struct HomeMapView: View {
                     }
                     .annotationTitles(.hidden)
 
-                    ForEach(viewModel.mapMarkerEntries()) { entry in
+                    ForEach(markerEntries) { entry in
                         let placeState = viewModel.placeState(for: entry.id)
                         Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
                             MapMarkerAnnotationView(
@@ -93,12 +98,26 @@ struct HomeMapView: View {
                                 }
                             )
                             .equatable()
-                            .zIndex(markerAnnotationZIndex(for: entry))
+                            .allowsHitTesting(
+                                markerAnnotationAllowsHitTesting(
+                                    for: entry,
+                                    hasVisibleMarkerMenu: hasVisibleMarkerMenu
+                                )
+                            )
+                            .zIndex(
+                                markerAnnotationZIndex(
+                                    for: entry,
+                                    hasVisibleMarkerMenu: hasVisibleMarkerMenu
+                                )
+                            )
                         }
                         .annotationTitles(.hidden)
                     }
                 }
                 .id(viewModel.mapViewInstanceID)
+                .onMapCameraChange(frequency: .continuous) { context in
+                    viewModel.handleMapCameraMotion(context.region)
+                }
                 .onMapCameraChange(frequency: .onEnd) { context in
                     viewModel.handleMapCameraChange(context.region)
                 }
@@ -160,6 +179,9 @@ struct HomeMapView: View {
                                     viewModel.openDetailForCurrentQuickCard()
                                 }
                             },
+                            onStartRoute: {
+                                routeNavigationPlace = place
+                            },
                             onExpandDetailBySwipe: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
                                     viewModel.openDetailForCurrentQuickCard()
@@ -197,6 +219,9 @@ struct HomeMapView: View {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
                                     viewModel.openDetailForCurrentQuickCard()
                                 }
+                            },
+                            onStartRoute: {
+                                routeNavigationPlace = place
                             },
                             onExpandDetailBySwipe: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
@@ -322,9 +347,84 @@ struct HomeMapView: View {
                 }
             )
         }
+        .confirmationDialog(
+            L10n.QuickCard.navigationChooserTitle,
+            isPresented: Binding(
+                get: { routeNavigationPlace != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        routeNavigationPlace = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.QuickCard.navigationOptionAppleMaps) {
+                if let place = routeNavigationPlace {
+                    openAppleMapsNavigation(to: place)
+                }
+                routeNavigationPlace = nil
+            }
+            Button(L10n.QuickCard.navigationOptionGoogleMaps) {
+                if let place = routeNavigationPlace {
+                    openGoogleMapsNavigation(to: place)
+                }
+                routeNavigationPlace = nil
+            }
+            Button(L10n.Common.close, role: .cancel) {
+                routeNavigationPlace = nil
+            }
+        } message: {
+            if let place = routeNavigationPlace {
+                Text(L10n.QuickCard.navigationChooserMessage(place.name))
+            }
+        }
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.topNotice?.id)
+    }
+
+    private func openAppleMapsNavigation(to place: HePlace) {
+        let origin = viewModel.currentLocationCoordinate
+        guard var components = URLComponents(string: "http://maps.apple.com/") else {
+            return
+        }
+        components.queryItems = [
+            URLQueryItem(name: "saddr", value: "\(origin.latitude),\(origin.longitude)"),
+            URLQueryItem(name: "daddr", value: "\(place.coordinate.latitude),\(place.coordinate.longitude)"),
+            URLQueryItem(name: "dirflg", value: "d")
+        ]
+        guard let url = components.url else {
+            return
+        }
+        openURL(url)
+    }
+
+    private func openGoogleMapsNavigation(to place: HePlace) {
+        let origin = viewModel.currentLocationCoordinate
+        guard let googleAppURL = URL(
+            string: "comgooglemaps://?saddr=\(origin.latitude),\(origin.longitude)&daddr=\(place.coordinate.latitude),\(place.coordinate.longitude)&directionsmode=driving"
+        ) else {
+            return
+        }
+        openURL(googleAppURL) { accepted in
+            guard !accepted else {
+                return
+            }
+            guard var components = URLComponents(string: "https://www.google.com/maps/dir/") else {
+                return
+            }
+            components.queryItems = [
+                URLQueryItem(name: "api", value: "1"),
+                URLQueryItem(name: "origin", value: "\(origin.latitude),\(origin.longitude)"),
+                URLQueryItem(name: "destination", value: "\(place.coordinate.latitude),\(place.coordinate.longitude)"),
+                URLQueryItem(name: "travelmode", value: "driving")
+            ]
+            guard let webURL = components.url else {
+                return
+            }
+            openURL(webURL)
+        }
     }
 
     private var mapAmbientGlowLayer: some View {
@@ -390,9 +490,24 @@ struct HomeMapView: View {
         }
     }
 
-    private func markerAnnotationZIndex(for entry: MapMarkerEntry) -> Double {
+    private func markerAnnotationZIndex(
+        for entry: MapMarkerEntry,
+        hasVisibleMarkerMenu: Bool
+    ) -> Double {
         if entry.isMenuVisible {
-            return 30
+            return 1_000
+        }
+        if hasVisibleMarkerMenu {
+            if entry.isSelected {
+                return 900
+            }
+            if entry.isTemporary {
+                return -100
+            }
+            if entry.isCluster {
+                return -110
+            }
+            return -120
         }
         if entry.isTemporary {
             return 21
@@ -404,6 +519,13 @@ struct HomeMapView: View {
             return 10
         }
         return 0
+    }
+
+    private func markerAnnotationAllowsHitTesting(
+        for _: MapMarkerEntry,
+        hasVisibleMarkerMenu _: Bool
+    ) -> Bool {
+        true
     }
 }
 
@@ -466,7 +588,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
                 onTap: onCheckedInTap
             )
             .offset(x: 14, y: -10)
-            .zIndex(0)
+            .zIndex(3)
 
             MarkerBubbleView(
                 placeName: entry.name,
@@ -491,10 +613,8 @@ private struct MapMarkerAnnotationView: View, Equatable {
             )
             .offset(y: -14)
             .allowsHitTesting(entry.isMenuVisible)
-            .zIndex(2)
+            .zIndex(4)
         }
-        // Keep radial menu hit targets inside annotation bounds; otherwise upper taps may fall through to map.
-        .frame(width: 220, height: 196, alignment: .bottom)
     }
 }
 
@@ -570,6 +690,8 @@ private struct MarkerDecorationOverlayView: View {
                         useWhiteBase: useWhiteBase
                     )
                     .modifier(MarkerDecorationPhaseModifier(progress: progress))
+                    .padding(8)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L10n.Marker.checkedInA11y)

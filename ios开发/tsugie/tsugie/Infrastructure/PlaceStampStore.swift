@@ -87,6 +87,12 @@ final class PlaceStampStore {
         )
     }
 
+    func clearAll() {
+        lockedStamps.removeAll(keepingCapacity: false)
+        transientStamps.removeAll(keepingCapacity: false)
+        defaults.removeObject(forKey: storageKey)
+    }
+
     private func sampleStamp(for heType: HeType, excluding excluded: String? = nil) -> StampSelection? {
         let folders = folders(for: heType)
         let shuffledFolders = folders.shuffled()

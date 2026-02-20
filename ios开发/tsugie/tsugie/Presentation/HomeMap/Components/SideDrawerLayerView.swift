@@ -4,6 +4,7 @@ import UIKit
 struct SideDrawerLayerView: View {
     @ObservedObject var viewModel: HomeMapViewModel
     @State private var favoriteSubtitle = L10n.SideDrawer.favoritesSubtitle
+    @State private var isClearLocalDataConfirmPresented = false
     private let drawerItemFillColor = Color.white
     private let drawerItemBorderColor = Color(red: 0.84, green: 0.92, blue: 0.95)
     private let languageOptions: [(code: String, label: String)] = [
@@ -159,6 +160,17 @@ struct SideDrawerLayerView: View {
         .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.16), radius: 16, x: 0, y: 10)
         .offset(x: viewModel.isSideDrawerOpen ? 0 : width + 16)
         .animation(.spring(response: 0.42, dampingFraction: 0.88), value: viewModel.isSideDrawerOpen)
+        .alert(
+            L10n.SideDrawer.clearLocalDataConfirmTitle,
+            isPresented: $isClearLocalDataConfirmPresented
+        ) {
+            Button(L10n.SideDrawer.clearLocalDataConfirmAction, role: .destructive) {
+                viewModel.clearLocalData()
+            }
+            Button(L10n.SideDrawer.clearLocalDataCancelAction, role: .cancel) {}
+        } message: {
+            Text(L10n.SideDrawer.clearLocalDataConfirmMessage)
+        }
     }
 
     private func favoriteDrawer(width: CGFloat) -> some View {
@@ -359,7 +371,7 @@ struct SideDrawerLayerView: View {
                         )
                         .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
                     Button(L10n.SideDrawer.contactCopyMail) {
-                        UIPasteboard.general.string = "contact@tsugie.app"
+                        UIPasteboard.general.string = L10n.SideDrawer.contactMailAddress
                     }
                     .font(.system(size: 13, weight: .bold))
                     .frame(maxWidth: .infinity)
@@ -371,9 +383,28 @@ struct SideDrawerLayerView: View {
                         borderOpacity: 0.88
                     )
                     .foregroundStyle(Color(red: 0.30, green: 0.42, blue: 0.46))
-                    Text("contact@tsugie.app")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+
+                    Text(L10n.SideDrawer.clearLocalDataHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.43, green: 0.53, blue: 0.57))
+                        .padding(.top, 2)
+
+                    Button {
+                        isClearLocalDataConfirmPresented = true
+                    } label: {
+                        Text(L10n.SideDrawer.clearLocalDataAction)
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .drawerRoundedSurface(
+                                cornerRadius: 12,
+                                fillColor: drawerItemFillColor,
+                                borderColor: Color(red: 0.92, green: 0.68, blue: 0.68),
+                                borderOpacity: 0.94
+                            )
+                            .foregroundStyle(Color(red: 0.76, green: 0.24, blue: 0.22))
+                    }
+                    .buttonStyle(.plain)
                 }
             case .none:
                 EmptyView()
@@ -659,20 +690,7 @@ struct SideDrawerLayerView: View {
             }
             Spacer()
             Button(action: action) {
-                ZStack(alignment: isOn ? .trailing : .leading) {
-                    Capsule()
-                        .fill(
-                            isOn
-                            ? AnyShapeStyle(viewModel.activePillGradient)
-                            : AnyShapeStyle(Color(red: 0.77, green: 0.84, blue: 0.87, opacity: 0.55))
-                        )
-                        .frame(width: 44, height: 26)
-                        .overlay(Capsule().stroke(Color(red: 0.74, green: 0.83, blue: 0.87, opacity: 0.95), lineWidth: isOn ? 0 : 1))
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 20, height: 20)
-                        .padding(3)
-                }
+                notificationToggleSwitch(isOn: isOn)
             }
             .buttonStyle(.plain)
         }
@@ -684,6 +702,26 @@ struct SideDrawerLayerView: View {
             borderColor: drawerItemBorderColor,
             borderOpacity: 0.9
         )
+    }
+
+    private func notificationToggleSwitch(isOn: Bool) -> some View {
+        ZStack {
+            Capsule()
+                .fill(Color(red: 0.77, green: 0.84, blue: 0.87, opacity: 0.55))
+                .opacity(isOn ? 0 : 1)
+            Capsule()
+                .fill(viewModel.activePillGradient)
+                .opacity(isOn ? 1 : 0)
+            Capsule()
+                .stroke(Color(red: 0.74, green: 0.83, blue: 0.87, opacity: 0.95), lineWidth: isOn ? 0 : 1)
+                .opacity(isOn ? 0 : 1)
+            Circle()
+                .fill(.white)
+                .frame(width: 20, height: 20)
+                .offset(x: isOn ? 9 : -9)
+        }
+        .frame(width: 44, height: 26)
+        .animation(TsugieVisuals.notificationToggleAnimation, value: isOn)
     }
 
     private func themeChipGradient(_ scheme: String) -> LinearGradient {

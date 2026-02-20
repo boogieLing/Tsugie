@@ -202,6 +202,16 @@
   - 必跑 App Store 高压线预检（完整性、隐私、权限、元数据一致性）。
   - 使用清单：`ios开发/tsugie/tsugie/APP_STORE_PRECHECK.md`。
 
+### 11.4 iOS 测试执行并发规范（强制）
+
+- 目标：避免 xcode test 自动拉起多 Clone 模拟器造成资源抖动与调试噪音。
+- 要求：
+  - 本地默认使用“单模拟器、禁并行 clone”执行 iOS 测试。
+  - `xcodebuild test` 必须显式带以下参数：
+    - `-parallel-testing-enabled NO`
+    - `-maximum-concurrent-test-simulator-destinations 1`
+  - 非用户明确要求，不得使用并行测试配置（包括多个 simulator destination 或默认并行 clone）。
+
 ## 12. 数据端子项目落位（新增）
 
 - 新增祭典抓取独立目录：`数据端/OMATSURI/`（与 `数据端/HANABI/` 同级）。
@@ -256,6 +266,7 @@
 - `upcoming` 的 `TimeScore` 在 `<24h` 保持阶梯规则，`>24h` 必须按 `delta_start` 连续衰减，禁止固定常数，避免“微小距离差”压过“显著时间差”。
 - 在数据覆盖率未达标前，`expected_visitors` 与 `launch_scale` 不得作为主排序强依赖；优先使用 `distance/时间状态/scale_score/heat_score`。
 - nearby 轮播推荐粗排阶段必须过滤 `ended` 活动，不允许过期活动进入轮播候选池。
+- nearby 轮播推荐精排阶段必须保证“已知时刻优先”：`unknown` 不得排在 `ongoing/upcoming` 之前（仅在没有已知时刻候选时可上浮）。
 - nearby 轮播推荐当前阶段默认优先 `hanabi`（花火大会），并通过类别权重与同分排序共同保证优先级。
 - nearby 重排触发策略固定为：仅用户手势移动结束后触发；地图移动过程中不得连续触发推荐重排。
 - marker 点击/quickCard 聚焦/定位重置等程序化相机变化，不得触发 nearby 重排。
@@ -268,12 +279,17 @@
 
 - 每个活动的“图片 + 活动介绍”增强链路默认使用统一脚本：`数据端/scripts/enrich_event_content.py`。
 - 链路定位为“低频长跑”任务，默认低 QPS、允许长时间运行，避免高频重复抓取。
+- 默认时间过滤规则：仅按 `event_date_start` 判断，`start_date < (today - 31d)` 的历史活动跳过；其余（未开始与已过期 31 天内）继续处理。
+- 默认重跑策略：`failed-only`（仅处理失败/未处理），历史成功记录直接复用，减少重复请求与模型调用。
+- 默认处理优先级：按 `event_date_start` 近期开场优先（未开始优先、其次为已过期 31 天内），并优先处理“仍需请求”的记录。
+- 默认低 token 策略：`codex_model=auto` 启动时先探测可用模型（在独立临时目录探测，避免仓库上下文额外 token），按候选顺序优先使用轻量模型（默认 `gpt-5-mini,gpt-4.1-mini,gpt-4o-mini,o4-mini,o3-mini,gpt-5`）；若轻量模型不可用则自动回退 `gpt-5`。可用 `CODEX_MODEL_CANDIDATES` 覆盖候选顺序；并要求日/中/英介绍与一句话在单次模型调用内返回（不走二次翻译补调），`codex_timeout_sec` 默认按 `120s` 运行。
 - 抓取收尾串接基线（新增）：
   - `hanabi_crawler/cli.py`、`omatsuri_crawler/cli.py` 的全量抓取在 `fuse` 完成后默认自动触发内容增强（可用 `--no-content-enrich` 临时关闭）。
   - `HANABI/scripts/refresh_incomplete_events.py`、`OMATSURI/scripts/refresh_incomplete_events.py` 的高频补充在 `fuse` 完成后默认自动触发内容增强（可用 `--no-content-enrich` 临时关闭）。
   - 默认内容增强参数基线：低 QPS、`max_images=1`、回写 `latest_run.json` 的 `content_run_id`。
 - iOS 接入收尾基线（新增）：
   - 统一数据管理系统 `POST /api/run/full` 与 `POST /api/run/highfreq` 在任务成功后默认自动执行 `bash 数据端/scripts/update_ios_payload.sh --pretty`，将最新内容同步到 iOS 资源包。
+  - 统一数据管理系统新增 `POST /api/run/content_regen`：用于“内容增强历史重跑”任务纳管（支持 `only_past_days` 等过滤），任务进度与日志统一纳入 `/api/jobs` 与 `/api/job_log` 监控。
   - 若自动导出失败，任务状态必须标记为失败并在 job 日志中输出失败原因。
 - 默认输入基于两个子项目最新融合批次：
   - `数据端/HANABI/data/latest_run.json` 的 `fused_run_id`
@@ -283,10 +299,17 @@
   - `数据端/文档/event-one-liner.prompt.md`（一句话简述）
 - 文本润色模式基线：
   - `--polish-mode auto|openai|codex|none`（默认 `auto`）
+  - `openai` 模式支持 OpenAI Responses 与 OpenAI 兼容 Chat Completions 两种端点（通过 `OPENAI_BASE_URL` 切换），可接入 Kimi/DeepSeek 等兼容供应商。
+  - `openai` 模式支持“介绍与一句话分模型/分端点”：
+    - 介绍默认使用 `OPENAI_MODEL/OPENAI_BASE_URL/OPENAI_API_KEY`
+    - 一句话可选覆盖 `OPENAI_ONE_LINER_MODEL/OPENAI_ONE_LINER_BASE_URL/OPENAI_ONE_LINER_API_KEY`
+    - 中英补全翻译可选覆盖 `OPENAI_TRANSLATION_MODEL/OPENAI_TRANSLATION_BASE_URL/OPENAI_TRANSLATION_API_KEY`
   - `codex` 模式允许本地逐条生成（通过本机 Codex CLI），用于无 OpenAI API key 场景的一次性批处理。
+  - 历史活动回刷支持：`--only-past-days N` 仅处理 `event_date_start < (today - N)` 的活动，适合脏数据清洗重跑。
 - 抓取质量基线（新增）：
   - 对 `text/html` 且未声明 charset 的页面，必须执行编码探测（含 `Shift_JIS/CP932`）后再解析，避免日文乱码落盘。
   - 对 `omatsuri.com/sch/*.html#...` 月历锚点页，必须优先抽取“活动行级文本”；若仅能命中页面通用头图/OGP 图（如 `header.jpg`），则该活动视为无图，不写入通用图占位。
+  - 对已识别脏图指纹 `banner1_069a0e3420`（含 `01_banner1_069a0e3420.jpg` 及哈希后缀变体）必须统一视为无图，不得写入内容结果与 iOS 资源包。
 - 输出基线：
   - `数据端/HANABI/data/content/<run_id>/`、`数据端/OMATSURI/data/content/<run_id>/`
   - 必须产出 `events_content.jsonl`、`events_content.csv`、`content_enrich_log.csv`、`content_summary.json`

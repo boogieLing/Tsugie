@@ -8,7 +8,7 @@ enum HeType: String, CaseIterable, Codable {
     case other
 }
 
-struct HePlaceImageRef {
+struct HePlaceImageRef: Sendable {
     let payloadOffset: UInt64
     let payloadLength: Int
     let payloadSHA256: String?
@@ -33,6 +33,16 @@ struct HePlace: Identifiable {
     let oneLinerZH: String?
     let detailDescriptionEN: String?
     let oneLinerEN: String?
+    let launchCount: String?
+    let launchScale: String?
+    let paidSeat: String?
+    let accessText: String?
+    let parkingText: String?
+    let trafficControlText: String?
+    let organizer: String?
+    let festivalType: String?
+    let admissionFee: String?
+    let expectedVisitors: String?
     let sourceURLs: [String]
     let descriptionSourceURL: String?
     let imageSourceURL: String?
@@ -61,6 +71,16 @@ struct HePlace: Identifiable {
         oneLinerZH: String? = nil,
         detailDescriptionEN: String? = nil,
         oneLinerEN: String? = nil,
+        launchCount: String? = nil,
+        launchScale: String? = nil,
+        paidSeat: String? = nil,
+        accessText: String? = nil,
+        parkingText: String? = nil,
+        trafficControlText: String? = nil,
+        organizer: String? = nil,
+        festivalType: String? = nil,
+        admissionFee: String? = nil,
+        expectedVisitors: String? = nil,
         sourceURLs: [String] = [],
         descriptionSourceURL: String? = nil,
         imageSourceURL: String? = nil,
@@ -88,6 +108,16 @@ struct HePlace: Identifiable {
         self.oneLinerZH = oneLinerZH
         self.detailDescriptionEN = detailDescriptionEN
         self.oneLinerEN = oneLinerEN
+        self.launchCount = launchCount
+        self.launchScale = launchScale
+        self.paidSeat = paidSeat
+        self.accessText = accessText
+        self.parkingText = parkingText
+        self.trafficControlText = trafficControlText
+        self.organizer = organizer
+        self.festivalType = festivalType
+        self.admissionFee = admissionFee
+        self.expectedVisitors = expectedVisitors
         self.sourceURLs = sourceURLs
         self.descriptionSourceURL = descriptionSourceURL
         self.imageSourceURL = imageSourceURL

@@ -138,6 +138,13 @@ enum L10n {
         static var closeA11y: String { text("quickcard.close_a11y") }
         static var viewDetails: String { text("quickcard.view_details") }
         static var startRoute: String { text("quickcard.start_route") }
+        static var navigationChooserTitle: String { text("quickcard.navigation_chooser_title") }
+        static var navigationOptionAppleMaps: String { text("quickcard.navigation_option.apple_maps") }
+        static var navigationOptionGoogleMaps: String { text("quickcard.navigation_option.google_maps") }
+
+        static func navigationChooserMessage(_ placeName: String) -> String {
+            format("quickcard.navigation_chooser_message", placeName)
+        }
     }
 
     enum Nearby {
@@ -179,6 +186,17 @@ enum L10n {
         static var focus: String { text("detail.focus") }
         static var intro: String { text("detail.intro") }
         static var sourceTitle: String { text("detail.source_title") }
+        static var extraInfo: String { text("detail.extra_info") }
+        static var launchCount: String { text("detail.field.launch_count") }
+        static var launchScale: String { text("detail.field.launch_scale") }
+        static var paidSeat: String { text("detail.field.paid_seat") }
+        static var accessText: String { text("detail.field.access_text") }
+        static var parkingText: String { text("detail.field.parking_text") }
+        static var trafficControlText: String { text("detail.field.traffic_control_text") }
+        static var organizer: String { text("detail.field.organizer") }
+        static var festivalType: String { text("detail.field.festival_type") }
+        static var admissionFee: String { text("detail.field.admission_fee") }
+        static var expectedVisitors: String { text("detail.field.expected_visitors") }
         static var atmosphere: String { text("detail.atmosphere") }
         static var heat: String { text("detail.heat") }
         static var surprise: String { text("detail.surprise") }
@@ -228,6 +246,13 @@ enum L10n {
         static var contactTitle: String { text("drawer.contact.title") }
         static var contactMailAction: String { text("drawer.contact.mail_action") }
         static var contactCopyMail: String { text("drawer.contact.copy_mail") }
+        static var clearLocalDataHint: String { text("drawer.local_data.clear_hint") }
+        static var clearLocalDataAction: String { text("drawer.local_data.clear_action") }
+        static var clearLocalDataConfirmTitle: String { text("drawer.local_data.clear_confirm_title") }
+        static var clearLocalDataConfirmMessage: String { text("drawer.local_data.clear_confirm_message") }
+        static var clearLocalDataConfirmAction: String { text("drawer.local_data.clear_confirm_action") }
+        static var clearLocalDataCancelAction: String { text("drawer.local_data.clear_cancel_action") }
+        static var localDataClearedNotice: String { text("drawer.local_data.cleared_notice") }
         static var noneHint: String { text("drawer.none_hint") }
         static var filterAll: String { text("drawer.filter.all") }
         static var filterPlanned: String { text("drawer.filter.planned") }
@@ -238,6 +263,7 @@ enum L10n {
         static var languageNameZhHans: String { text("drawer.language.zh_hans") }
         static var languageNameEn: String { text("drawer.language.en") }
         static var languageNameJa: String { text("drawer.language.ja") }
+        static var contactMailAddress: String { "ushouldknowr0@gmail.com" }
 
         static func languageSwitchA11y(_ currentLanguage: String) -> String {
             format("drawer.language.switch_a11y", currentLanguage)
@@ -246,7 +272,7 @@ enum L10n {
         static var contactMailURL: URL {
             let subject = text("drawer.contact.mail_subject")
             let encoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? subject
-            return URL(string: "mailto:contact@tsugie.app?subject=\(encoded)")!
+            return URL(string: "mailto:\(contactMailAddress)?subject=\(encoded)")!
         }
 
         static func favoritesFastestHintWithinWeek(days: Int) -> String {

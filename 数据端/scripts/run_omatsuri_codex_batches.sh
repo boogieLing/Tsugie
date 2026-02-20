@@ -13,12 +13,26 @@ PYTHON_BIN_DEFAULT="${ROOT_DIR}/数据端/HANABI/.venv/bin/python"
 RUN_PREFIX="${RUN_PREFIX:-20260218_omatsuri_codex_polish}"
 BATCH_SIZE="${BATCH_SIZE:-30}"
 QPS="${QPS:-0.12}"
-CODEX_TIMEOUT_SEC="${CODEX_TIMEOUT_SEC:-25}"
+REQUEST_TIMEOUT_SEC="${REQUEST_TIMEOUT_SEC:-120}"
+CODEX_TIMEOUT_SEC="${CODEX_TIMEOUT_SEC:-120}"
+CODEX_MODEL="${CODEX_MODEL:-auto}"
+POLISH_MODE="${POLISH_MODE:-auto}"
+OPENAI_MODEL="${OPENAI_MODEL:-gpt-5-mini}"
+OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1/responses}"
+OPENAI_ONE_LINER_MODEL="${OPENAI_ONE_LINER_MODEL:-}"
+OPENAI_ONE_LINER_BASE_URL="${OPENAI_ONE_LINER_BASE_URL:-}"
+OPENAI_TRANSLATION_MODEL="${OPENAI_TRANSLATION_MODEL:-}"
+OPENAI_TRANSLATION_BASE_URL="${OPENAI_TRANSLATION_BASE_URL:-}"
 PYTHON_BIN="${PYTHON_BIN:-$PYTHON_BIN_DEFAULT}"
+SKIP_PAST_DAYS="${SKIP_PAST_DAYS:-31}"
+ONLY_PAST_DAYS="${ONLY_PAST_DAYS:--1}"
+FAILED_ONLY_FLAG="${FAILED_ONLY_FLAG:---failed-only}"
+PRIORITIZE_NEAR_START_FLAG="${PRIORITIZE_NEAR_START_FLAG:---prioritize-near-start}"
+SINGLE_PASS_I18N_FLAG="${SINGLE_PASS_I18N_FLAG:---codex-single-pass-i18n}"
 
 START_BATCH="${START_BATCH:-auto}"
 END_BATCH="${END_BATCH:-}"
-FORCE_FLAG="${FORCE_FLAG:---force}"
+FORCE_FLAG="${FORCE_FLAG:---no-force}"
 UPDATE_LATEST_FLAG="${UPDATE_LATEST_FLAG:---update-latest-run}"
 
 if [[ ! -f "${LATEST_RUN_JSON}" ]]; then
@@ -128,8 +142,21 @@ for batch in $(seq "${START_BATCH}" "${END_BATCH}"); do
     --max-events "${max_events}" \
     --progress-every 1 \
     --qps "${QPS}" \
-    --polish-mode codex \
+    --request-timeout-sec "${REQUEST_TIMEOUT_SEC}" \
+    --polish-mode "${POLISH_MODE}" \
+    --openai-model "${OPENAI_MODEL}" \
+    --openai-base-url "${OPENAI_BASE_URL}" \
+    --openai-one-liner-model "${OPENAI_ONE_LINER_MODEL}" \
+    --openai-one-liner-base-url "${OPENAI_ONE_LINER_BASE_URL}" \
+    --openai-translation-model "${OPENAI_TRANSLATION_MODEL}" \
+    --openai-translation-base-url "${OPENAI_TRANSLATION_BASE_URL}" \
+    --codex-model "${CODEX_MODEL}" \
     --codex-timeout-sec "${CODEX_TIMEOUT_SEC}" \
+    --skip-past-days "${SKIP_PAST_DAYS}" \
+    --only-past-days "${ONLY_PAST_DAYS}" \
+    "${FAILED_ONLY_FLAG}" \
+    "${PRIORITIZE_NEAR_START_FLAG}" \
+    "${SINGLE_PASS_I18N_FLAG}" \
     --download-images \
     --max-images 1 \
     "${FORCE_FLAG}" \

@@ -28,6 +28,7 @@ class SourceConfig:
     latest_run_path: Path
     fused_dir: Path
     content_dir: Path
+    score_dir: Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,8 +121,15 @@ def normalize_string_list(raw: Any) -> list[str]:
     return []
 
 
+DIRTY_IMAGE_FINGERPRINTS = [
+    "banner1_069a0e3420",
+]
+
+
 def is_generic_image_url(url: str) -> bool:
     low = url.lower()
+    if any(fp in low for fp in DIRTY_IMAGE_FINGERPRINTS):
+        return True
     if low.endswith("/img/header.jpg") or low.endswith("/img/header.jpeg") or low.endswith("/img/header.png"):
         return True
     if "ogp0.png" in low:
@@ -129,7 +137,7 @@ def is_generic_image_url(url: str) -> bool:
     return False
 
 
-def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, str]:
+def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, int, str]:
     status_rank = {
         "ok": 4,
         "cached": 3,
@@ -140,6 +148,7 @@ def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, str]:
     polished_desc = nonempty(row.get("polished_description")) or ""
     one_liner = nonempty(row.get("one_liner")) or ""
     raw_desc = nonempty(row.get("raw_description")) or ""
+    polish_mode = (nonempty(row.get("polish_mode")) or "").lower()
     image_urls = normalize_string_list(row.get("image_urls"))
     local_images = normalize_string_list(row.get("downloaded_images"))
 
@@ -156,9 +165,15 @@ def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, str]:
             return True
         return "festival schedule" in low
 
+    polish_rank = 0
+    if polish_mode in {"codex", "openai"}:
+        polish_rank = 2
+    elif polished_desc and polished_desc != raw_desc:
+        polish_rank = 1
+
     desc_quality = 0
     if polished_desc:
-        desc_quality = 2
+        desc_quality = 2 if polished_desc != raw_desc else 1
         if has_bad_text(polished_desc) or looks_generic_description(polished_desc):
             desc_quality = 1
     elif raw_desc:
@@ -166,9 +181,14 @@ def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, str]:
         if has_bad_text(raw_desc) or looks_generic_description(raw_desc):
             desc_quality = 0
 
+    fallback_like_one_liner = False
+    if raw_desc and one_liner:
+        fallback_candidate = raw_desc if len(raw_desc) <= 46 else (raw_desc[:46].rstrip() + "…")
+        fallback_like_one_liner = one_liner == fallback_candidate
+
     one_liner_quality = 0
     if one_liner:
-        one_liner_quality = 2
+        one_liner_quality = 1 if fallback_like_one_liner else 2
         if has_bad_text(one_liner) or looks_generic_description(one_liner):
             one_liner_quality = 1
 
@@ -177,17 +197,68 @@ def score_content_entry(row: dict[str, Any]) -> tuple[int, int, int, int, str]:
         if image_urls:
             has_non_generic_image = 1 if any(not is_generic_image_url(u) for u in image_urls) else 0
         else:
-            has_non_generic_image = 1
+            has_non_generic_image = 1 if any(not is_generic_image_url(u) for u in local_images) else 0
 
     fetched_at = nonempty(row.get("fetched_at")) or ""
-    return (status_rank, desc_quality, one_liner_quality, has_non_generic_image, fetched_at)
+    return (status_rank, polish_rank, desc_quality, one_liner_quality, has_non_generic_image, fetched_at)
 
 
-def load_content_index(source: SourceConfig, fused_run_id: str) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    result: dict[str, dict[str, Any]] = {}
+def normalize_name_for_match(raw: Any) -> str:
+    text = nonempty(raw) or ""
+    if not text:
+        return ""
+    text = text.lower()
+    text = re.sub(r"\s+", "", text)
+    text = re.sub(r"[【】\[\]（）()「」『』・,，。.!！?？:：/／\\\-~〜～]", "", text)
+    return text
+
+
+def build_name_date_key(event_name: Any, event_date_start: Any) -> str:
+    name_key = normalize_name_for_match(event_name)
+    if not name_key:
+        return ""
+    date_key = extract_date(event_date_start) or (nonempty(event_date_start) or "")
+    return f"{name_key}|{date_key}"
+
+
+def source_url_set(row: dict[str, Any]) -> set[str]:
+    urls = set(normalize_string_list(row.get("source_urls")))
+    description_source = nonempty(row.get("description_source_url"))
+    if description_source:
+        urls.add(description_source)
+    return urls
+
+
+def rows_look_same_event(base_row: dict[str, Any], candidate_row: dict[str, Any]) -> bool:
+    base_sources = source_url_set(base_row)
+    candidate_sources = source_url_set(candidate_row)
+    if base_sources and candidate_sources and base_sources.intersection(candidate_sources):
+        return True
+
+    base_key = build_name_date_key(base_row.get("event_name"), base_row.get("event_date_start"))
+    candidate_key = build_name_date_key(candidate_row.get("event_name"), candidate_row.get("event_date_start"))
+    return bool(base_key and candidate_key and base_key == candidate_key)
+
+
+def _put_if_better(
+    bucket: dict[str, dict[str, Any]],
+    row: dict[str, Any],
+    key: str,
+) -> None:
+    if not key:
+        return
+    existing = bucket.get(key)
+    if existing is None or score_content_entry(row) >= score_content_entry(existing):
+        bucket[key] = row
+
+
+def load_content_index(source: SourceConfig, fused_run_id: str) -> tuple[dict[str, dict[str, dict[str, Any]]], list[str]]:
+    by_canonical: dict[str, dict[str, Any]] = {}
+    by_source_url: dict[str, dict[str, Any]] = {}
+    by_name_date: dict[str, dict[str, Any]] = {}
     run_ids: list[str] = []
     if not source.content_dir.exists():
-        return result, run_ids
+        return {"by_canonical": by_canonical, "by_source_url": by_source_url, "by_name_date": by_name_date}, run_ids
 
     run_dirs = sorted([path for path in source.content_dir.iterdir() if path.is_dir()], key=lambda p: p.name)
     for run_dir in run_dirs:
@@ -202,10 +273,6 @@ def load_content_index(source: SourceConfig, fused_run_id: str) -> tuple[dict[st
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 summary = {}
-        summary_fused = nonempty(summary.get("fused_run_id"))
-        if summary_fused and summary_fused != fused_run_id:
-            continue
-
         run_ids.append(run_dir.name)
         with jsonl_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -219,11 +286,162 @@ def load_content_index(source: SourceConfig, fused_run_id: str) -> tuple[dict[st
                 canonical_id = nonempty(row.get("canonical_id"))
                 if not canonical_id:
                     continue
-                existing = result.get(canonical_id)
-                if existing is None or score_content_entry(row) >= score_content_entry(existing):
-                    result[canonical_id] = row
+                _put_if_better(by_canonical, row, canonical_id)
 
-    return result, run_ids
+                for source_url in normalize_string_list(row.get("source_urls")):
+                    _put_if_better(by_source_url, row, source_url)
+                description_source_url = nonempty(row.get("description_source_url"))
+                if description_source_url:
+                    _put_if_better(by_source_url, row, description_source_url)
+
+                name_date_key = build_name_date_key(row.get("event_name"), row.get("event_date_start"))
+                if name_date_key:
+                    _put_if_better(by_name_date, row, name_date_key)
+
+    return {"by_canonical": by_canonical, "by_source_url": by_source_url, "by_name_date": by_name_date}, run_ids
+
+
+def resolve_content_row(row: dict[str, Any], content_index: dict[str, dict[str, dict[str, Any]]]) -> dict[str, Any] | None:
+    canonical_id = nonempty(row.get("canonical_id")) or ""
+    by_canonical = content_index.get("by_canonical", {})
+    by_source_url = content_index.get("by_source_url", {})
+    by_name_date = content_index.get("by_name_date", {})
+    candidates: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    if canonical_id and canonical_id in by_canonical:
+        candidate = by_canonical[canonical_id]
+        if rows_look_same_event(row, candidate):
+            candidates.append(candidate)
+            seen.add(id(candidate))
+
+    for source_url in normalize_string_list(row.get("source_urls")):
+        matched = by_source_url.get(source_url)
+        if not matched:
+            continue
+        if id(matched) in seen:
+            continue
+        if not rows_look_same_event(row, matched):
+            continue
+        candidates.append(matched)
+        seen.add(id(matched))
+
+    name_date_key = build_name_date_key(row.get("event_name"), row.get("event_date_start"))
+    if name_date_key:
+        candidate = by_name_date.get(name_date_key)
+        if candidate and id(candidate) not in seen and rows_look_same_event(row, candidate):
+            candidates.append(candidate)
+            seen.add(id(candidate))
+
+    if not candidates:
+        return None
+    return sorted(candidates, key=score_content_entry, reverse=True)[0]
+
+
+def score_score_entry(row: dict[str, Any]) -> tuple[int, str]:
+    status = str(row.get("status", "")).strip().lower()
+    source = str(row.get("score_source", "")).strip().lower()
+    rank = 0
+    if status == "ok" and source == "ai":
+        rank = 4
+    elif status == "ok":
+        rank = 3
+    elif status.startswith("cached"):
+        rank = 2
+    elif status:
+        rank = 1
+    generated_at = nonempty(row.get("generated_at")) or ""
+    return (rank, generated_at)
+
+
+def _put_score_if_better(
+    bucket: dict[str, dict[str, Any]],
+    row: dict[str, Any],
+    key: str,
+) -> None:
+    if not key:
+        return
+    existing = bucket.get(key)
+    if existing is None or score_score_entry(row) >= score_score_entry(existing):
+        bucket[key] = row
+
+
+def load_score_index(source: SourceConfig, preferred_run_id: str) -> tuple[dict[str, dict[str, dict[str, Any]]], list[str]]:
+    by_canonical: dict[str, dict[str, Any]] = {}
+    by_source_url: dict[str, dict[str, Any]] = {}
+    by_name_date: dict[str, dict[str, Any]] = {}
+    run_ids: list[str] = []
+    if not source.score_dir.exists():
+        return {"by_canonical": by_canonical, "by_source_url": by_source_url, "by_name_date": by_name_date}, run_ids
+
+    run_dirs = sorted([path for path in source.score_dir.iterdir() if path.is_dir()], key=lambda p: p.name)
+    if preferred_run_id:
+        run_dirs = sorted(run_dirs, key=lambda p: (p.name != preferred_run_id, p.name))
+
+    for run_dir in run_dirs:
+        jsonl_path = run_dir / "events_scores.jsonl"
+        if not jsonl_path.exists():
+            continue
+        run_ids.append(run_dir.name)
+        with jsonl_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                canonical_id = nonempty(row.get("canonical_id"))
+                if canonical_id:
+                    _put_score_if_better(by_canonical, row, canonical_id)
+
+                for source_url in normalize_string_list(row.get("source_urls")):
+                    _put_score_if_better(by_source_url, row, source_url)
+
+                name_date_key = build_name_date_key(row.get("event_name"), row.get("event_date_start"))
+                if name_date_key:
+                    _put_score_if_better(by_name_date, row, name_date_key)
+
+    return {"by_canonical": by_canonical, "by_source_url": by_source_url, "by_name_date": by_name_date}, run_ids
+
+
+def resolve_score_row(row: dict[str, Any], score_index: dict[str, dict[str, dict[str, Any]]]) -> dict[str, Any] | None:
+    canonical_id = nonempty(row.get("canonical_id")) or ""
+    by_canonical = score_index.get("by_canonical", {})
+    by_source_url = score_index.get("by_source_url", {})
+    by_name_date = score_index.get("by_name_date", {})
+    candidates: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    if canonical_id and canonical_id in by_canonical:
+        candidate = by_canonical[canonical_id]
+        if rows_look_same_event(row, candidate):
+            candidates.append(candidate)
+            seen.add(id(candidate))
+
+    for source_url in normalize_string_list(row.get("source_urls")):
+        matched = by_source_url.get(source_url)
+        if not matched:
+            continue
+        if id(matched) in seen:
+            continue
+        if not rows_look_same_event(row, matched):
+            continue
+        candidates.append(matched)
+        seen.add(id(matched))
+
+    name_date_key = build_name_date_key(row.get("event_name"), row.get("event_date_start"))
+    if name_date_key:
+        candidate = by_name_date.get(name_date_key)
+        if candidate and id(candidate) not in seen and rows_look_same_event(row, candidate):
+            candidates.append(candidate)
+            seen.add(id(candidate))
+
+    if not candidates:
+        return None
+    return sorted(candidates, key=score_score_entry, reverse=True)[0]
 
 
 def extract_date(raw: Any) -> str | None:
@@ -270,7 +488,30 @@ def clamp(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, v))
 
 
-def derive_scores(row: dict[str, Any], category: str) -> tuple[int, int, int]:
+def parse_score_int(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return clamp(int(round(float(raw))), 0, 100)
+    text = str(raw)
+    m = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not m:
+        return None
+    try:
+        return clamp(int(round(float(m.group(0)))), 0, 100)
+    except ValueError:
+        return None
+
+
+def is_usable_ai_score(row: dict[str, Any] | None) -> bool:
+    if not row:
+        return False
+    status = str(row.get("status", "")).strip().lower()
+    source = str(row.get("score_source", "")).strip().lower()
+    return source == "ai" and (status == "ok" or status.startswith("cached"))
+
+
+def derive_scores(row: dict[str, Any], category: str, score_row: dict[str, Any] | None) -> tuple[int, int, int]:
     source_count_raw = row.get("source_count")
     if isinstance(source_count_raw, int):
         source_count = source_count_raw
@@ -291,8 +532,10 @@ def derive_scores(row: dict[str, Any], category: str) -> tuple[int, int, int]:
         base += 6
 
     scale = clamp(base, 25, 99)
-    heat = clamp(scale + 6, 20, 100)
-    surprise = clamp(52 + ((scale * 37) % 39), 15, 98)
+    ai_heat = parse_score_int(score_row.get("initial_heat_score")) if is_usable_ai_score(score_row) else None
+    ai_surprise = parse_score_int(score_row.get("surprise_score")) if is_usable_ai_score(score_row) else None
+    heat = ai_heat if ai_heat is not None else clamp(scale + 6, 20, 100)
+    surprise = ai_surprise if ai_surprise is not None else clamp(52 + ((scale * 37) % 39), 15, 98)
     return scale, heat, surprise
 
 
@@ -367,12 +610,13 @@ def build_entry(
     row: dict[str, Any],
     geohash_precision: int,
     content_row: dict[str, Any] | None,
+    score_row: dict[str, Any] | None,
     repo_root: Path,
 ) -> dict[str, Any]:
     canonical_id = str(row.get("canonical_id") or "").strip() or str(uuid.uuid4())
     place_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"tsugie:{category}:{canonical_id}"))
 
-    scale_score, heat_score, surprise_score = derive_scores(row, category)
+    scale_score, heat_score, surprise_score = derive_scores(row, category, score_row)
     start_date = extract_date(row.get("event_date_start"))
     end_date = extract_date(row.get("event_date_end"))
     start_time = extract_time(row.get("event_time_start"))
@@ -387,6 +631,10 @@ def build_entry(
     source_urls = normalize_string_list(row.get("source_urls"))
     content_description = None
     content_one_liner = None
+    content_description_zh = None
+    content_one_liner_zh = None
+    content_description_en = None
+    content_one_liner_en = None
     content_source_url = source_urls[0] if source_urls else None
     content_image_source_url = None
     image_local_abs = None
@@ -395,6 +643,10 @@ def build_entry(
     if content_row:
         content_description = nonempty(content_row.get("polished_description")) or nonempty(content_row.get("raw_description"))
         content_one_liner = nonempty(content_row.get("one_liner"))
+        content_description_zh = nonempty(content_row.get("polished_description_zh"))
+        content_one_liner_zh = nonempty(content_row.get("one_liner_zh"))
+        content_description_en = nonempty(content_row.get("polished_description_en"))
+        content_one_liner_en = nonempty(content_row.get("one_liner_en"))
         description_source = nonempty(content_row.get("description_source_url"))
         content_source_urls = normalize_string_list(content_row.get("source_urls"))
         if content_source_urls:
@@ -416,10 +668,12 @@ def build_entry(
         candidate_rel_paths: list[str] = []
         if non_generic_indices and downloaded_images:
             candidate_rel_paths.extend(
-                downloaded_images[idx] for idx in non_generic_indices if 0 <= idx < len(downloaded_images)
+                downloaded_images[idx]
+                for idx in non_generic_indices
+                if 0 <= idx < len(downloaded_images) and not is_generic_image_url(downloaded_images[idx])
             )
         elif not content_image_urls:
-            candidate_rel_paths.extend(downloaded_images)
+            candidate_rel_paths.extend(rel for rel in downloaded_images if not is_generic_image_url(rel))
 
         for rel_path in candidate_rel_paths:
             candidate_roots = [repo_root]
@@ -453,6 +707,10 @@ def build_entry(
         "geohash": geohash,
         "content_description": content_description,
         "content_one_liner": content_one_liner,
+        "content_description_zh": content_description_zh,
+        "content_one_liner_zh": content_one_liner_zh,
+        "content_description_en": content_description_en,
+        "content_one_liner_en": content_one_liner_en,
         "content_source_urls": source_urls,
         "content_description_source_url": content_source_url,
         "content_image_source_url": content_image_source_url,
@@ -630,6 +888,10 @@ def count_content_fields(entries: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "with_description": sum(1 for e in entries if nonempty(e.get("content_description"))),
         "with_one_liner": sum(1 for e in entries if nonempty(e.get("content_one_liner"))),
+        "with_description_zh": sum(1 for e in entries if nonempty(e.get("content_description_zh"))),
+        "with_one_liner_zh": sum(1 for e in entries if nonempty(e.get("content_one_liner_zh"))),
+        "with_description_en": sum(1 for e in entries if nonempty(e.get("content_description_en"))),
+        "with_one_liner_en": sum(1 for e in entries if nonempty(e.get("content_one_liner_en"))),
         "with_source_urls": sum(1 for e in entries if normalize_string_list(e.get("content_source_urls"))),
         "with_image_ref": sum(
             1
@@ -652,18 +914,29 @@ def main() -> int:
         latest_run_path=repo_root / "数据端/HANABI/data/latest_run.json",
         fused_dir=repo_root / "数据端/HANABI/data/fused",
         content_dir=repo_root / "数据端/HANABI/data/content",
+        score_dir=repo_root / "数据端/HANABI/data/scores",
     )
     omatsuri_source = SourceConfig(
         category="matsuri",
         latest_run_path=repo_root / "数据端/OMATSURI/data/latest_run.json",
         fused_dir=repo_root / "数据端/OMATSURI/data/fused",
         content_dir=repo_root / "数据端/OMATSURI/data/content",
+        score_dir=repo_root / "数据端/OMATSURI/data/scores",
     )
 
     hanabi_rows, hanabi_run_id = load_latest_fused_records(hanabi_source)
     omatsuri_rows, omatsuri_run_id = load_latest_fused_records(omatsuri_source)
-    hanabi_content_map, hanabi_content_runs = load_content_index(hanabi_source, hanabi_run_id)
-    omatsuri_content_map, omatsuri_content_runs = load_content_index(omatsuri_source, omatsuri_run_id)
+    with hanabi_source.latest_run_path.open("r", encoding="utf-8") as f:
+        hanabi_latest = json.load(f)
+    with omatsuri_source.latest_run_path.open("r", encoding="utf-8") as f:
+        omatsuri_latest = json.load(f)
+    hanabi_content_index, hanabi_content_runs = load_content_index(hanabi_source, hanabi_run_id)
+    omatsuri_content_index, omatsuri_content_runs = load_content_index(omatsuri_source, omatsuri_run_id)
+    hanabi_score_index, hanabi_score_runs = load_score_index(hanabi_source, str(hanabi_latest.get("score_run_id") or ""))
+    omatsuri_score_index, omatsuri_score_runs = load_score_index(
+        omatsuri_source,
+        str(omatsuri_latest.get("score_run_id") or ""),
+    )
 
     entries: list[dict[str, Any]] = []
     for row in hanabi_rows:
@@ -673,7 +946,8 @@ def main() -> int:
                 hanabi_source.category,
                 row,
                 geohash_precision,
-                hanabi_content_map.get(canonical_id),
+                resolve_content_row(row, hanabi_content_index),
+                resolve_score_row(row, hanabi_score_index),
                 repo_root,
             )
         )
@@ -684,7 +958,8 @@ def main() -> int:
                 omatsuri_source.category,
                 row,
                 geohash_precision,
-                omatsuri_content_map.get(canonical_id),
+                resolve_content_row(row, omatsuri_content_index),
+                resolve_score_row(row, omatsuri_score_index),
                 repo_root,
             )
         )
@@ -714,6 +989,8 @@ def main() -> int:
             "omatsuri_fused_run_id": omatsuri_run_id,
             "hanabi_content_runs": hanabi_content_runs,
             "omatsuri_content_runs": omatsuri_content_runs,
+            "hanabi_score_runs": hanabi_score_runs,
+            "omatsuri_score_runs": omatsuri_score_runs,
         },
         "record_counts": {
             **count_by_category(entries),
@@ -770,6 +1047,10 @@ def main() -> int:
     print(
         f"[ok] content_counts: description={content_counts['with_description']} "
         f"one_liner={content_counts['with_one_liner']} "
+        f"description_zh={content_counts['with_description_zh']} "
+        f"one_liner_zh={content_counts['with_one_liner_zh']} "
+        f"description_en={content_counts['with_description_en']} "
+        f"one_liner_en={content_counts['with_one_liner_en']} "
         f"source_urls={content_counts['with_source_urls']} "
         f"images={content_counts['with_image_ref']}"
     )

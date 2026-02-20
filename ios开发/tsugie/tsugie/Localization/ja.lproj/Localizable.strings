@@ -32,6 +32,10 @@
 "quickcard.close_a11y" = "クイック表示を閉じる";
 "quickcard.view_details" = "詳細を見る";
 "quickcard.start_route" = "ルートを開始";
+"quickcard.navigation_chooser_title" = "ナビ地図を選択";
+"quickcard.navigation_chooser_message" = "%@ へのルートを開始します";
+"quickcard.navigation_option.apple_maps" = "Appleマップ";
+"quickcard.navigation_option.google_maps" = "Googleマップ";
 
 "nearby.preparing" = "開催準備中";
 "nearby.remaining" = "残り %@";
@@ -53,6 +57,17 @@
 "detail.focus" = "フォーカス";
 "detail.intro" = "紹介";
 "detail.source_title" = "元ページ";
+"detail.extra_info" = "活動情報";
+"detail.field.launch_count" = "打ち上げ数";
+"detail.field.launch_scale" = "打ち上げ規模";
+"detail.field.paid_seat" = "有料観覧席";
+"detail.field.access_text" = "交通アクセス";
+"detail.field.parking_text" = "駐車場情報";
+"detail.field.traffic_control_text" = "交通規制";
+"detail.field.organizer" = "主催";
+"detail.field.festival_type" = "祭りタイプ";
+"detail.field.admission_fee" = "料金";
+"detail.field.expected_visitors" = "想定来場者数";
 "detail.atmosphere" = "いまの空気感";
 "detail.heat" = "熱気";
 "detail.surprise" = "驚き";
@@ -93,6 +108,13 @@
 "drawer.contact.mail_action" = "便りを送る";
 "drawer.contact.copy_mail" = "宛先を写す";
 "drawer.contact.mail_subject" = "Tsugie 問い合わせ";
+"drawer.local_data.clear_hint" = "お気に入り・チェックイン・スタンプ・ローカル通知を消去します。";
+"drawer.local_data.clear_action" = "ローカルデータを消去";
+"drawer.local_data.clear_confirm_title" = "ローカルデータを消去しますか？";
+"drawer.local_data.clear_confirm_message" = "この操作は取り消せません。消去後は再度マークが必要です。";
+"drawer.local_data.clear_confirm_action" = "消去する";
+"drawer.local_data.clear_cancel_action" = "キャンセル";
+"drawer.local_data.cleared_notice" = "ローカルデータを消去しました。";
 "drawer.none_hint" = "項目をひとつ選ぶと、ここに静かにひらきます。";
 "drawer.filter.all" = "すべて";
 "drawer.filter.planned" = "いつか";

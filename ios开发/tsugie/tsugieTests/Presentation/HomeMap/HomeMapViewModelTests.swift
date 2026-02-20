@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import XCTest
 @testable import tsugie
 
@@ -127,6 +128,120 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(region.center.longitude, resolvedCoordinate.longitude, accuracy: 0.0001)
     }
 
+    func testStaleInteractionUpdateCannotOverrideResetLocationTarget() async {
+        let jumpedPlace = makePlace(
+            name: "jumped",
+            heType: .hanabi,
+            coordinate: CLLocationCoordinate2D(latitude: 34.6937, longitude: 135.5023)
+        )
+        let resolvedCoordinate = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+        let viewModel = HomeMapViewModel(
+            places: [jumpedPlace],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            locationProvider: FixedLocationProvider(coordinate: resolvedCoordinate)
+        )
+
+        viewModel.openQuickCard(placeID: jumpedPlace.id, keepMarkerActions: true)
+        viewModel.resetToCurrentLocation()
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        viewModel.updateMapPositionFromInteraction(
+            .region(
+                MKCoordinateRegion(
+                    center: jumpedPlace.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                )
+            )
+        )
+
+        guard let region = viewModel.mapPosition.region else {
+            return XCTFail("expected map position to be region")
+        }
+        XCTAssertEqual(region.center.latitude, resolvedCoordinate.latitude, accuracy: 0.0001)
+        XCTAssertEqual(region.center.longitude, resolvedCoordinate.longitude, accuracy: 0.0001)
+    }
+
+    func testStaleInteractionAfterProgrammaticCameraCallbackCannotOverrideResetTarget() async {
+        let jumpedPlace = makePlace(
+            name: "jumped",
+            heType: .hanabi,
+            coordinate: CLLocationCoordinate2D(latitude: 34.6937, longitude: 135.5023)
+        )
+        let resolvedCoordinate = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
+        let viewModel = HomeMapViewModel(
+            places: [jumpedPlace],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            locationProvider: FixedLocationProvider(coordinate: resolvedCoordinate)
+        )
+
+        viewModel.openQuickCard(placeID: jumpedPlace.id, keepMarkerActions: true)
+        viewModel.resetToCurrentLocation()
+
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        guard let resetRegion = viewModel.mapPosition.region else {
+            return XCTFail("expected map position to be region")
+        }
+
+        // Simulate the programmatic camera onEnd callback that arrives right after reset.
+        viewModel.handleMapCameraChange(resetRegion)
+        // Simulate a stale old interaction update arriving after the callback above.
+        viewModel.updateMapPositionFromInteraction(
+            .region(
+                MKCoordinateRegion(
+                    center: jumpedPlace.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+                )
+            )
+        )
+
+        guard let region = viewModel.mapPosition.region else {
+            return XCTFail("expected map position to be region")
+        }
+        XCTAssertEqual(region.center.latitude, resolvedCoordinate.latitude, accuracy: 0.0001)
+        XCTAssertEqual(region.center.longitude, resolvedCoordinate.longitude, accuracy: 0.0001)
+    }
+
+    func testResetToCurrentLocationImmediatelyReturnsToAnchorEvenIfLocationResolutionIsSlow() async {
+        let jumpedPlace = makePlace(
+            name: "jumped",
+            heType: .hanabi,
+            coordinate: CLLocationCoordinate2D(latitude: 34.6937, longitude: 135.5023)
+        )
+        let delayedResolvedCoordinate = CLLocationCoordinate2D(latitude: 43.0642, longitude: 141.3469)
+        let viewModel = HomeMapViewModel(
+            places: [jumpedPlace],
+            placeStateStore: PlaceStateStore(defaults: defaults),
+            locationProvider: DelayedLocationProvider(
+                coordinate: delayedResolvedCoordinate,
+                delayNanoseconds: 1_200_000_000
+            )
+        )
+
+        viewModel.openQuickCard(placeID: jumpedPlace.id, keepMarkerActions: true)
+        viewModel.resetToCurrentLocation()
+
+        guard let immediateRegion = viewModel.mapPosition.region else {
+            return XCTFail("expected immediate map position to be region")
+        }
+        XCTAssertEqual(
+            immediateRegion.center.latitude,
+            DefaultAppLocationProvider.developmentFixedCoordinate.latitude,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            immediateRegion.center.longitude,
+            DefaultAppLocationProvider.developmentFixedCoordinate.longitude,
+            accuracy: 0.0001
+        )
+
+        try? await Task.sleep(nanoseconds: 1_400_000_000)
+        guard let resolvedRegion = viewModel.mapPosition.region else {
+            return XCTFail("expected resolved map position to be region")
+        }
+        XCTAssertEqual(resolvedRegion.center.latitude, delayedResolvedCoordinate.latitude, accuracy: 0.0001)
+        XCTAssertEqual(resolvedRegion.center.longitude, delayedResolvedCoordinate.longitude, accuracy: 0.0001)
+    }
+
     func testTapSelectedMarkerClosesQuickCardAndClearsSelection() {
         let place = makePlace(name: "hanabi", heType: .hanabi)
         let viewModel = HomeMapViewModel(places: [place], placeStateStore: PlaceStateStore(defaults: defaults))
@@ -235,6 +350,36 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(ordered, ["ongoing", "upcoming"])
     }
 
+    func testNearbyCarouselPrefersKnownTimeOverUnknownEvenIfUnknownIsCloser() {
+        let now = Date()
+        let unknownClose = makePlace(
+            name: "unknown-close",
+            heType: .matsuri,
+            startAt: nil,
+            endAt: nil,
+            distanceMeters: 60,
+            scaleScore: 70,
+            heatScore: 90
+        )
+        let upcomingKnown = makePlace(
+            name: "known-upcoming",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(8 * 60 * 60),
+            endAt: now.addingTimeInterval(10 * 60 * 60),
+            distanceMeters: 4_200,
+            scaleScore: 60,
+            heatScore: 30
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [unknownClose, upcomingKnown],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+
+        let ordered = viewModel.nearbyPlaces(now: now, limit: 2).map(\.name)
+        XCTAssertEqual(ordered, ["known-upcoming", "unknown-close"])
+    }
+
     func testNearbyCarouselPrioritizesHanabi() {
         let now = Date()
         let hanabi = makePlace(
@@ -332,6 +477,44 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(nearbyNames.first, "out-viewport-nearby")
     }
 
+    func testNearbyCarouselBecomesEmptyInNoActivityViewport() async {
+        let now = Date()
+        let nearTokyoA = makePlace(
+            name: "tokyo-a",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(2 * 60 * 60),
+            endAt: now.addingTimeInterval(4 * 60 * 60),
+            distanceMeters: 600,
+            coordinate: CLLocationCoordinate2D(latitude: 35.7103, longitude: 139.8108)
+        )
+        let nearTokyoB = makePlace(
+            name: "tokyo-b",
+            heType: .hanabi,
+            startAt: now.addingTimeInterval(3 * 60 * 60),
+            endAt: now.addingTimeInterval(5 * 60 * 60),
+            distanceMeters: 900,
+            coordinate: CLLocationCoordinate2D(latitude: 35.7089, longitude: 139.8089)
+        )
+        let viewModel = HomeMapViewModel(
+            places: [nearTokyoA, nearTokyoB],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+
+        viewModel.onViewAppear()
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        XCTAssertFalse(viewModel.nearbyCarouselItems(now: now, limit: 3).isEmpty)
+
+        viewModel.handleMapCameraChange(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 0.0, longitude: -140.0),
+                span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+            )
+        )
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertTrue(viewModel.nearbyCarouselItems(now: now, limit: 3).isEmpty)
+    }
+
     func testFastestFavoritePlacesPrefersOngoingThenSoonestUpcoming() {
         let now = Date()
         let ongoing = makePlace(
@@ -417,6 +600,16 @@ final class HomeMapViewModelTests: XCTestCase {
 
         func resolveCurrentLocation(fallback: CLLocationCoordinate2D) async -> AppLocationResolution {
             AppLocationResolution(coordinate: coordinate, fallbackReason: nil)
+        }
+    }
+
+    private struct DelayedLocationProvider: AppLocationProviding {
+        let coordinate: CLLocationCoordinate2D
+        let delayNanoseconds: UInt64
+
+        func resolveCurrentLocation(fallback: CLLocationCoordinate2D) async -> AppLocationResolution {
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            return AppLocationResolution(coordinate: coordinate, fallbackReason: nil)
         }
     }
 }

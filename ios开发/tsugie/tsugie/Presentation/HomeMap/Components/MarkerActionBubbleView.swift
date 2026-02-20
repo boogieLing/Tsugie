@@ -63,7 +63,6 @@ struct MarkerActionBubbleView: View {
     ) -> some View {
         let finalAngle = angleDegrees + menuClockwiseDegrees
         let orbit = polarOffset(radius: isVisible ? radius : 0, angleDegrees: finalAngle)
-        let hitDiameter = max(buttonSize + 12, 44)
 
         return Button(action: action) {
             icon()
@@ -88,7 +87,7 @@ struct MarkerActionBubbleView: View {
                     secondaryYOffset: 6
                 )
         }
-        .frame(width: hitDiameter, height: hitDiameter)
+        .frame(width: buttonSize, height: buttonSize)
         .contentShape(Circle())
         .offset(orbit)
         .opacity(isVisible ? 1 : 0)

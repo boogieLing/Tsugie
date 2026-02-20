@@ -32,6 +32,10 @@
 "quickcard.close_a11y" = "Close quick card";
 "quickcard.view_details" = "View details";
 "quickcard.start_route" = "Start route";
+"quickcard.navigation_chooser_title" = "Choose navigation app";
+"quickcard.navigation_chooser_message" = "Start route to %@";
+"quickcard.navigation_option.apple_maps" = "Apple Maps";
+"quickcard.navigation_option.google_maps" = "Google Maps";
 
 "nearby.preparing" = "Preparing";
 "nearby.remaining" = "%@ left";
@@ -53,6 +57,17 @@
 "detail.focus" = "Focus";
 "detail.intro" = "Intro";
 "detail.source_title" = "Source page";
+"detail.extra_info" = "Event info";
+"detail.field.launch_count" = "Launch count";
+"detail.field.launch_scale" = "Launch scale";
+"detail.field.paid_seat" = "Paid seats";
+"detail.field.access_text" = "Access";
+"detail.field.parking_text" = "Parking";
+"detail.field.traffic_control_text" = "Traffic control";
+"detail.field.organizer" = "Organizer";
+"detail.field.festival_type" = "Festival type";
+"detail.field.admission_fee" = "Admission fee";
+"detail.field.expected_visitors" = "Expected visitors";
 "detail.atmosphere" = "Current vibe";
 "detail.heat" = "Heat";
 "detail.surprise" = "Surprise";
@@ -91,6 +106,13 @@
 "drawer.contact.mail_action" = "Email us";
 "drawer.contact.copy_mail" = "Copy email address";
 "drawer.contact.mail_subject" = "Tsugie Inquiry";
+"drawer.local_data.clear_hint" = "Clears favorites, check-ins, stamp picks, and local reminders.";
+"drawer.local_data.clear_action" = "Clear local data";
+"drawer.local_data.clear_confirm_title" = "Clear local data?";
+"drawer.local_data.clear_confirm_message" = "This can't be undone and you'll need to mark places again.";
+"drawer.local_data.clear_confirm_action" = "Clear now";
+"drawer.local_data.clear_cancel_action" = "Cancel";
+"drawer.local_data.cleared_notice" = "Local data cleared.";
 "drawer.none_hint" = "Pick one item and it will open here.";
 "drawer.filter.all" = "All";
 "drawer.filter.planned" = "Want to visit";

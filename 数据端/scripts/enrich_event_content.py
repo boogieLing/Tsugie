@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -27,6 +27,16 @@ DEFAULT_MAX_IMAGES = 6
 DEFAULT_MAX_SOURCE_URLS = 3
 DEFAULT_MAX_DESC_CHARS = 1800
 DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+DEFAULT_CODEX_MODEL = "auto"
+DEFAULT_CODEX_MODEL_CANDIDATES = [
+    "gpt-5-mini",
+    "gpt-4.1-mini",
+    "gpt-4o-mini",
+    "o4-mini",
+    "o3-mini",
+    "gpt-5",
+]
+CODEX_UNSUPPORTED_HINT = "not supported when using Codex with a ChatGPT account"
 
 DESCRIPTION_SELECTORS = [
     "article p",
@@ -73,6 +83,10 @@ SKIP_IMAGE_PATTERNS = [
     "avatar",
 ]
 
+DIRTY_IMAGE_FINGERPRINTS = [
+    "banner1_069a0e3420",
+]
+
 
 @dataclass(frozen=True)
 class SourceProject:
@@ -113,42 +127,123 @@ class OpenAITextPolisher:
         timeout_sec: float,
         description_template: str,
         one_liner_template: str,
+        one_liner_api_key: str = "",
+        one_liner_model: str = "",
+        one_liner_base_url: str = "",
+        translation_api_key: str = "",
+        translation_model: str = "",
+        translation_base_url: str = "",
     ) -> None:
-        self.model = model
+        self.model = clean_text(model)
+        self.base_url = clean_text(base_url)
+        self._primary_client = self._build_client(api_key=api_key, timeout_sec=timeout_sec)
+
+        self.one_liner_model = clean_text(one_liner_model) or self.model
+        self.one_liner_base_url = clean_text(one_liner_base_url) or self.base_url
+        one_liner_key = clean_text(one_liner_api_key) or clean_text(api_key)
+        self._one_liner_client = self._build_client(api_key=one_liner_key, timeout_sec=timeout_sec)
+
+        self.translation_model = clean_text(translation_model) or self.model
+        self.translation_base_url = clean_text(translation_base_url) or self.base_url
+        translation_key = clean_text(translation_api_key) or clean_text(api_key)
+        self._translation_client = self._build_client(api_key=translation_key, timeout_sec=timeout_sec)
+
+        self.model_tag = f"description:{self.model};one_liner:{self.one_liner_model}"
         self.description_template = description_template
         self.one_liner_template = one_liner_template
-        self.client = httpx.Client(
+
+    def close(self) -> None:
+        seen: set[int] = set()
+        for client in (self._primary_client, self._one_liner_client, self._translation_client):
+            if id(client) in seen:
+                continue
+            seen.add(id(client))
+            client.close()
+
+    def polish_description(self, raw_text: str) -> str:
+        bundle = self.polish_bundle(raw_text)
+        return bundle.get("polished_description", "") or raw_text
+
+    def one_liner(self, raw_text: str) -> str:
+        bundle = self.polish_bundle(raw_text)
+        return bundle.get("one_liner", "") or ""
+
+    def polish_bundle(self, raw_text: str) -> dict[str, str]:
+        desc_prompt = self.description_template.replace("{原始文本}", raw_text)
+        one_liner_prompt = self.one_liner_template.replace("{原始文本}", raw_text)
+        polished_description = clean_text_block(self._call(desc_prompt, target="description"))
+        one_liner = clean_text_block(self._call(one_liner_prompt, target="one_liner"))
+        return {
+            "polished_description": polished_description,
+            "one_liner": one_liner,
+            "polished_description_zh": "",
+            "one_liner_zh": "",
+            "polished_description_en": "",
+            "one_liner_en": "",
+        }
+
+    def translate_pair(self, polished_description: str, one_liner: str) -> dict[str, str]:
+        prompt = (
+            "请把下面的日文活动文案翻译成简体中文和英文，并仅返回 JSON。\n"
+            "保持信息完整，不添加原文没有的信息。\n\n"
+            f"日文介绍：{polished_description}\n"
+            f"日文一句话：{one_liner}\n\n"
+            "JSON 格式：\n"
+            "{\"polished_description_zh\":\"...\",\"one_liner_zh\":\"...\","
+            "\"polished_description_en\":\"...\",\"one_liner_en\":\"...\"}\n"
+            "不要输出额外说明、不要输出 markdown 代码块。"
+        )
+        out = self._call(prompt, target="translation")
+        data = parse_json_object(out)
+        if not isinstance(data, dict):
+            return {}
+        return {
+            "polished_description_zh": clean_text_block(str(data.get("polished_description_zh") or "")),
+            "one_liner_zh": clean_text_block(str(data.get("one_liner_zh") or "")),
+            "polished_description_en": clean_text_block(str(data.get("polished_description_en") or "")),
+            "one_liner_en": clean_text_block(str(data.get("one_liner_en") or "")),
+        }
+
+    @staticmethod
+    def _build_client(*, api_key: str, timeout_sec: float) -> httpx.Client:
+        return httpx.Client(
             timeout=timeout_sec,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
         )
-        self.base_url = base_url
 
-    def close(self) -> None:
-        self.client.close()
+    def _call(self, prompt: str, *, target: str = "description") -> str:
+        if target == "one_liner":
+            endpoint = self.one_liner_base_url.rstrip("/")
+            model = self.one_liner_model
+            client = self._one_liner_client
+        elif target == "translation":
+            endpoint = self.translation_base_url.rstrip("/")
+            model = self.translation_model
+            client = self._translation_client
+        else:
+            endpoint = self.base_url.rstrip("/")
+            model = self.model
+            client = self._primary_client
 
-    def polish_description(self, raw_text: str) -> str:
-        prompt = self.description_template.replace("{原始文本}", raw_text)
-        out = self._call(prompt)
-        return out or raw_text
-
-    def one_liner(self, raw_text: str) -> str:
-        prompt = self.one_liner_template.replace("{原始文本}", raw_text)
-        out = self._call(prompt)
-        return out or ""
-
-    def _call(self, prompt: str) -> str:
-        payload = {
-            "model": self.model,
-            "input": prompt,
-            "reasoning": {"effort": "low"},
-        }
-        resp = self.client.post(self.base_url, json=payload)
+        if endpoint.endswith("/chat/completions"):
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+            }
+        else:
+            payload = {
+                "model": model,
+                "input": prompt,
+                "reasoning": {"effort": "low"},
+            }
+        resp = client.post(endpoint, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        text = extract_openai_output_text(data)
+        text = extract_openai_output_text(data) or extract_chat_completion_text(data)
         return clean_text_block(text)
 
 
@@ -167,27 +262,70 @@ class CodexTextPolisher:
         self.timeout_sec = max(20.0, float(timeout_sec))
         self.description_template = description_template
         self.one_liner_template = one_liner_template
+        resolved = resolve_codex_model(self.model, timeout_sec=self.timeout_sec)
+        if resolved != self.model:
+            requested = self.model or DEFAULT_CODEX_MODEL
+            print(f"[codex] model resolved requested={requested} using={resolved}")
+        self.model = resolved
 
     def close(self) -> None:
         return
 
-    def polish_pair(self, raw_text: str) -> tuple[str, str]:
+    def polish_bundle(self, raw_text: str) -> dict[str, str]:
         desc_prompt = self.description_template.replace("{原始文本}", raw_text)
         one_liner_prompt = self.one_liner_template.replace("{原始文本}", raw_text)
         prompt = (
             f"{desc_prompt}\n\n"
             f"{one_liner_prompt}\n\n"
+            "同时请基于同一原始文本，补充以下 4 个字段：\n"
+            "1) polished_description_zh（简体中文介绍）\n"
+            "2) one_liner_zh（简体中文一句话）\n"
+            "3) polished_description_en（英文介绍）\n"
+            "4) one_liner_en（英文一句话）\n\n"
             "请仅返回 JSON，格式如下：\n"
-            "{\"polished_description\":\"...\",\"one_liner\":\"...\"}\n"
+            "{\"polished_description\":\"...\",\"one_liner\":\"...\","
+            "\"polished_description_zh\":\"...\",\"one_liner_zh\":\"...\","
+            "\"polished_description_en\":\"...\",\"one_liner_en\":\"...\"}\n"
             "不要输出额外说明、不要输出 markdown 代码块。"
         )
         out = self._call(prompt)
         data = parse_json_object(out)
         if not isinstance(data, dict):
-            return "", ""
-        polished = clean_text_block(str(data.get("polished_description") or ""))
-        one_liner = clean_text_block(str(data.get("one_liner") or ""))
-        return polished, one_liner
+            return {}
+        return {
+            "polished_description": clean_text_block(str(data.get("polished_description") or "")),
+            "one_liner": clean_text_block(str(data.get("one_liner") or "")),
+            "polished_description_zh": clean_text_block(str(data.get("polished_description_zh") or "")),
+            "one_liner_zh": clean_text_block(str(data.get("one_liner_zh") or "")),
+            "polished_description_en": clean_text_block(str(data.get("polished_description_en") or "")),
+            "one_liner_en": clean_text_block(str(data.get("one_liner_en") or "")),
+        }
+
+    def polish_pair(self, raw_text: str) -> tuple[str, str]:
+        bundle = self.polish_bundle(raw_text)
+        return bundle.get("polished_description", ""), bundle.get("one_liner", "")
+
+    def translate_pair(self, polished_description: str, one_liner: str) -> dict[str, str]:
+        prompt = (
+            "请把下面的日文活动文案翻译成简体中文和英文，并仅返回 JSON。\n"
+            "保持信息完整，不添加原文没有的信息。\n\n"
+            f"日文介绍：{polished_description}\n"
+            f"日文一句话：{one_liner}\n\n"
+            "JSON 格式：\n"
+            "{\"polished_description_zh\":\"...\",\"one_liner_zh\":\"...\","
+            "\"polished_description_en\":\"...\",\"one_liner_en\":\"...\"}\n"
+            "不要输出额外说明、不要输出 markdown 代码块。"
+        )
+        out = self._call(prompt)
+        data = parse_json_object(out)
+        if not isinstance(data, dict):
+            return {}
+        return {
+            "polished_description_zh": clean_text_block(str(data.get("polished_description_zh") or "")),
+            "one_liner_zh": clean_text_block(str(data.get("one_liner_zh") or "")),
+            "polished_description_en": clean_text_block(str(data.get("polished_description_en") or "")),
+            "one_liner_en": clean_text_block(str(data.get("one_liner_en") or "")),
+        }
 
     def _call(self, prompt: str) -> str:
         import tempfile
@@ -195,33 +333,58 @@ class CodexTextPolisher:
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             output_path = tmp.name
         try:
-            cmd = [
-                "codex",
-                "exec",
-                "--skip-git-repo-check",
-                "-C",
-                str(self.repo_root),
-                "--sandbox",
-                "read-only",
-                "--output-last-message",
-                output_path,
-            ]
-            if self.model:
-                cmd.extend(["-m", self.model])
-            cmd.append(prompt)
+            models_to_try: list[str] = []
+            preferred = clean_text(self.model)
+            if preferred:
+                models_to_try.append(preferred)
+            # ChatGPT-account Codex sessions may reject lightweight variants; keep a stable fallback.
+            if "gpt-5" not in models_to_try:
+                models_to_try.append("gpt-5")
 
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_sec,
-                check=False,
-            )
-            if proc.returncode != 0:
-                return ""
-            if not Path(output_path).exists():
-                return ""
-            return Path(output_path).read_text(encoding="utf-8").strip()
+            last_error = "unknown codex error"
+            for model_name in models_to_try:
+                for attempt in range(1, 3):
+                    cmd = [
+                        "codex",
+                        "exec",
+                        "--skip-git-repo-check",
+                        "-C",
+                        str(self.repo_root),
+                        "--sandbox",
+                        "read-only",
+                        "--output-last-message",
+                        output_path,
+                        "-m",
+                        model_name,
+                        prompt,
+                    ]
+
+                    proc = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=self.timeout_sec,
+                        check=False,
+                    )
+                    output_text = ""
+                    if Path(output_path).exists():
+                        output_text = Path(output_path).read_text(encoding="utf-8").strip()
+                    if proc.returncode == 0 and output_text:
+                        return output_text
+
+                    combined = "\n".join([proc.stdout or "", proc.stderr or "", output_text or ""]).strip()
+                    if combined:
+                        last_error = combined[:500]
+                    else:
+                        last_error = f"codex_empty_response(model={model_name}, attempt={attempt})"
+
+                    unsupported = CODEX_UNSUPPORTED_HINT in combined
+                    if unsupported and model_name != "gpt-5":
+                        break
+                    if attempt < 2:
+                        time.sleep(1.0 * attempt)
+
+            raise RuntimeError(last_error)
         finally:
             try:
                 Path(output_path).unlink(missing_ok=True)
@@ -263,6 +426,40 @@ def extract_openai_output_text(data: dict[str, Any]) -> str:
     return "\n".join(chunks).strip()
 
 
+def extract_chat_completion_text(data: dict[str, Any]) -> str:
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        return ""
+    chunks: list[str] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            chunks.append(content.strip())
+            continue
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, str) and item.strip():
+                chunks.append(item.strip())
+                continue
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str) and text.strip():
+                chunks.append(text.strip())
+                continue
+            if isinstance(text, dict):
+                value = text.get("value")
+                if isinstance(value, str) and value.strip():
+                    chunks.append(value.strip())
+    return "\n".join(chunks).strip()
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -271,6 +468,73 @@ def clean_text(text: str | None) -> str:
     if not text:
         return ""
     return re.sub(r"\s+", " ", text).strip()
+
+
+def parse_codex_model_candidates(raw: str | None) -> list[str]:
+    parts = [clean_text(x) for x in str(raw or "").split(",")]
+    unique: list[str] = []
+    for item in parts:
+        if item and item not in unique:
+            unique.append(item)
+    return unique
+
+
+def probe_codex_model_support(model: str, timeout_sec: float) -> bool:
+    import tempfile
+
+    candidate = clean_text(model)
+    if not candidate:
+        return False
+    probe_timeout = max(8.0, min(float(timeout_sec), 20.0))
+    with tempfile.TemporaryDirectory(prefix="codex_model_probe_") as probe_dir:
+        output_path = Path(probe_dir) / "probe_output.txt"
+        cmd = [
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "-C",
+            probe_dir,
+            "--sandbox",
+            "read-only",
+            "--output-last-message",
+            str(output_path),
+            "-m",
+            candidate,
+            "Reply with exactly OK.",
+        ]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=probe_timeout,
+            check=False,
+        )
+        output_text = output_path.read_text(encoding="utf-8").strip() if output_path.exists() else ""
+        combined = "\n".join([proc.stdout or "", proc.stderr or "", output_text]).strip()
+        if CODEX_UNSUPPORTED_HINT in combined:
+            return False
+        return proc.returncode == 0 and bool(output_text)
+
+
+def resolve_codex_model(requested_model: str, *, timeout_sec: float) -> str:
+    requested = clean_text(requested_model)
+    requested_lower = requested.lower()
+    if requested and requested_lower not in {"auto", "cheapest", "lite"}:
+        return requested
+
+    candidates = parse_codex_model_candidates(os.getenv("CODEX_MODEL_CANDIDATES"))
+    if not candidates:
+        candidates = list(DEFAULT_CODEX_MODEL_CANDIDATES)
+    if "gpt-5" not in candidates:
+        candidates.append("gpt-5")
+
+    for candidate in candidates:
+        try:
+            if probe_codex_model_support(candidate, timeout_sec=timeout_sec):
+                return candidate
+        except Exception:  # noqa: BLE001
+            continue
+    return "gpt-5"
 
 
 def clean_text_block(text: str | None) -> str:
@@ -296,6 +560,38 @@ def parse_iso_datetime(raw: str | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def parse_event_date(raw: Any) -> date | None:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    m = re.search(r"(20\d{2})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})", text)
+    if not m:
+        return None
+    y = int(m.group(1))
+    mo = int(m.group(2))
+    d = int(m.group(3))
+    try:
+        return date(y, mo, d)
+    except ValueError:
+        return None
+
+
+def is_start_date_older_than_cutoff(row: dict[str, Any], cutoff: date) -> bool:
+    start_date = parse_event_date(row.get("event_date_start"))
+    if start_date is None:
+        return False
+    return start_date < cutoff
+
+
+def is_start_date_not_older_than_cutoff(row: dict[str, Any], cutoff: date) -> bool:
+    start_date = parse_event_date(row.get("event_date_start"))
+    if start_date is None:
+        return True
+    return start_date >= cutoff
 
 
 def parse_source_urls(row: dict[str, Any]) -> list[str]:
@@ -327,6 +623,65 @@ def source_signature(urls: list[str]) -> str:
         digest.update(url.encode("utf-8"))
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def normalize_name_for_match(raw: Any) -> str:
+    text = clean_text(raw).lower()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", "", text)
+    text = re.sub(r"[【】\[\]（）()「」『』・,，、。.!！?？:：/／\\\-~〜～]", "", text)
+    return text
+
+
+def build_name_date_key(event_name: Any, event_date_start: Any) -> str:
+    name_key = normalize_name_for_match(event_name)
+    if not name_key:
+        return ""
+    date_obj = parse_event_date(event_date_start)
+    date_key = date_obj.isoformat() if date_obj else clean_text(event_date_start)
+    return f"{name_key}|{date_key}" if date_key else name_key
+
+
+def source_url_set(row: dict[str, Any]) -> set[str]:
+    urls = set(parse_source_urls(row))
+    description_source = clean_text(row.get("description_source_url"))
+    if description_source:
+        urls.add(description_source)
+    return urls
+
+
+def rows_look_same_event(current_row: dict[str, Any], previous_row: dict[str, Any]) -> bool:
+    current_sources = source_url_set(current_row)
+    previous_sources = source_url_set(previous_row)
+    if current_sources and previous_sources and current_sources.intersection(previous_sources):
+        return True
+
+    current_key = build_name_date_key(current_row.get("event_name"), current_row.get("event_date_start"))
+    previous_key = build_name_date_key(previous_row.get("event_name"), previous_row.get("event_date_start"))
+    return bool(current_key and previous_key and current_key == previous_key)
+
+
+def score_previous_record(row: dict[str, Any]) -> tuple[int, int, int, str]:
+    status_rank = {
+        "ok": 4,
+        "cached": 3,
+        "partial": 2,
+        "empty": 1,
+    }.get(clean_text(row.get("status")).lower(), 0)
+    has_desc = int(bool(clean_text_block(row.get("raw_description"))))
+    image_urls = row.get("image_urls")
+    has_images = int(isinstance(image_urls, list) and len(image_urls) > 0)
+    fetched_at = clean_text(row.get("fetched_at"))
+    return (status_rank, has_desc, has_images, fetched_at)
+
+
+def _put_previous_if_better(bucket: dict[str, dict[str, Any]], key: str, row: dict[str, Any]) -> None:
+    if not key:
+        return
+    existing = bucket.get(key)
+    if existing is None or score_previous_record(row) >= score_previous_record(existing):
+        bucket[key] = row
 
 
 def extract_meta(soup: BeautifulSoup, keys: list[tuple[str, str]]) -> list[str]:
@@ -529,6 +884,8 @@ def is_schedule_anchor_url(source_url: str) -> bool:
 
 def is_generic_image_url(url: str) -> bool:
     low = url.lower()
+    if any(fp in low for fp in DIRTY_IMAGE_FINGERPRINTS):
+        return True
     if low.endswith("/img/header.jpg") or low.endswith("/img/header.jpeg") or low.endswith("/img/header.png"):
         return True
     if "ogp0.png" in low:
@@ -717,6 +1074,8 @@ def choose_raw_description(soup: BeautifulSoup, max_chars: int) -> str:
 
 def looks_like_image_url(url: str) -> bool:
     low = url.lower()
+    if any(fp in low for fp in DIRTY_IMAGE_FINGERPRINTS):
+        return False
     if any(p in low for p in SKIP_IMAGE_PATTERNS):
         return False
     if low.startswith("data:"):
@@ -844,33 +1203,122 @@ def read_jsonl(path: Path, max_rows: int, start_index: int = 0) -> list[dict[str
     return rows
 
 
-def load_previous_records(project: SourceProject, latest_run: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def load_previous_records(project: SourceProject, latest_run: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
+    content_root = project.root / "data" / "content"
+    if not content_root.exists():
+        return {
+            "by_canonical": {},
+            "by_source_url": {},
+            "by_name_date": {},
+        }
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    def add_candidate(path: Path) -> None:
+        if not path.exists():
+            return
+        if path in seen:
+            return
+        seen.add(path)
+        candidates.append(path)
+
     run_id = str(latest_run.get("content_run_id") or "").strip()
-    candidate = project.root / "data" / "content" / run_id / "events_content.jsonl" if run_id else None
-    if not candidate or not candidate.exists():
-        fallback = project.root / "data" / "content" / "latest" / "events_content.jsonl"
-        candidate = fallback if fallback.exists() else None
+    if run_id:
+        add_candidate(content_root / run_id / "events_content.jsonl")
 
-    if not candidate:
-        return {}
+    add_candidate(content_root / "latest" / "events_content.jsonl")
 
-    out: dict[str, dict[str, Any]] = {}
-    with candidate.open("r", encoding="utf-8") as f:
-        for line in f:
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                row = json.loads(text)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(row, dict):
-                continue
-            canonical_id = str(row.get("canonical_id") or "").strip()
-            if not canonical_id:
-                continue
-            out[canonical_id] = row
-    return out
+    all_history = sorted(
+        (p for p in content_root.glob("*/events_content.jsonl") if p.parent.name != "latest"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for path in all_history:
+        add_candidate(path)
+
+    if not candidates:
+        return {
+            "by_canonical": {},
+            "by_source_url": {},
+            "by_name_date": {},
+        }
+
+    by_canonical: dict[str, dict[str, Any]] = {}
+    by_source_url: dict[str, dict[str, Any]] = {}
+    by_name_date: dict[str, dict[str, Any]] = {}
+
+    for candidate in candidates:
+        with candidate.open("r", encoding="utf-8") as f:
+            for line in f:
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    row = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                canonical_id = str(row.get("canonical_id") or "").strip()
+                if canonical_id:
+                    _put_previous_if_better(by_canonical, canonical_id, row)
+
+                for source_url in source_url_set(row):
+                    _put_previous_if_better(by_source_url, source_url, row)
+
+                name_date_key = build_name_date_key(row.get("event_name"), row.get("event_date_start"))
+                if name_date_key:
+                    _put_previous_if_better(by_name_date, name_date_key, row)
+
+    return {
+        "by_canonical": by_canonical,
+        "by_source_url": by_source_url,
+        "by_name_date": by_name_date,
+    }
+
+
+def resolve_previous_record(
+    current_row: dict[str, Any],
+    previous_index: dict[str, dict[str, dict[str, Any]]],
+) -> dict[str, Any] | None:
+    candidates: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+
+    by_canonical = previous_index.get("by_canonical", {})
+    by_source_url = previous_index.get("by_source_url", {})
+    by_name_date = previous_index.get("by_name_date", {})
+
+    canonical_id = clean_text(current_row.get("canonical_id"))
+    if canonical_id:
+        candidate = by_canonical.get(canonical_id)
+        if candidate is not None and rows_look_same_event(current_row, candidate):
+            candidates.append(candidate)
+            seen_ids.add(id(candidate))
+
+    for source_url in parse_source_urls(current_row):
+        candidate = by_source_url.get(source_url)
+        if candidate is None:
+            continue
+        if id(candidate) in seen_ids:
+            continue
+        if not rows_look_same_event(current_row, candidate):
+            continue
+        candidates.append(candidate)
+        seen_ids.add(id(candidate))
+
+    name_date_key = build_name_date_key(current_row.get("event_name"), current_row.get("event_date_start"))
+    if name_date_key:
+        candidate = by_name_date.get(name_date_key)
+        if candidate is not None and id(candidate) not in seen_ids and rows_look_same_event(current_row, candidate):
+            candidates.append(candidate)
+            seen_ids.add(id(candidate))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=score_previous_record, reverse=True)
+    return candidates[0]
 
 
 def is_recent_enough(
@@ -879,6 +1327,7 @@ def is_recent_enough(
     current_signature: str,
     min_refresh_days: int,
     force: bool,
+    desired_polish_mode: str,
 ) -> bool:
     if force:
         return False
@@ -900,6 +1349,52 @@ def is_recent_enough(
     image_urls = previous.get("image_urls")
     has_images = isinstance(image_urls, list) and len(image_urls) > 0
     return bool(raw_description or has_images)
+
+
+def is_failed_or_incomplete(previous: dict[str, Any] | None) -> bool:
+    if not previous:
+        return True
+
+    status = clean_text(str(previous.get("status") or "")).lower()
+    error_text = clean_text_block(str(previous.get("error") or ""))
+    raw_description = clean_text_block(str(previous.get("raw_description") or ""))
+    image_urls = previous.get("image_urls")
+    has_images = isinstance(image_urls, list) and len(image_urls) > 0
+
+    has_ja = bool(
+        clean_text_block(str(previous.get("polished_description") or ""))
+        and clean_text_block(str(previous.get("one_liner") or ""))
+    )
+    has_zh = bool(
+        clean_text_block(str(previous.get("polished_description_zh") or ""))
+        and clean_text_block(str(previous.get("one_liner_zh") or ""))
+    )
+    has_en = bool(
+        clean_text_block(str(previous.get("polished_description_en") or ""))
+        and clean_text_block(str(previous.get("one_liner_en") or ""))
+    )
+
+    if status in {"partial", "empty", "openai_failed", "codex_failed"}:
+        return True
+    if error_text:
+        return True
+    if not raw_description and not has_images:
+        return True
+    if raw_description and (not has_ja or not has_zh or not has_en):
+        return True
+    return False
+
+
+def should_reuse_success_in_failed_only(
+    previous: dict[str, Any] | None,
+    *,
+    force: bool,
+) -> bool:
+    if force:
+        return False
+    if not previous:
+        return False
+    return not is_failed_or_incomplete(previous)
 
 
 def fetch_page_with_retries(
@@ -1041,38 +1536,48 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+CONTENT_CSV_FIELDS = [
+    "canonical_id",
+    "category",
+    "event_name",
+    "event_date_start",
+    "event_date_end",
+    "fused_run_id",
+    "description_source_url",
+    "raw_description",
+    "polished_description",
+    "one_liner",
+    "polished_description_zh",
+    "one_liner_zh",
+    "polished_description_en",
+    "one_liner_en",
+    "image_urls",
+    "downloaded_images",
+    "source_urls",
+    "source_urls_sig",
+    "status",
+    "error",
+    "fetched_at",
+    "polish_mode",
+    "polish_model",
+]
+
+
+def csv_row_from_record(row: dict[str, Any]) -> dict[str, Any]:
+    out = dict(row)
+    out["image_urls"] = "|".join(row.get("image_urls", []))
+    out["downloaded_images"] = "|".join(row.get("downloaded_images", []))
+    out["source_urls"] = "|".join(row.get("source_urls", []))
+    return {k: out.get(k, "") for k in CONTENT_CSV_FIELDS}
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = [
-        "canonical_id",
-        "category",
-        "event_name",
-        "event_date_start",
-        "event_date_end",
-        "fused_run_id",
-        "description_source_url",
-        "raw_description",
-        "polished_description",
-        "one_liner",
-        "image_urls",
-        "downloaded_images",
-        "source_urls",
-        "source_urls_sig",
-        "status",
-        "error",
-        "fetched_at",
-        "polish_mode",
-        "polish_model",
-    ]
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=CONTENT_CSV_FIELDS)
         writer.writeheader()
         for row in rows:
-            out = dict(row)
-            out["image_urls"] = "|".join(row.get("image_urls", []))
-            out["downloaded_images"] = "|".join(row.get("downloaded_images", []))
-            out["source_urls"] = "|".join(row.get("source_urls", []))
-            writer.writerow({k: out.get(k, "") for k in fields})
+            writer.writerow(csv_row_from_record(row))
 
 
 def read_template(path: Path) -> str:
@@ -1112,14 +1617,83 @@ def run_project(
 
     rows = read_jsonl(
         fused_jsonl,
-        max_rows=args.max_events,
-        start_index=args.start_index,
+        max_rows=0,
+        start_index=0,
     )
+    skipped_by_age = 0
+    skipped_by_not_old_enough = 0
+    cutoff_date: date | None = None
+    only_past_cutoff_date: date | None = None
+    failed_only = bool(args.failed_only)
+    prioritize_near_start = bool(args.prioritize_near_start)
+    codex_single_pass_i18n = bool(args.codex_single_pass_i18n)
+    only_past_days = int(args.only_past_days)
+
+    if only_past_days >= 0:
+        only_past_cutoff_date = datetime.now(timezone.utc).date() - timedelta(days=only_past_days)
+        filtered_old: list[dict[str, Any]] = []
+        for row in rows:
+            if is_start_date_not_older_than_cutoff(row, only_past_cutoff_date):
+                skipped_by_not_old_enough += 1
+                continue
+            filtered_old.append(row)
+        rows = filtered_old
+
+    if int(args.skip_past_days) >= 0:
+        cutoff_date = datetime.now(timezone.utc).date() - timedelta(days=int(args.skip_past_days))
+        filtered: list[dict[str, Any]] = []
+        for row in rows:
+            if is_start_date_older_than_cutoff(row, cutoff_date):
+                skipped_by_age += 1
+                continue
+            filtered.append(row)
+        rows = filtered
+
+    previous = load_previous_records(project, latest_run)
+
+    if prioritize_near_start and rows:
+        today = datetime.now(timezone.utc).date()
+        indexed_rows = list(enumerate(rows))
+
+        def sort_key(item: tuple[int, dict[str, Any]]) -> tuple[int, int, int, int]:
+            idx, row = item
+            old = resolve_previous_record(row, previous)
+            work_rank = 1 if should_reuse_success_in_failed_only(old, force=bool(args.force)) and failed_only else 0
+            start_date = parse_event_date(row.get("event_date_start"))
+            if start_date is None:
+                return (work_rank, 2, 36500, idx)
+            delta = (start_date - today).days
+            if delta >= 0:
+                return (work_rank, 0, delta, idx)
+            return (work_rank, 1, abs(delta), idx)
+
+        indexed_rows.sort(key=sort_key)
+        rows = [row for _, row in indexed_rows]
+
+    eligible_rows = len(rows)
+    slice_start = max(0, int(args.start_index))
+    max_events = int(args.max_events)
+    if max_events > 0:
+        rows = rows[slice_start : slice_start + max_events]
+    else:
+        rows = rows[slice_start:]
+
     print(
         f"[batch] project={project.name} run_id={args.run_id} start_index={args.start_index} "
-        f"max_events={args.max_events} selected_rows={len(rows)}"
+        f"max_events={args.max_events} selected_rows={len(rows)} eligible_rows={eligible_rows} skipped_by_age={skipped_by_age} "
+        f"failed_only={str(failed_only).lower()} prioritize_near_start={str(prioritize_near_start).lower()} "
+        f"codex_single_pass_i18n={str(codex_single_pass_i18n).lower()}"
     )
-    previous = load_previous_records(project, latest_run)
+    if cutoff_date is not None:
+        print(
+            f"[filter] project={project.name} skip_past_days={int(args.skip_past_days)} "
+            f"basis=event_date_start cutoff_date={cutoff_date.isoformat()}"
+        )
+    if only_past_cutoff_date is not None:
+        print(
+            f"[filter] project={project.name} only_past_days={only_past_days} "
+            f"basis=event_date_start older_than={only_past_cutoff_date.isoformat()}"
+        )
 
     run_dir = project.root / "data" / "content" / args.run_id
     image_root = project.root / "data" / "content_assets" / args.run_id
@@ -1137,6 +1711,12 @@ def run_project(
             timeout_sec=safe_float(args.request_timeout_sec, DEFAULT_TIMEOUT_SEC),
             description_template=description_template,
             one_liner_template=one_liner_template,
+            one_liner_api_key=str(args.openai_one_liner_api_key or "").strip(),
+            one_liner_model=args.openai_one_liner_model,
+            one_liner_base_url=args.openai_one_liner_base_url,
+            translation_api_key=str(args.openai_translation_api_key or "").strip(),
+            translation_model=args.openai_translation_model,
+            translation_base_url=args.openai_translation_base_url,
         )
     elif args.polish_mode == "codex":
         codex_polisher = CodexTextPolisher(
@@ -1146,13 +1726,78 @@ def run_project(
             description_template=description_template,
             one_liner_template=one_liner_template,
         )
+    desired_polish_mode = "openai" if polisher else ("codex" if codex_polisher else "none")
 
     timeout = httpx.Timeout(safe_float(args.request_timeout_sec, DEFAULT_TIMEOUT_SEC))
     client = httpx.Client(follow_redirects=True, timeout=timeout, headers={"User-Agent": args.user_agent})
     limiter = RateLimiter(qps=safe_float(args.qps, DEFAULT_QPS))
 
-    content_rows: list[dict[str, Any]] = []
-    log_rows: list[list[str]] = []
+    run_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = run_dir / "events_content.jsonl"
+    csv_path = run_dir / "events_content.csv"
+    log_path = run_dir / "content_enrich_log.csv"
+    summary_path = run_dir / "content_summary.json"
+
+    counts = {
+        "total": 0,
+        "ok": 0,
+        "partial": 0,
+        "empty": 0,
+        "cached": 0,
+        "with_description": 0,
+        "with_polished_zh": 0,
+        "with_one_liner_zh": 0,
+        "with_polished_en": 0,
+        "with_one_liner_en": 0,
+        "with_images": 0,
+        "skipped_by_age": skipped_by_age,
+        "skipped_by_not_old_enough": skipped_by_not_old_enough,
+        "reused_by_failed_only": 0,
+    }
+
+    jsonl_fp = jsonl_path.open("w", encoding="utf-8")
+    csv_fp = csv_path.open("w", encoding="utf-8", newline="")
+    log_fp = log_path.open("w", encoding="utf-8", newline="")
+    csv_writer = csv.DictWriter(csv_fp, fieldnames=CONTENT_CSV_FIELDS)
+    csv_writer.writeheader()
+    log_writer = csv.writer(log_fp)
+    log_writer.writerow(
+        [
+            "project",
+            "canonical_id",
+            "event_name",
+            "status",
+            "error",
+            "source_url_count",
+            "image_url_count",
+            "downloaded_image_count",
+        ]
+    )
+
+    def persist_record(record: dict[str, Any], log_row: list[str]) -> None:
+        jsonl_fp.write(json.dumps(record, ensure_ascii=False) + "\n")
+        csv_writer.writerow(csv_row_from_record(record))
+        log_writer.writerow(log_row)
+        jsonl_fp.flush()
+        csv_fp.flush()
+        log_fp.flush()
+
+        counts["total"] += 1
+        status = clean_text(str(record.get("status") or "")).lower()
+        if status in {"ok", "partial", "empty", "cached"}:
+            counts[status] += 1
+        if clean_text_block(str(record.get("raw_description") or "")):
+            counts["with_description"] += 1
+        if clean_text_block(str(record.get("polished_description_zh") or "")):
+            counts["with_polished_zh"] += 1
+        if clean_text_block(str(record.get("one_liner_zh") or "")):
+            counts["with_one_liner_zh"] += 1
+        if clean_text_block(str(record.get("polished_description_en") or "")):
+            counts["with_polished_en"] += 1
+        if clean_text_block(str(record.get("one_liner_en") or "")):
+            counts["with_one_liner_en"] += 1
+        if isinstance(record.get("image_urls"), list) and len(record["image_urls"]) > 0:
+            counts["with_images"] += 1
 
     for idx, row in enumerate(rows, start=1):
         canonical_id = str(row.get("canonical_id") or "").strip()
@@ -1162,20 +1807,135 @@ def run_project(
         event_name = clean_text(str(row.get("event_name") or ""))
         source_urls = parse_source_urls(row)
         sig = source_signature(source_urls)
-        old = previous.get(canonical_id)
+        old = resolve_previous_record(row, previous)
 
-        if is_recent_enough(
+        # Failed-only mode: only retry rows that are failed/incomplete or missing previous record.
+        # Successful rows are directly reused to avoid unnecessary network/model requests.
+        if failed_only and should_reuse_success_in_failed_only(old, force=bool(args.force)):
+            counts["reused_by_failed_only"] += 1
+            reused = dict(old)
+            reused["canonical_id"] = canonical_id
+            reused["event_name"] = event_name
+            reused["event_date_start"] = str(row.get("event_date_start") or "")
+            reused["event_date_end"] = str(row.get("event_date_end") or "")
+            reused["fused_run_id"] = fused_run_id
+            reused["source_urls"] = source_urls
+            reused["source_urls_sig"] = sig
+            reused["status"] = "cached"
+            reused["error"] = ""
+            persist_record(reused, [project.name, canonical_id, event_name, "cached", "", "0", "0", "0"])
+            if args.progress_every > 0 and (idx % args.progress_every == 0 or idx == len(rows)):
+                print(
+                    f"[progress] project={project.name} run_id={args.run_id} "
+                    f"processed={idx}/{len(rows)}"
+                )
+            continue
+
+        if (not failed_only) and is_recent_enough(
             old,
             current_signature=sig,
             min_refresh_days=int(args.min_refresh_days),
             force=bool(args.force),
+            desired_polish_mode=desired_polish_mode,
         ):
             reused = dict(old)
+            reused["canonical_id"] = canonical_id
+            reused["event_name"] = event_name
+            reused["event_date_start"] = str(row.get("event_date_start") or "")
+            reused["event_date_end"] = str(row.get("event_date_end") or "")
             reused["fused_run_id"] = fused_run_id
-            reused["status"] = "cached"
+            reused["source_urls"] = source_urls
+            reused["source_urls_sig"] = sig
             reused["error"] = ""
-            content_rows.append(reused)
-            log_rows.append([project.name, canonical_id, event_name, "cached", "", "0", "0", "0"])
+            reused_mode = str(reused.get("polish_mode") or "").strip().lower()
+            raw_cached = clean_text_block(str(reused.get("raw_description") or ""))
+            missing_zh = not clean_text_block(str(reused.get("polished_description_zh") or "")) or not clean_text_block(
+                str(reused.get("one_liner_zh") or "")
+            )
+            missing_en = not clean_text_block(str(reused.get("polished_description_en") or "")) or not clean_text_block(
+                str(reused.get("one_liner_en") or "")
+            )
+            should_upgrade_openai = bool(polisher and raw_cached and reused_mode != "openai")
+            should_upgrade_codex = bool(codex_polisher and raw_cached and (reused_mode != "codex" or missing_zh or missing_en))
+
+            if should_upgrade_openai:
+                try:
+                    bundle = polisher.polish_bundle(raw_cached)
+                    polished = clean_text_block(bundle.get("polished_description"))
+                    one = clean_text_block(bundle.get("one_liner"))
+                    if polished:
+                        reused["polished_description"] = polished
+                    used_one_liner = one or fallback_one_liner(raw_cached)
+                    reused["one_liner"] = used_one_liner
+                    zh_desc = clean_text_block(bundle.get("polished_description_zh"))
+                    zh_one = clean_text_block(bundle.get("one_liner_zh"))
+                    en_desc = clean_text_block(bundle.get("polished_description_en"))
+                    en_one = clean_text_block(bundle.get("one_liner_en"))
+                    if not (zh_desc and zh_one and en_desc and en_one):
+                        translated = polisher.translate_pair(
+                            polished or clean_text_block(str(reused.get("polished_description") or raw_cached)),
+                            used_one_liner,
+                        )
+                        zh_desc = zh_desc or clean_text_block(translated.get("polished_description_zh"))
+                        zh_one = zh_one or clean_text_block(translated.get("one_liner_zh"))
+                        en_desc = en_desc or clean_text_block(translated.get("polished_description_en"))
+                        en_one = en_one or clean_text_block(translated.get("one_liner_en"))
+                    reused["polished_description_zh"] = zh_desc
+                    reused["one_liner_zh"] = zh_one
+                    reused["polished_description_en"] = en_desc
+                    reused["one_liner_en"] = en_one
+                    reused["polish_mode"] = "openai"
+                    reused["polish_model"] = polisher.model_tag
+                    reused["status"] = "ok"
+                except Exception as exc:  # noqa: BLE001
+                    reused["status"] = "cached"
+                    reused["error"] = f"polish_error:{exc}"
+            elif should_upgrade_codex:
+                try:
+                    bundle = codex_polisher.polish_bundle(raw_cached)
+                    polished = clean_text_block(bundle.get("polished_description"))
+                    one = clean_text_block(bundle.get("one_liner"))
+                    if not polished and not one:
+                        raise ValueError("empty codex polish response")
+                    if polished:
+                        reused["polished_description"] = polished
+                    used_one_liner = one or fallback_one_liner(raw_cached)
+                    reused["one_liner"] = used_one_liner
+                    zh_desc = clean_text_block(bundle.get("polished_description_zh"))
+                    zh_one = clean_text_block(bundle.get("one_liner_zh"))
+                    en_desc = clean_text_block(bundle.get("polished_description_en"))
+                    en_one = clean_text_block(bundle.get("one_liner_en"))
+                    if not codex_single_pass_i18n and not (zh_desc and zh_one and en_desc and en_one):
+                        translated = codex_polisher.translate_pair(
+                            polished or clean_text_block(str(reused.get("polished_description") or raw_cached)),
+                            used_one_liner,
+                        )
+                        zh_desc = zh_desc or clean_text_block(translated.get("polished_description_zh"))
+                        zh_one = zh_one or clean_text_block(translated.get("one_liner_zh"))
+                        en_desc = en_desc or clean_text_block(translated.get("polished_description_en"))
+                        en_one = en_one or clean_text_block(translated.get("one_liner_en"))
+                    reused["polished_description_zh"] = zh_desc
+                    reused["one_liner_zh"] = zh_one
+                    reused["polished_description_en"] = en_desc
+                    reused["one_liner_en"] = en_one
+                    reused["polish_mode"] = "codex"
+                    reused["polish_model"] = codex_polisher.model
+                    reused["status"] = "ok"
+                except Exception as exc:  # noqa: BLE001
+                    reused["status"] = "cached"
+                    reused["error"] = f"polish_error:{exc}"
+            else:
+                reused["status"] = "cached"
+
+            persist_record(
+                reused,
+                [project.name, canonical_id, event_name, str(reused.get("status") or "cached"), "", "0", "0", "0"],
+            )
+            if args.progress_every > 0 and (idx % args.progress_every == 0 or idx == len(rows)):
+                print(
+                    f"[progress] project={project.name} run_id={args.run_id} "
+                    f"processed={idx}/{len(rows)}"
+                )
             continue
 
         extracts: list[PageExtract] = []
@@ -1208,32 +1968,87 @@ def run_project(
 
         polished_description = raw_description
         one_liner = ""
+        polished_description_zh = ""
+        one_liner_zh = ""
+        polished_description_en = ""
+        one_liner_en = ""
         polish_mode_used = "none"
         polish_model_used = ""
 
         if raw_description and polisher:
             try:
-                polished_description = polisher.polish_description(raw_description)
-                one_liner = polisher.one_liner(raw_description)
+                bundle = polisher.polish_bundle(raw_description)
+                polished = clean_text_block(bundle.get("polished_description"))
+                one = clean_text_block(bundle.get("one_liner"))
+                if polished:
+                    polished_description = polished
+                one_liner = one
+                polished_description_zh = clean_text_block(bundle.get("polished_description_zh"))
+                one_liner_zh = clean_text_block(bundle.get("one_liner_zh"))
+                polished_description_en = clean_text_block(bundle.get("polished_description_en"))
+                one_liner_en = clean_text_block(bundle.get("one_liner_en"))
                 polish_mode_used = "openai"
-                polish_model_used = args.openai_model
+                polish_model_used = polisher.model_tag
             except Exception as exc:  # noqa: BLE001
                 polish_mode_used = "openai_failed"
                 fetch_error = f"{fetch_error}; polish_error:{exc}" if fetch_error else f"polish_error:{exc}"
         elif raw_description and codex_polisher:
             try:
-                polished, one = codex_polisher.polish_pair(raw_description)
+                bundle = codex_polisher.polish_bundle(raw_description)
+                polished = clean_text_block(bundle.get("polished_description"))
+                one = clean_text_block(bundle.get("one_liner"))
+                if not polished and not one:
+                    raise ValueError("empty codex polish response")
                 if polished:
                     polished_description = polished
                 one_liner = one
+                polished_description_zh = clean_text_block(bundle.get("polished_description_zh"))
+                one_liner_zh = clean_text_block(bundle.get("one_liner_zh"))
+                polished_description_en = clean_text_block(bundle.get("polished_description_en"))
+                one_liner_en = clean_text_block(bundle.get("one_liner_en"))
                 polish_mode_used = "codex"
-                polish_model_used = args.codex_model
+                polish_model_used = codex_polisher.model
             except Exception as exc:  # noqa: BLE001
                 polish_mode_used = "codex_failed"
                 fetch_error = f"{fetch_error}; polish_error:{exc}" if fetch_error else f"polish_error:{exc}"
 
         if not one_liner and raw_description:
             one_liner = fallback_one_liner(raw_description)
+
+        if polisher and raw_description and polish_mode_used == "openai":
+            has_zh = bool(polished_description_zh and one_liner_zh)
+            has_en = bool(polished_description_en and one_liner_en)
+            if not (has_zh and has_en):
+                try:
+                    translated = polisher.translate_pair(polished_description or raw_description, one_liner)
+                    polished_description_zh = polished_description_zh or clean_text_block(translated.get("polished_description_zh"))
+                    one_liner_zh = one_liner_zh or clean_text_block(translated.get("one_liner_zh"))
+                    polished_description_en = polished_description_en or clean_text_block(translated.get("polished_description_en"))
+                    one_liner_en = one_liner_en or clean_text_block(translated.get("one_liner_en"))
+                except Exception as exc:  # noqa: BLE001
+                    fetch_error = f"{fetch_error}; translate_error:{exc}" if fetch_error else f"translate_error:{exc}"
+
+        if codex_polisher and raw_description and polish_mode_used == "codex" and not codex_single_pass_i18n:
+            has_zh = bool(polished_description_zh and one_liner_zh)
+            has_en = bool(polished_description_en and one_liner_en)
+            if not (has_zh and has_en):
+                try:
+                    translated = codex_polisher.translate_pair(polished_description or raw_description, one_liner)
+                    polished_description_zh = polished_description_zh or clean_text_block(translated.get("polished_description_zh"))
+                    one_liner_zh = one_liner_zh or clean_text_block(translated.get("one_liner_zh"))
+                    polished_description_en = polished_description_en or clean_text_block(translated.get("polished_description_en"))
+                    one_liner_en = one_liner_en or clean_text_block(translated.get("one_liner_en"))
+                except Exception as exc:  # noqa: BLE001
+                    fetch_error = f"{fetch_error}; translate_error:{exc}" if fetch_error else f"translate_error:{exc}"
+        elif codex_polisher and raw_description and polish_mode_used == "codex" and codex_single_pass_i18n:
+            has_zh = bool(polished_description_zh and one_liner_zh)
+            has_en = bool(polished_description_en and one_liner_en)
+            if not (has_zh and has_en):
+                fetch_error = (
+                    f"{fetch_error}; polish_i18n_incomplete(single_pass)"
+                    if fetch_error
+                    else "polish_i18n_incomplete(single_pass)"
+                )
 
         downloaded_abs: list[str] = []
         if image_urls and args.download_images:
@@ -1265,6 +2080,10 @@ def run_project(
             "raw_description": raw_description,
             "polished_description": polished_description,
             "one_liner": one_liner,
+            "polished_description_zh": polished_description_zh,
+            "one_liner_zh": one_liner_zh,
+            "polished_description_en": polished_description_en,
+            "one_liner_en": one_liner_en,
             "image_urls": image_urls,
             "downloaded_images": downloaded_rel,
             "source_urls": source_urls,
@@ -1275,8 +2094,8 @@ def run_project(
             "polish_mode": polish_mode_used,
             "polish_model": polish_model_used,
         }
-        content_rows.append(record)
-        log_rows.append(
+        persist_record(
+            record,
             [
                 project.name,
                 canonical_id,
@@ -1286,7 +2105,7 @@ def run_project(
                 str(len(source_urls)),
                 str(len(image_urls)),
                 str(len(downloaded_rel)),
-            ]
+            ],
         )
         if args.progress_every > 0 and (idx % args.progress_every == 0 or idx == len(rows)):
             print(
@@ -1294,46 +2113,14 @@ def run_project(
                 f"processed={idx}/{len(rows)}"
             )
 
+    jsonl_fp.close()
+    csv_fp.close()
+    log_fp.close()
     client.close()
     if polisher:
         polisher.close()
     if codex_polisher:
         codex_polisher.close()
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    jsonl_path = run_dir / "events_content.jsonl"
-    csv_path = run_dir / "events_content.csv"
-    log_path = run_dir / "content_enrich_log.csv"
-    summary_path = run_dir / "content_summary.json"
-
-    write_jsonl(jsonl_path, content_rows)
-    write_csv(csv_path, content_rows)
-
-    with log_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [
-                "project",
-                "canonical_id",
-                "event_name",
-                "status",
-                "error",
-                "source_url_count",
-                "image_url_count",
-                "downloaded_image_count",
-            ]
-        )
-        writer.writerows(log_rows)
-
-    counts = {
-        "total": len(content_rows),
-        "ok": sum(1 for r in content_rows if r.get("status") == "ok"),
-        "partial": sum(1 for r in content_rows if r.get("status") == "partial"),
-        "empty": sum(1 for r in content_rows if r.get("status") == "empty"),
-        "cached": sum(1 for r in content_rows if r.get("status") == "cached"),
-        "with_description": sum(1 for r in content_rows if clean_text_block(str(r.get("raw_description") or ""))),
-        "with_images": sum(1 for r in content_rows if isinstance(r.get("image_urls"), list) and len(r["image_urls"]) > 0),
-    }
 
     summary = {
         "project": project.name,
@@ -1351,6 +2138,16 @@ def run_project(
         "prompt_paths": {
             "description": str(Path(args.description_prompt)),
             "one_liner": str(Path(args.one_liner_prompt)),
+        },
+        "filter": {
+            "skip_past_days": int(args.skip_past_days),
+            "basis": "event_date_start",
+            "cutoff_date": cutoff_date.isoformat() if cutoff_date else None,
+            "only_past_days": only_past_days,
+            "only_past_cutoff_date": only_past_cutoff_date.isoformat() if only_past_cutoff_date else None,
+            "failed_only": failed_only,
+            "prioritize_near_start": prioritize_near_start,
+            "codex_single_pass_i18n": codex_single_pass_i18n,
         },
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1407,6 +2204,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--download-images", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--update-latest-run", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--skip-past-days",
+        type=int,
+        default=31,
+        help="Skip events whose start date is older than N days (event_date_start only)",
+    )
+    parser.add_argument(
+        "--only-past-days",
+        type=int,
+        default=-1,
+        help="Only process events whose start date is older than N days (event_date_start only); -1 disables",
+    )
+    parser.add_argument(
+        "--failed-only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Only process failed/unprocessed events; successful previous records are reused",
+    )
+    parser.add_argument(
+        "--prioritize-near-start",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Prioritize events with nearest start date (upcoming first, then recently ended)",
+    )
+    parser.add_argument(
+        "--codex-single-pass-i18n",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Require JA/ZH/EN generation in one codex pass and skip second translation pass",
+    )
 
     parser.add_argument(
         "--description-prompt",
@@ -1417,10 +2244,40 @@ def parse_args() -> argparse.Namespace:
         default=str(repo_root / "数据端/文档/event-one-liner.prompt.md"),
     )
     parser.add_argument("--polish-mode", choices=["auto", "openai", "codex", "none"], default="auto")
-    parser.add_argument("--openai-model", default="gpt-5-mini")
-    parser.add_argument("--openai-base-url", default="https://api.openai.com/v1/responses")
+    parser.add_argument("--openai-model", default=os.getenv("OPENAI_MODEL", "gpt-5-mini"))
+    parser.add_argument("--openai-base-url", default=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1/responses"))
     parser.add_argument("--openai-api-key", default=os.getenv("OPENAI_API_KEY", ""))
-    parser.add_argument("--codex-model", default="")
+    parser.add_argument(
+        "--openai-one-liner-model",
+        default=os.getenv("OPENAI_ONE_LINER_MODEL", ""),
+        help="Optional one-liner model (falls back to --openai-model)",
+    )
+    parser.add_argument(
+        "--openai-one-liner-base-url",
+        default=os.getenv("OPENAI_ONE_LINER_BASE_URL", ""),
+        help="Optional one-liner endpoint (falls back to --openai-base-url)",
+    )
+    parser.add_argument(
+        "--openai-one-liner-api-key",
+        default=os.getenv("OPENAI_ONE_LINER_API_KEY", ""),
+        help="Optional one-liner API key (falls back to --openai-api-key)",
+    )
+    parser.add_argument(
+        "--openai-translation-model",
+        default=os.getenv("OPENAI_TRANSLATION_MODEL", ""),
+        help="Optional translation model (falls back to --openai-model)",
+    )
+    parser.add_argument(
+        "--openai-translation-base-url",
+        default=os.getenv("OPENAI_TRANSLATION_BASE_URL", ""),
+        help="Optional translation endpoint (falls back to --openai-base-url)",
+    )
+    parser.add_argument(
+        "--openai-translation-api-key",
+        default=os.getenv("OPENAI_TRANSLATION_API_KEY", ""),
+        help="Optional translation API key (falls back to --openai-api-key)",
+    )
+    parser.add_argument("--codex-model", default=DEFAULT_CODEX_MODEL)
     parser.add_argument("--codex-timeout-sec", type=float, default=120.0)
     parser.add_argument(
         "--user-agent",
@@ -1442,7 +2299,7 @@ def main() -> int:
     description_template = read_template(Path(args.description_prompt))
     one_liner_template = read_template(Path(args.one_liner_prompt))
 
-    if args.polish_mode == "openai" and not args.openai_api_key:
+    if args.polish_mode == "openai" and not str(args.openai_api_key or "").strip():
         print("[warn] --polish-mode=openai but --openai-api-key is empty, fallback to none")
         args.polish_mode = "none"
 

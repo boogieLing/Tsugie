@@ -32,6 +32,12 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Multiply per-site configured QPS to speed up crawling",
     )
+    parser.add_argument(
+        "--skip-known-confirmed-start",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip detail refetch when existing raw record already has confirmed start date/time",
+    )
     parser.add_argument("--out-dir", default="data/raw")
     parser.add_argument("--log-dir", default="data/logs")
     parser.add_argument("--fused-dir", default="data/fused")
@@ -81,12 +87,68 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--content-min-refresh-days", type=int, default=45)
     parser.add_argument("--content-qps", type=float, default=0.12)
     parser.add_argument("--content-max-images", type=int, default=1)
+    parser.add_argument("--content-openai-model", default="gpt-5-mini")
+    parser.add_argument("--content-openai-base-url", default="https://api.openai.com/v1/responses")
+    parser.add_argument("--content-openai-one-liner-model", default="")
+    parser.add_argument("--content-openai-one-liner-base-url", default="")
+    parser.add_argument("--content-openai-translation-model", default="")
+    parser.add_argument("--content-openai-translation-base-url", default="")
     parser.add_argument(
         "--content-polish-mode",
         choices=["auto", "openai", "codex", "none"],
         default="auto",
     )
-    parser.add_argument("--content-codex-timeout-sec", type=int, default=25)
+    parser.add_argument("--content-codex-model", default="auto")
+    parser.add_argument("--content-codex-timeout-sec", type=int, default=120)
+    parser.add_argument(
+        "--content-only-past-days",
+        type=int,
+        default=-1,
+        help="Only process events whose start date is older than N days; -1 disables",
+    )
+    parser.add_argument(
+        "--content-failed-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Only process failed/unprocessed items in content enrichment",
+    )
+    parser.add_argument(
+        "--content-prioritize-near-start",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Prioritize near-start events in content enrichment",
+    )
+    parser.add_argument(
+        "--content-codex-single-pass-i18n",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Generate JA/ZH/EN in one codex call without second translation pass",
+    )
+    parser.add_argument(
+        "--score-enrich",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run AI score enrichment after fuse/content",
+    )
+    parser.add_argument("--score-run-id", default="", help="Override score enrichment run_id")
+    parser.add_argument("--score-qps", type=float, default=0.2)
+    parser.add_argument("--score-max-events", type=int, default=0, help="0 means no limit")
+    parser.add_argument(
+        "--score-failed-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Only process failed/unprocessed items in score enrichment",
+    )
+    parser.add_argument(
+        "--score-prioritize-near-start",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Prioritize near-start events in score enrichment",
+    )
+    parser.add_argument("--score-deepseek-model", default="deepseek-chat")
+    parser.add_argument("--score-deepseek-base-url", default="https://api.deepseek.com/chat/completions")
+    parser.add_argument("--score-deepseek-api-key", default="")
+    parser.add_argument("--score-timeout-sec", type=float, default=45.0)
     return parser.parse_args()
 
 
@@ -112,14 +174,70 @@ def run_content_enrich(args: argparse.Namespace, run_id: str) -> None:
         str(max(args.content_max_images, 1)),
         "--polish-mode",
         args.content_polish_mode,
+        "--openai-model",
+        args.content_openai_model,
+        "--openai-base-url",
+        args.content_openai_base_url,
+        "--openai-one-liner-model",
+        args.content_openai_one_liner_model,
+        "--openai-one-liner-base-url",
+        args.content_openai_one_liner_base_url,
+        "--openai-translation-model",
+        args.content_openai_translation_model,
+        "--openai-translation-base-url",
+        args.content_openai_translation_base_url,
+        "--codex-model",
+        args.content_codex_model,
         "--codex-timeout-sec",
         str(max(args.content_codex_timeout_sec, 1)),
+        "--only-past-days",
+        str(int(args.content_only_past_days)),
+        "--failed-only" if args.content_failed_only else "--no-failed-only",
+        "--prioritize-near-start" if args.content_prioritize_near_start else "--no-prioritize-near-start",
+        "--codex-single-pass-i18n" if args.content_codex_single_pass_i18n else "--no-codex-single-pass-i18n",
         "--download-images",
         "--update-latest-run",
     ]
     print(f"[content] start run_id={content_run_id}")
     subprocess.run(cmd, cwd=str(repo_root), check=True)
     print(f"[content] done run_id={content_run_id}")
+
+
+def run_score_enrich(args: argparse.Namespace, run_id: str) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    score_script = repo_root / "scripts" / "enrich_event_scores.py"
+    if not score_script.exists():
+        raise RuntimeError(f"score enrich script not found: {score_script}")
+
+    score_run_id = args.score_run_id.strip() or f"{run_id}_score"
+    cmd = [
+        sys.executable,
+        str(score_script),
+        "--project",
+        "omatsuri",
+        "--run-id",
+        score_run_id,
+        "--fused-run-id",
+        run_id,
+        "--qps",
+        str(max(args.score_qps, 0.0)),
+        "--max-events",
+        str(max(args.score_max_events, 0)),
+        "--failed-only" if args.score_failed_only else "--no-failed-only",
+        "--prioritize-near-start" if args.score_prioritize_near_start else "--no-prioritize-near-start",
+        "--deepseek-model",
+        args.score_deepseek_model,
+        "--deepseek-base-url",
+        args.score_deepseek_base_url,
+        "--timeout-sec",
+        str(max(args.score_timeout_sec, 10.0)),
+        "--update-latest-run",
+    ]
+    if args.score_deepseek_api_key.strip():
+        cmd.extend(["--deepseek-api-key", args.score_deepseek_api_key.strip()])
+    print(f"[score] start run_id={score_run_id}")
+    subprocess.run(cmd, cwd=str(repo_root), check=True)
+    print(f"[score] done run_id={score_run_id}")
 
 
 def main() -> int:
@@ -154,6 +272,7 @@ def main() -> int:
                 logger=run_logger,
                 qps_multiplier=args.qps_multiplier,
                 target_year=args.target_year,
+                skip_known_confirmed_start=args.skip_known_confirmed_start,
             )
             try:
                 list_visited, detail_found, detail_written = crawler.crawl(
@@ -218,6 +337,8 @@ def main() -> int:
         )
         if args.content_enrich:
             run_content_enrich(args, run_id)
+        if args.score_enrich:
+            run_score_enrich(args, run_id)
     print(f"[run] run_id={run_id}, logs={args.log_dir}/{run_id}")
     return 0
 
