@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DetailPanelView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.locale) private var locale
 
     let place: HePlace
     let snapshot: EventStatusSnapshot
@@ -42,7 +43,7 @@ struct DetailPanelView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if let oneLiner = place.oneLiner?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    if let oneLiner = localizedOneLiner,
                        !oneLiner.isEmpty {
                         Text(oneLiner)
                             .font(.system(size: 13, weight: .regular))
@@ -192,12 +193,13 @@ struct DetailPanelView: View {
             Text(L10n.Detail.intro)
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-            Text(place.detailDescription)
+            Text(localizedDetailDescription)
                 .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
@@ -208,30 +210,33 @@ struct DetailPanelView: View {
 
     @ViewBuilder
     private var sourceBlock: some View {
-        if let sourceText = preferredSourceURL,
-           let sourceURL = URL(string: sourceText) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.Detail.sourceTitle)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-
+        if let sourceURLText = preferredSourceURL,
+           let sourceURL = URL(string: sourceURLText) {
+            HStack {
                 Button {
                     openURL(sourceURL)
                 } label: {
-                    Text(sourceText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(Color(red: 0.22, green: 0.43, blue: 0.56))
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 6) {
+                        Image(systemName: "link")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("\(L10n.Detail.sourceTitle) ٩(^ᴗ^)۶")
+                            .font(.system(size: 12, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Color(red: 0.22, green: 0.43, blue: 0.56))
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Color.white.opacity(0.86), in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color(red: 0.80, green: 0.89, blue: 0.93, opacity: 0.95), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L10n.Detail.sourceTitle)
+                Spacer(minLength: 0)
             }
-            .padding(12)
-            .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color(red: 0.84, green: 0.92, blue: 0.95, opacity: 0.85), lineWidth: 1)
-            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -241,6 +246,14 @@ struct DetailPanelView: View {
             return primary
         }
         return place.sourceURLs.first
+    }
+
+    private var localizedDetailDescription: String {
+        place.localizedDetailDescription(for: locale.identifier)
+    }
+
+    private var localizedOneLiner: String? {
+        place.localizedOneLiner(for: locale.identifier)
     }
 
     private var statsBlock: some View {
