@@ -333,6 +333,7 @@
 				DEVELOPMENT_TEAM = RSD4Q22Q8D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Tsugie;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于加载你附近的へ地点推荐";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -366,6 +367,7 @@
 				DEVELOPMENT_TEAM = RSD4Q22Q8D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Tsugie;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于加载你附近的へ地点推荐";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
