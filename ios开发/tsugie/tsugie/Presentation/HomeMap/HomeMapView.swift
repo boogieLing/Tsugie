@@ -53,80 +53,15 @@ struct HomeMapView: View {
                 Color.clear
                     .ignoresSafeArea()
             } else {
-                Map(position: mapPositionBinding) {
-                    Annotation("CurrentLocation", coordinate: viewModel.currentLocationCoordinate, anchor: .center) {
-                        CurrentLocationMarkerView(
-                            pinGradient: locationLogoGradient,
-                            glowColor: viewModel.activeMapGlowColor
-                        )
-                            .allowsHitTesting(false)
-                    }
-                    .annotationTitles(.hidden)
-
-                    ForEach(markerEntries) { entry in
-                        let placeState = viewModel.placeState(for: entry.id)
-                        let shouldShowDecoration = (entry.isMenuVisible || entry.isSelected) && placeState.isCheckedIn
-                        Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
-                            MapMarkerAnnotationView(
-                                entry: entry,
-                                themeSignature: markerThemeSignature,
-                                activeGlowColor: markerActiveGlowColor,
-                                markerActionStyle: markerActionStyle(
-                                    for: entry.heType,
-                                    hanabi: markerActionStyleHanabi,
-                                    matsuri: markerActionStyleMatsuri,
-                                    fallback: markerActionStyleFallback
-                                ),
-                                stamp: entry.isMenuVisible
-                                    ? viewModel.stampPresentation(for: entry.id, heType: entry.heType)
-                                    : nil,
-                                isDecorationVisible: shouldShowDecoration,
-                                isDecorationWhiteBaseEnabled: placeState.isCheckedIn,
-                                decoration: shouldShowDecoration
-                                    ? viewModel.markerDecorationPresentation(for: entry.id, heType: entry.heType)
-                                    : nil,
-                                onFavoriteTap: {
-                                    viewModel.markAnnotationTapCooldown(0.4)
-                                    viewModel.toggleFavorite(for: entry.id)
-                                },
-                                onCheckedInTap: {
-                                    viewModel.markAnnotationTapCooldown(0.4)
-                                    viewModel.toggleCheckedIn(for: entry.id)
-                                },
-                                onTap: {
-                                    viewModel.tapMarker(placeID: entry.id)
-                                }
-                            )
-                            .equatable()
-                            .allowsHitTesting(
-                                markerAnnotationAllowsHitTesting(
-                                    for: entry,
-                                    hasVisibleMarkerMenu: hasVisibleMarkerMenu
-                                )
-                            )
-                            .zIndex(
-                                markerAnnotationZIndex(
-                                    for: entry,
-                                    hasVisibleMarkerMenu: hasVisibleMarkerMenu
-                                )
-                            )
-                        }
-                        .annotationTitles(.hidden)
-                    }
-                }
-                .id(viewModel.mapViewInstanceID)
-                .onMapCameraChange(frequency: .continuous) { context in
-                    viewModel.handleMapCameraMotion(context.region)
-                }
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    viewModel.handleMapCameraChange(context.region)
-                }
-                .ignoresSafeArea()
-                .gesture(
-                    TapGesture().onEnded {
-                        viewModel.handleMapBackgroundTap()
-                    },
-                    including: .gesture
+                mapCanvas(
+                    markerEntries: markerEntries,
+                    markerThemeSignature: markerThemeSignature,
+                    markerActiveGlowColor: markerActiveGlowColor,
+                    markerActionStyleHanabi: markerActionStyleHanabi,
+                    markerActionStyleMatsuri: markerActionStyleMatsuri,
+                    markerActionStyleFallback: markerActionStyleFallback,
+                    hasVisibleMarkerMenu: hasVisibleMarkerMenu,
+                    locationLogoGradient: locationLogoGradient
                 )
 
                 if let detailPlace = viewModel.detailPlace {
@@ -393,6 +328,95 @@ struct HomeMapView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.Home.openMenuA11y)
         }
+    }
+
+    private func mapCanvas(
+        markerEntries: [MapMarkerEntry],
+        markerThemeSignature: MarkerThemeSignature,
+        markerActiveGlowColor: Color,
+        markerActionStyleHanabi: MarkerActionStyle,
+        markerActionStyleMatsuri: MarkerActionStyle,
+        markerActionStyleFallback: MarkerActionStyle,
+        hasVisibleMarkerMenu: Bool,
+        locationLogoGradient: LinearGradient
+    ) -> some View {
+        Map(position: mapPositionBinding) {
+            Annotation("CurrentLocation", coordinate: viewModel.currentLocationCoordinate, anchor: .center) {
+                CurrentLocationMarkerView(
+                    pinGradient: locationLogoGradient,
+                    glowColor: viewModel.activeMapGlowColor
+                )
+                .allowsHitTesting(false)
+            }
+            .annotationTitles(.hidden)
+
+            ForEach(markerEntries) { entry in
+                let placeState = viewModel.placeState(for: entry.id)
+                let shouldShowDecoration = (entry.isMenuVisible || entry.isSelected) && placeState.isCheckedIn
+                Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
+                    MapMarkerAnnotationView(
+                        entry: entry,
+                        themeSignature: markerThemeSignature,
+                        activeGlowColor: markerActiveGlowColor,
+                        markerActionStyle: markerActionStyle(
+                            for: entry.heType,
+                            hanabi: markerActionStyleHanabi,
+                            matsuri: markerActionStyleMatsuri,
+                            fallback: markerActionStyleFallback
+                        ),
+                        stamp: entry.isMenuVisible
+                        ? viewModel.stampPresentation(for: entry.id, heType: entry.heType)
+                        : nil,
+                        isDecorationVisible: shouldShowDecoration,
+                        isDecorationWhiteBaseEnabled: placeState.isCheckedIn,
+                        decoration: shouldShowDecoration
+                        ? viewModel.markerDecorationPresentation(for: entry.id, heType: entry.heType)
+                        : nil,
+                        onFavoriteTap: {
+                            viewModel.markAnnotationTapCooldown(0.4)
+                            viewModel.toggleFavorite(for: entry.id)
+                        },
+                        onCheckedInTap: {
+                            viewModel.markAnnotationTapCooldown(0.4)
+                            viewModel.toggleCheckedIn(for: entry.id)
+                        },
+                        onTap: {
+                            viewModel.tapMarker(placeID: entry.id)
+                        }
+                    )
+                    .equatable()
+                    .allowsHitTesting(
+                        markerAnnotationAllowsHitTesting(
+                            for: entry,
+                            hasVisibleMarkerMenu: hasVisibleMarkerMenu
+                        )
+                    )
+                    .zIndex(
+                        markerAnnotationZIndex(
+                            for: entry,
+                            hasVisibleMarkerMenu: hasVisibleMarkerMenu
+                        )
+                    )
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .preferredColorScheme(.light)
+        .id(viewModel.mapViewInstanceID)
+        .onMapCameraChange(frequency: .continuous) { context in
+            viewModel.handleMapCameraMotion(context.region)
+        }
+        .onMapCameraChange(frequency: .onEnd) { context in
+            viewModel.handleMapCameraChange(context.region)
+        }
+        .ignoresSafeArea()
+        .gesture(
+            TapGesture().onEnded {
+                viewModel.handleMapBackgroundTap()
+            },
+            including: .gesture
+        )
     }
 
     private func openAppleMapsNavigation(to place: HePlace) {
