@@ -422,6 +422,7 @@ final class HomeMapViewModel: ObservableObject {
     private var markerEntriesCache: [MapMarkerEntry] = []
     private var markerEntriesIndexByID: [UUID: Int] = [:]
     private var hasAutoOpened = false
+    private var hasStartedLaunchPrewarm = false
     private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
@@ -656,7 +657,7 @@ final class HomeMapViewModel: ObservableObject {
         startPeriodicHardRecycleTask()
         startMemoryWatchdogTask()
         debugLog("onViewAppear allPlaces=\(self.places.count) renderedPlaces=\(self.renderedPlaces.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
-        bootstrapNearbyPlacesIfNeeded()
+        beginLaunchPrewarmIfNeeded()
         scheduleAutoOpenIfNeeded()
         if startNotificationEnabled {
             scheduleStartReminderSync()
@@ -725,6 +726,15 @@ final class HomeMapViewModel: ObservableObject {
                 setProgrammaticMapPosition(.region(pinnedRegion))
             }
         }
+    }
+
+    func beginLaunchPrewarmIfNeeded() {
+        guard !hasStartedLaunchPrewarm else {
+            return
+        }
+        hasStartedLaunchPrewarm = true
+        bootstrapNearbyPlacesIfNeeded()
+        _ = mapMarkerEntries()
     }
 
     func prepareForCalendarPlaceNavigation() {

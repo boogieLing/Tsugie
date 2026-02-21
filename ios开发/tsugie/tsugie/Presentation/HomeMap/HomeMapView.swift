@@ -6,6 +6,7 @@ struct HomeMapView: View {
     @State private var routeNavigationPlace: HePlace?
 
     @ObservedObject var viewModel: HomeMapViewModel
+    let suppressLocationFallbackAlert: Bool
     let onOpenCalendar: () -> Void
 
     var body: some View {
@@ -332,7 +333,12 @@ struct HomeMapView: View {
         }
         .alert(
             item: Binding(
-                get: { viewModel.locationFallbackNotice },
+                get: {
+                    guard !suppressLocationFallbackAlert else {
+                        return nil
+                    }
+                    return viewModel.locationFallbackNotice
+                },
                 set: { _ in viewModel.dismissLocationFallbackNotice() }
             )
         ) { notice in

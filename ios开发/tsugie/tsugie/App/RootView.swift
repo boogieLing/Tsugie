@@ -1,4 +1,6 @@
 import SwiftUI
+import ImageIO
+import UIKit
 
 struct RootView: View {
     @StateObject private var viewModel = HomeMapViewModel()
@@ -10,6 +12,7 @@ struct RootView: View {
         ZStack {
             HomeMapView(
                 viewModel: viewModel,
+                suppressLocationFallbackAlert: isLaunchSplashVisible,
                 onOpenCalendar: {
                     viewModel.setCalendarPresented(true)
                     isCalendarPresented = true
@@ -64,6 +67,7 @@ struct RootView: View {
             guard isLaunchSplashVisible else {
                 return
             }
+            viewModel.beginLaunchPrewarmIfNeeded()
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else {
                 return
@@ -76,7 +80,7 @@ struct RootView: View {
 }
 
 private struct LaunchSplashOverlayView: View {
-    @State private var image: UIImage?
+    @State private var splashImage: UIImage?
 
     var body: some View {
         GeometryReader { proxy in
@@ -84,17 +88,40 @@ private struct LaunchSplashOverlayView: View {
                 Color.white
                     .ignoresSafeArea()
 
-                if let image {
-                    Image(uiImage: image)
+                if let splashImage {
+                    let horizontalInset: CGFloat = 10
+                    let availableWidth = max(0, proxy.size.width - horizontalInset * 2)
+                    let availableHeight = max(
+                        0,
+                        proxy.size.height - proxy.safeAreaInsets.top - proxy.safeAreaInsets.bottom - 8
+                    )
+
+                    Image(uiImage: splashImage)
+                        .resizable()
+                        .interpolation(.low)
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .blur(radius: 22, opaque: true)
+                        .clipped()
+                        .saturation(0.92)
+                        .brightness(0.03)
+                        .overlay(Color.white.opacity(0.18))
+                        .overlay {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .opacity(0.28)
+                        }
+                        .ignoresSafeArea()
+
+                    Image(uiImage: splashImage)
                         .resizable()
                         .scaledToFit()
                         .frame(
-                            maxWidth: proxy.size.width,
-                            maxHeight: max(0, proxy.size.height - proxy.safeAreaInsets.top - 12)
+                            width: availableWidth,
+                            height: availableHeight,
+                            alignment: .center
                         )
-                        .padding(.top, proxy.safeAreaInsets.top + 12)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        .background(Color.white)
+                        .position(x: proxy.size.width * 0.5, y: proxy.size.height * 0.5)
                 } else {
                     ProgressView()
                         .tint(Color(red: 0.22, green: 0.43, blue: 0.52))
@@ -102,15 +129,16 @@ private struct LaunchSplashOverlayView: View {
             }
         }
         .task {
-            guard image == nil else {
+            guard splashImage == nil else {
                 return
             }
-            image = await Task.detached(priority: .utility) {
+            let loaded = await Task.detached(priority: .userInitiated) {
                 SplashAssetLoader.loadSplashImage()
             }.value
+            splashImage = loaded
         }
         .onDisappear {
-            image = nil
+            splashImage = nil
         }
     }
 }
@@ -120,34 +148,79 @@ private enum SplashAssetLoader {
         guard let url = splashImageURL() else {
             return nil
         }
-        guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
-            return nil
-        }
-        return UIImage(data: data)
+        return downsampledImage(at: url, maxPixelSize: 1_600)
     }
 
     nonisolated static func splashImageURL() -> URL? {
-        if let direct = Bundle.main.url(forResource: "1", withExtension: "jpg", subdirectory: "tsugie_splash") {
-            return direct
+        let imageURLs = allSplashImageURLs()
+        guard !imageURLs.isEmpty else {
+            return nil
         }
-        if let direct = Bundle.main.url(forResource: "1", withExtension: "jpg") {
-            return direct
+        return imageURLs.randomElement()
+    }
+
+    nonisolated private static func allSplashImageURLs() -> [URL] {
+        let subdirectoryCandidates = ["tsugie_splash", nil]
+        let imageExtensions = ["jpg", "jpeg", "png", "webp"]
+        var urls: [URL] = []
+
+        for subdirectory in subdirectoryCandidates {
+            for ext in imageExtensions {
+                urls.append(contentsOf:
+                    contentsOfBundle(forExtension: ext, subdirectory: subdirectory)
+                )
+            }
         }
 
-        guard let resourcePath = Bundle.main.resourcePath else {
+        let filtered = urls.filter { isSplashImageFileName($0.lastPathComponent) }
+        let candidates = filtered.isEmpty ? urls : filtered
+
+        // Keep deterministic ordering and deduplicate identical file URLs.
+        let unique = Dictionary(grouping: candidates, by: \.path).compactMap { $0.value.first }
+        return unique.sorted { lhs, rhs in
+            lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    nonisolated private static func isImageFileName(_ fileName: String) -> Bool {
+        let lowercased = fileName.lowercased()
+        return lowercased.hasSuffix(".jpg")
+            || lowercased.hasSuffix(".jpeg")
+            || lowercased.hasSuffix(".png")
+            || lowercased.hasSuffix(".webp")
+    }
+
+    nonisolated private static func isSplashImageFileName(_ fileName: String) -> Bool {
+        guard isImageFileName(fileName) else {
+            return false
+        }
+        let baseName = (fileName as NSString).deletingPathExtension
+        return !baseName.isEmpty && baseName.allSatisfy(\.isNumber)
+    }
+
+    nonisolated private static func contentsOfBundle(
+        forExtension ext: String,
+        subdirectory: String?
+    ) -> [URL] {
+        if let urls = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: subdirectory) {
+            return urls
+        }
+        return []
+    }
+
+    nonisolated private static func downsampledImage(at url: URL, maxPixelSize: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             return nil
         }
-        let directory = (resourcePath as NSString).appendingPathComponent("tsugie_splash")
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(128, maxPixelSize)
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             return nil
         }
-        let target = entries
-            .filter { $0.lowercased().hasSuffix(".jpg") || $0.lowercased().hasSuffix(".jpeg") || $0.lowercased().hasSuffix(".png") }
-            .sorted()
-            .first
-        guard let target else {
-            return nil
-        }
-        return URL(fileURLWithPath: (directory as NSString).appendingPathComponent(target))
+        return UIImage(cgImage: cgImage)
     }
 }
