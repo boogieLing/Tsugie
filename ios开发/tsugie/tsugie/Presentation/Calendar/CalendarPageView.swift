@@ -206,16 +206,17 @@ struct CalendarPageView: View {
 
     @State private var selectedDayKey: String?
     @State private var dayFilterID = "all"
-    @State private var didInitialAutoScroll = false
     @State private var cachedBucketsByDayKey: [String: CalendarBucket] = [:]
-    @State private var cachedMonthBlocks: [CalendarMonthBlock] = []
-    @State private var cachedDayKeys: Set<String> = []
     @State private var cachedDetailItemsByDayKey: [String: [CalendarScoredItem]] = [:]
     @State private var cachedPlacesSignature = ""
     @State private var isCalendarCacheLoading = true
     @State private var calendarCacheBuildToken: Int = 0
-    @State private var visibleMonthBlockCount = 0
-    @State private var monthStageTask: Task<Void, Never>?
+    @State private var currentMonthCursor = Calendar.current.startOfDay(for: Date())
+    @State private var monthPageDragOffset: CGFloat = 0
+    @State private var isMonthPaging = false
+    @State private var previousMonthBlock: CalendarMonthBlock?
+    @State private var currentMonthBlock: CalendarMonthBlock?
+    @State private var nextMonthBlock: CalendarMonthBlock?
 
     private var categories: [CalendarCategoryMeta] {
         [
@@ -257,9 +258,9 @@ struct CalendarPageView: View {
                 refreshCalendarCacheIfNeeded(force: true)
             }
             .onDisappear {
-                monthStageTask?.cancel()
-                monthStageTask = nil
                 calendarCacheBuildToken &+= 1
+                isMonthPaging = false
+                monthPageDragOffset = 0
             }
             .onChange(of: places.count) { _, _ in
                 refreshCalendarCacheIfNeeded(force: false)
@@ -296,64 +297,106 @@ struct CalendarPageView: View {
     }
 
     private var monthList: some View {
-        let blocks = cachedMonthBlocks
-        let dayKeys = cachedDayKeys
-        let stagedCount = visibleMonthBlockCount
-        let visibleBlocks = stagedCount > 0 ? Array(blocks.prefix(stagedCount)) : blocks
-        let visibleDayKeys = Set(visibleBlocks.flatMap { $0.cells.compactMap(\.dayKey) })
+        GeometryReader { proxy in
+            let width = max(proxy.size.width - 36, 1)
 
-        return ScrollViewReader { scrollProxy in
-            ScrollView {
-                VStack(spacing: 8) {
-                    if isCalendarCacheLoading {
-                        monthListSkeleton
-                    } else if blocks.isEmpty {
-                        Text(L10n.Calendar.empty)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(red: 0.38, green: 0.50, blue: 0.54))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 8)
-                    } else {
-                        ForEach(visibleBlocks) { block in
-                            monthBlock(block)
-                        }
+            VStack(spacing: 8) {
+                if isCalendarCacheLoading {
+                    monthListSkeleton
+                } else if let previousBlock = previousMonthBlock,
+                          let currentBlock = currentMonthBlock,
+                          let nextBlock = nextMonthBlock {
+                    ZStack(alignment: .top) {
+                        monthBlock(previousBlock)
+                            .frame(width: width)
+                            .offset(x: -width + monthPageDragOffset)
+
+                        monthBlock(currentBlock)
+                            .frame(width: width)
+                            .offset(x: monthPageDragOffset)
+
+                        monthBlock(nextBlock)
+                            .frame(width: width)
+                            .offset(x: width + monthPageDragOffset)
                     }
+                    .frame(width: width)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .contentShape(Rectangle())
+                    .clipped()
+                    .gesture(monthPagingGesture(width: width))
+                } else {
+                    monthListSkeleton
                 }
-                .padding(.leading, 12)
-                .padding(.trailing, 24)
-                .padding(.bottom, 24)
             }
-            .scrollIndicators(.hidden)
-            .onAppear {
-                scrollCurrentDayToCenterIfNeeded(
-                    scrollProxy: scrollProxy,
-                    dayKeys: dayKeys,
-                    visibleDayKeys: visibleDayKeys
-                )
-            }
-            .onChange(of: places.count) { _, _ in
-                scrollCurrentDayToCenterIfNeeded(
-                    scrollProxy: scrollProxy,
-                    dayKeys: dayKeys,
-                    visibleDayKeys: visibleDayKeys
-                )
-            }
-            .onChange(of: cachedMonthBlocks.count) { _, _ in
-                scrollCurrentDayToCenterIfNeeded(
-                    scrollProxy: scrollProxy,
-                    dayKeys: dayKeys,
-                    visibleDayKeys: visibleDayKeys
-                )
-            }
-            .onChange(of: visibleMonthBlockCount) { _, _ in
-                scrollCurrentDayToCenterIfNeeded(
-                    scrollProxy: scrollProxy,
-                    dayKeys: dayKeys,
-                    visibleDayKeys: visibleDayKeys
-                )
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.leading, 12)
+            .padding(.trailing, 24)
+            .padding(.bottom, 24)
         }
+    }
+
+    private func monthBlockForPage(offset: Int) -> CalendarMonthBlock {
+        let calendar = Calendar.current
+        let baseMonth = startOfMonth(currentMonthCursor)
+        let targetMonth = calendar.date(byAdding: .month, value: offset, to: baseMonth) ?? baseMonth
+        return Self.buildSingleCalendarMonth(
+            monthStart: targetMonth,
+            bucketMap: cachedBucketsByDayKey,
+            locale: L10n.locale,
+            calendar: calendar
+        )
+    }
+
+    private func monthPagingGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                guard !isMonthPaging else { return }
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                guard abs(horizontal) > abs(vertical) else {
+                    monthPageDragOffset = 0
+                    return
+                }
+                monthPageDragOffset = max(-width, min(width, horizontal))
+            }
+            .onEnded { value in
+                guard !isMonthPaging else { return }
+
+                let horizontal = value.translation.width
+                let predicted = value.predictedEndTranslation.width
+                let threshold = max(56, width * 0.18)
+                let decision: Int
+                if horizontal <= -threshold || predicted <= -threshold * 1.25 {
+                    decision = 1
+                } else if horizontal >= threshold || predicted >= threshold * 1.25 {
+                    decision = -1
+                } else {
+                    decision = 0
+                }
+
+                guard decision != 0 else {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                        monthPageDragOffset = 0
+                    }
+                    return
+                }
+
+                isMonthPaging = true
+                let targetOffset = decision > 0 ? -width : width
+                withAnimation(.easeOut(duration: 0.22)) {
+                    monthPageDragOffset = targetOffset
+                }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.23) {
+                let calendar = Calendar.current
+                let baseMonth = startOfMonth(currentMonthCursor)
+                let nextMonth = calendar.date(byAdding: .month, value: decision, to: baseMonth) ?? baseMonth
+                currentMonthCursor = startOfMonth(nextMonth)
+                rebuildVisibleMonthBlocks()
+                monthPageDragOffset = 0
+                isMonthPaging = false
+            }
+    }
     }
 
     private var monthListSkeleton: some View {
@@ -557,7 +600,7 @@ struct CalendarPageView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    if let bucket {
+                    if bucket != nil {
                         VStack(spacing: 8) {
                             ForEach(filteredItems, id: \.id) { item in
                                 dayItemRow(item)
@@ -726,57 +769,33 @@ struct CalendarPageView: View {
         cachedPlacesSignature = signature
         cachedDetailItemsByDayKey = [:]
         isCalendarCacheLoading = true
-        monthStageTask?.cancel()
-        monthStageTask = nil
-        visibleMonthBlockCount = 0
+        isMonthPaging = false
+        monthPageDragOffset = 0
 
         calendarCacheBuildToken &+= 1
         let buildToken = calendarCacheBuildToken
         let sourcePlaces = places
         let baseDate = now
-        let locale = L10n.locale
         let calendar = Calendar.current
 
         DispatchQueue.global(qos: .userInitiated).async {
             let buckets = Self.buildCalendarBuckets(from: sourcePlaces, calendar: calendar)
-            let blocks = Self.buildCalendarMonths(from: buckets, now: baseDate, locale: locale, calendar: calendar)
             let bucketsByDayKey = Dictionary(uniqueKeysWithValues: buckets.map { ($0.id, $0) })
-            let dayKeys = Set(blocks.flatMap { $0.cells.compactMap(\.dayKey) })
 
             DispatchQueue.main.async {
                 guard buildToken == calendarCacheBuildToken else {
                     return
                 }
                 cachedBucketsByDayKey = bucketsByDayKey
-                cachedMonthBlocks = blocks
-                cachedDayKeys = dayKeys
+                if force {
+                    currentMonthCursor = startOfMonth(baseDate)
+                }
+                rebuildVisibleMonthBlocks()
                 isCalendarCacheLoading = false
-                startMonthStagedRendering(totalCount: blocks.count)
 
                 if let selectedDayKey, cachedBucketsByDayKey[selectedDayKey] == nil {
                     closeDayDrawer()
                 }
-            }
-        }
-    }
-
-    private func startMonthStagedRendering(totalCount: Int) {
-        monthStageTask?.cancel()
-        monthStageTask = nil
-        guard totalCount > 0 else {
-            visibleMonthBlockCount = 0
-            return
-        }
-
-        visibleMonthBlockCount = min(3, totalCount)
-        guard totalCount > visibleMonthBlockCount else {
-            return
-        }
-
-        monthStageTask = Task { @MainActor in
-            while !Task.isCancelled, visibleMonthBlockCount < totalCount {
-                try? await Task.sleep(nanoseconds: 60_000_000)
-                visibleMonthBlockCount = min(visibleMonthBlockCount + 4, totalCount)
             }
         }
     }
@@ -984,20 +1003,87 @@ struct CalendarPageView: View {
         return "\((safe / 1_000).formatted(.number.locale(L10n.locale).precision(.fractionLength(1))))km"
     }
 
-    private func scrollCurrentDayToCenterIfNeeded(
-        scrollProxy: ScrollViewProxy,
-        dayKeys: Set<String>,
-        visibleDayKeys: Set<String>
-    ) {
-        guard !didInitialAutoScroll else { return }
-        let todayKey = dayKeyOf(now)
-        guard dayKeys.contains(todayKey) else { return }
-        guard visibleDayKeys.contains(todayKey) else { return }
+    private func startOfMonth(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? calendar.startOfDay(for: date)
+    }
 
-        didInitialAutoScroll = true
-        DispatchQueue.main.async {
-            scrollProxy.scrollTo(todayKey, anchor: .center)
+    private func rebuildVisibleMonthBlocks() {
+        previousMonthBlock = monthBlockForPage(offset: -1)
+        currentMonthBlock = monthBlockForPage(offset: 0)
+        nextMonthBlock = monthBlockForPage(offset: 1)
+    }
+
+    private static func buildSingleCalendarMonth(
+        monthStart: Date,
+        bucketMap: [String: CalendarBucket],
+        locale: Locale,
+        calendar: Calendar
+    ) -> CalendarMonthBlock {
+        let year = calendar.component(.year, from: monthStart)
+        let month = calendar.component(.month, from: monthStart)
+        let monthID = "\(year)-\(String(format: "%02d", month))"
+        let firstWeekday = calendar.component(.weekday, from: monthStart) - 1
+        let daysInMonth = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
+
+        var cells: [CalendarMonthBlock.Cell] = []
+        cells.reserveCapacity(daysInMonth + 12)
+
+        if firstWeekday > 0 {
+            for index in 0..<firstWeekday {
+                cells.append(
+                    .init(
+                        id: "\(monthID)-pad-\(index)",
+                        day: nil,
+                        dayKey: nil,
+                        date: nil,
+                        bucket: nil
+                    )
+                )
+            }
         }
+
+        for day in 1...daysInMonth {
+            let date = DateComponents(calendar: calendar, year: year, month: month, day: day).date
+            let key = date.map { calendarDayKey($0, calendar: calendar) } ?? ""
+            let cellID = key.isEmpty ? "\(monthID)-day-\(day)" : key
+            cells.append(
+                .init(
+                    id: cellID,
+                    day: day,
+                    dayKey: key,
+                    date: date,
+                    bucket: bucketMap[key]
+                )
+            )
+        }
+
+        let trailingPadCount = (7 - (cells.count % 7)) % 7
+        if trailingPadCount > 0 {
+            for index in 0..<trailingPadCount {
+                cells.append(
+                    .init(
+                        id: "\(monthID)-tail-\(index)",
+                        day: nil,
+                        dayKey: nil,
+                        date: nil,
+                        bucket: nil
+                    )
+                )
+            }
+        }
+
+        return CalendarMonthBlock(
+            id: monthID,
+            title: monthStart.formatted(
+                Date.FormatStyle()
+                    .year(.defaultDigits)
+                    .month(.wide)
+                    .locale(locale)
+            ),
+            cells: cells
+        )
     }
 
     private var backgroundLayer: some View {
