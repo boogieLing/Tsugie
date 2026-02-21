@@ -72,7 +72,7 @@
 "detail.heat" = "Heat";
 "detail.surprise" = "Surprise";
 "detail.progress_title.ongoing" = "Progress";
-"detail.progress_title.upcoming" = "Timeline to start";
+"detail.progress_title.upcoming" = "Before start";
 "detail.progress_title.ended" = "Status";
 "detail.progress_title.unknown" = "Time info";
 "detail.upcoming_pending" = "Confirming start time";
@@ -128,12 +128,12 @@
 "drawer.language.switch_a11y" = "Switch language, current %@";
 
 "calendar.title" = "Tokimeguri Calendar";
-"calendar.subtitle" = "Time-axis へ stats (map is location-axis)";
+"calendar.subtitle" = "See へ stats by date";
 "calendar.close_a11y" = "Close calendar";
 "calendar.empty" = "No へ in this period.";
 "calendar.day_title" = "%@ へ";
 "calendar.day_title.fallback" = "Day へ";
-"calendar.drawer.summary" = "Picked from the time axis. Order favors distance and earliest start.";
+"calendar.drawer.summary" = "Filtered by date. Order favors distance and earliest start.";
 "calendar.drawer.no_match" = "No matches";
 "calendar.selected_day.empty" = "No へ on the selected day.";
 "calendar.category.all" = "All";
@@ -145,7 +145,7 @@
 "calendar.category.other" = "Other";
 
 "placeholder.title" = "Tokimeguri";
-"placeholder.desc1" = "Calendar is the time-axis view and independent from the map's location-axis view.";
+"placeholder.desc1" = "Calendar is for browsing events by date.";
 "placeholder.desc2" = "Phase 1 keeps this as a standalone placeholder page. Full month view and day drawer will follow.";
 
 "mock.sumida.hint" = "✨ (ง •̀_•́)ง Best time to leave now";

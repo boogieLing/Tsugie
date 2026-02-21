@@ -206,13 +206,17 @@
 
 ### 7.3 推荐与排序逻辑（MVP）
 
-- 推荐优先：按 `FinalScore` 统一排序（空间 + 时间主导，热度补充，类别权重修正）。
+- 推荐优先：按 `FinalScore` 统一排序（空间 + 时间主导，动态热度与惊喜度融合，类别权重修正）。
 - 系统默认输出一个“最速攻略へ”。
 - 日历某日列表排序：保持与推荐顺序一致（距离优先 + 开始优先，热度兜底）。
 - 数据字段与算法对齐基线：以 `需求/Tsugie_Recommendation_Algorithm_V1.docx` 与 `需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md` 为准（2026-02-19 回调）。
 - 在当前 iOS 数据包覆盖率下，`expected_visitors` 与 `launch_scale` 仅作为补充信息，不作为主排序强依赖。
-- 评分公式默认采用 V1（docx 回调）：`FinalScore = (0.45 * SpaceScore + 0.45 * TimeScore + 0.10 * HeatScore) * CategoryWeight`。
+- 评分公式（2026-02-22 调整）：
+  `FinalScore = (0.33 * SpaceScore + 0.35 * TimeScore + 0.20 * DynamicHeatScore + 0.12 * DynamicSurpriseScore + OngoingNearBoost + ImminentUpcomingBoost) * CategoryWeight * GeoConfidencePenalty`。
 - `CategoryWeight` 默认：`hanabi=1.2`、`matsuri=1.0`、`nature=0.8`、`other=1.0`。
+- `DynamicHeatScore` 必须与时间相关：开场前预热、进行中抬升、结束后冷却（不能固定静态值）。
+- `DynamicSurpriseScore` 必须参与精排，不得仅用于详情展示。
+- `ongoing` 且距离近的候选必须具备强优先权（通过 `OngoingNearBoost` 保证）。
 - `upcoming` 的 `TimeScore` 在 `<24h` 维持阶梯规则；`>24h` 必须按 `delta_start` 连续衰减（不能固定常数），避免“仅近 100~300m 但晚很多天”的地点反超更早开始地点。
 - nearby 轮播推荐粗排阶段必须先过滤 `ended` 活动（仅保留 `upcoming/ongoing/unknown`）。
 - nearby 轮播推荐精排阶段必须保证“已知时刻优先”：`unknown` 不得排在 `ongoing/upcoming` 之前（仅在没有已知时刻候选时可上浮）。

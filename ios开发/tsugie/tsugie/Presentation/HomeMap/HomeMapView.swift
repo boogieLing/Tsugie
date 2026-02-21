@@ -569,6 +569,7 @@ struct MapMarkerEntry: Identifiable, Equatable {
     let name: String
     let coordinate: CLLocationCoordinate2D
     let heType: HeType
+    let isEnded: Bool
     let isSelected: Bool
     let isCluster: Bool
     let clusterCount: Int
@@ -580,6 +581,7 @@ struct MapMarkerEntry: Identifiable, Equatable {
         lhs.id == rhs.id &&
         lhs.name == rhs.name &&
         lhs.heType == rhs.heType &&
+        lhs.isEnded == rhs.isEnded &&
         lhs.isSelected == rhs.isSelected &&
         lhs.isCluster == rhs.isCluster &&
         lhs.clusterCount == rhs.clusterCount &&
@@ -633,6 +635,7 @@ private struct MapMarkerAnnotationView: View, Equatable {
             MarkerBubbleView(
                 placeName: entry.name,
                 heType: entry.heType,
+                isEnded: entry.isEnded,
                 isSelected: entry.isSelected,
                 clusterCount: entry.clusterCount,
                 activeGlowColor: activeGlowColor,

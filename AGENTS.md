@@ -262,7 +262,10 @@
 
 - 推荐算法文档基线：`需求/Tsugie_Recommendation_Algorithm_V1.docx`（原始）+ `需求/Tsugie_Recommendation_Algorithm_V1_数据对齐修订.md`（字段落地）（2026-02-19）。
 - iOS 推荐逻辑在“数据字段定义、时间解析回退、过滤规则、评分权重”四部分，默认以以上两份文档共同约束为准。
-- 评分权重默认回调为 V1：`0.45 * SpaceScore + 0.45 * TimeScore + 0.10 * HeatScore`；类别权重默认：`hanabi=1.2`、`matsuri=1.0`、`nature=0.8`、`other=1.0`。
+- iOS nearby 评分公式（2026-02-22）：`(0.33 * SpaceScore + 0.35 * TimeScore + 0.20 * DynamicHeatScore + 0.12 * DynamicSurpriseScore + OngoingNearBoost + ImminentUpcomingBoost) * CategoryWeight * GeoConfidencePenalty`；类别权重默认：`hanabi=1.2`、`matsuri=1.0`、`nature=0.8`、`other=1.0`。
+- `DynamicHeatScore` 必须是时间相关动态值（开场前预热、进行中抬升、结束后冷却），不得直接使用静态热度分数。
+- `DynamicSurpriseScore` 必须参与 nearby 精排，不得仅用于详情页展示。
+- `ongoing` 且距离近的活动必须在 nearby 精排中具备高优先级（通过 `OngoingNearBoost` 保证）。
 - `upcoming` 的 `TimeScore` 在 `<24h` 保持阶梯规则，`>24h` 必须按 `delta_start` 连续衰减，禁止固定常数，避免“微小距离差”压过“显著时间差”。
 - 在数据覆盖率未达标前，`expected_visitors` 与 `launch_scale` 不得作为主排序强依赖；优先使用 `distance/时间状态/scale_score/heat_score`。
 - nearby 轮播推荐粗排阶段必须过滤 `ended` 活动，不允许过期活动进入轮播候选池。

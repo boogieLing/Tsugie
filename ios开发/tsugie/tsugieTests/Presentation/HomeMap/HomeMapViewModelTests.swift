@@ -350,6 +350,70 @@ final class HomeMapViewModelTests: XCTestCase {
         XCTAssertEqual(ordered, ["ongoing", "upcoming"])
     }
 
+    func testNearbyCarouselFusesSurpriseScoreIntoOrdering() {
+        let now = Date()
+        let lowSurprise = makePlace(
+            name: "low-surprise",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(5 * 60 * 60),
+            endAt: now.addingTimeInterval(7 * 60 * 60),
+            distanceMeters: 900,
+            scaleScore: 70,
+            heatScore: 66,
+            surpriseScore: 22
+        )
+        let highSurprise = makePlace(
+            name: "high-surprise",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(5 * 60 * 60),
+            endAt: now.addingTimeInterval(7 * 60 * 60),
+            distanceMeters: 900,
+            scaleScore: 70,
+            heatScore: 66,
+            surpriseScore: 94
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [lowSurprise, highSurprise],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        let ordered = viewModel.nearbyCarouselItems(now: now, limit: 2).map(\.name)
+
+        XCTAssertEqual(ordered.first, "high-surprise")
+    }
+
+    func testNearbyCarouselPrioritizesNearbyOngoingWhenCompetingWithUpcomingHotSpot() {
+        let now = Date()
+        let ongoingNear = makePlace(
+            name: "ongoing-near",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(-20 * 60),
+            endAt: now.addingTimeInterval(80 * 60),
+            distanceMeters: 250,
+            scaleScore: 72,
+            heatScore: 70,
+            surpriseScore: 62
+        )
+        let upcomingHot = makePlace(
+            name: "upcoming-hot",
+            heType: .matsuri,
+            startAt: now.addingTimeInterval(30 * 60),
+            endAt: now.addingTimeInterval(3 * 60 * 60),
+            distanceMeters: 80,
+            scaleScore: 96,
+            heatScore: 96,
+            surpriseScore: 95
+        )
+
+        let viewModel = HomeMapViewModel(
+            places: [upcomingHot, ongoingNear],
+            placeStateStore: PlaceStateStore(defaults: defaults)
+        )
+        let ordered = viewModel.nearbyCarouselItems(now: now, limit: 2).map(\.name)
+
+        XCTAssertEqual(ordered.first, "ongoing-near")
+    }
+
     func testNearbyCarouselPrefersKnownTimeOverUnknownEvenIfUnknownIsCloser() {
         let now = Date()
         let unknownClose = makePlace(
@@ -573,6 +637,7 @@ final class HomeMapViewModelTests: XCTestCase {
         distanceMeters: Double = 500,
         scaleScore: Int = 80,
         heatScore: Int = 60,
+        surpriseScore: Int = 50,
         coordinate: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 35.7, longitude: 139.8)
     ) -> HePlace {
         HePlace(
@@ -591,7 +656,7 @@ final class HomeMapViewModelTests: XCTestCase {
             imageTag: "tag",
             imageHint: "image",
             heatScore: heatScore,
-            surpriseScore: 50
+            surpriseScore: surpriseScore
         )
     }
 

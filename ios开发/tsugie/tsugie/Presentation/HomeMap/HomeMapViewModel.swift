@@ -215,6 +215,7 @@ private enum HomeMapSpatialCompute {
 final class HomeMapViewModel: ObservableObject {
     private struct MarkerEntriesCacheKey: Equatable {
         let placesRevision: UInt64
+        let statusTimeBucket: Int64
         let filter: MapPlaceCategoryFilter
         let selectedPlaceID: UUID?
         let markerActionPlaceID: UUID?
@@ -289,6 +290,20 @@ final class HomeMapViewModel: ObservableObject {
         let sourceRevision: UInt64
         let usesRenderedSource: Bool
         let daySerial: Int
+    }
+
+    private struct NearbyRankedEntry {
+        let place: HePlace
+        let snapshot: EventStatusSnapshot
+        let score: Double
+        let stage: Int
+        let stageDelta: TimeInterval
+    }
+
+    private struct NearbyRankingCacheKey: Equatable {
+        let recommendationRevision: UInt64
+        let nowBucket: Int64
+        let filter: MapPlaceCategoryFilter
     }
 
     private struct SideDrawerSnapshot {
@@ -408,6 +423,7 @@ final class HomeMapViewModel: ObservableObject {
     private let maxNearbyRecommendationPlaces = 220
     private let markerCollisionPointThreshold: Double = 30
     private let minMarkerCollisionMeters: Double = 10
+    private let markerStatusCacheTimeBucketSeconds: TimeInterval = 60
     private var shouldBootstrapFromBundled: Bool
     private var isLoadingAllPlaces = false
     private var didLoadAllPlaces = false
@@ -444,6 +460,9 @@ final class HomeMapViewModel: ObservableObject {
     private var markerEntriesCacheKey: MarkerEntriesCacheKey?
     private var markerEntriesCache: [MapMarkerEntry] = []
     private var markerEntriesIndexByID: [UUID: Int] = [:]
+    private var nearbyRecommendationRevision: UInt64 = 1
+    private var nearbyRankingCacheKey: NearbyRankingCacheKey?
+    private var nearbyRankingCache: [NearbyRankedEntry] = []
     private var sideDrawerSnapshotCacheKey: SideDrawerSnapshotCacheKey?
     private var sideDrawerSnapshotCache: SideDrawerSnapshot?
     private var calendarDetailSnapshotCacheKey: CalendarDetailSnapshotCacheKey?
@@ -453,6 +472,8 @@ final class HomeMapViewModel: ObservableObject {
     private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
+    private var hasAppliedInitialRecommendationFocus = false
+    private var initialRecommendationFocusRevision: UInt64?
     private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
     private var pendingProgrammaticCameraSource: String?
     private var pendingProgrammaticCameraExpiresAt: Date = .distantPast
@@ -467,6 +488,7 @@ final class HomeMapViewModel: ObservableObject {
     private let sideDrawerAnimation = Animation.spring(response: 0.40, dampingFraction: 0.88)
     private let favoriteDrawerOpenAnimation = Animation.spring(response: 0.46, dampingFraction: 0.90)
     private let favoriteDrawerCloseAnimation = Animation.spring(response: 0.62, dampingFraction: 0.94)
+    private let nearbyRankingTimeBucketSeconds: TimeInterval = 20
     private let startReminderNotificationPrefix = "tsugie.notify.start."
     private let nearbyReminderNotificationPrefix = "tsugie.notify.nearby."
     private let startReminderLeadTime: TimeInterval = 97 * 60
@@ -685,6 +707,9 @@ final class HomeMapViewModel: ObservableObject {
         registerMemoryWarningObserverIfNeeded()
         startPeriodicHardRecycleTask()
         startMemoryWatchdogTask()
+        if initialRecommendationFocusRevision == nil {
+            initialRecommendationFocusRevision = cameraChangeRevision
+        }
         debugLog("onViewAppear allPlaces=\(self.places.count) renderedPlaces=\(self.renderedPlaces.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
         beginLaunchPrewarmIfNeeded()
         scheduleAutoOpenIfNeeded()
@@ -1161,6 +1186,7 @@ final class HomeMapViewModel: ObservableObject {
 
     func mapMarkerEntries() -> [MapMarkerEntry] {
         let isDetailVisible = _detailPlaceID != nil
+        let now = Date()
         let overlapRegion = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) ?? MKCoordinateRegion(
             center: resolvedCenter,
             span: defaultMapSpan
@@ -1174,6 +1200,7 @@ final class HomeMapViewModel: ObservableObject {
 
         let cacheKey = MarkerEntriesCacheKey(
             placesRevision: placesRevision,
+            statusTimeBucket: Int64(floor(now.timeIntervalSince1970 / markerStatusCacheTimeBucketSeconds)),
             filter: mapCategoryFilter,
             selectedPlaceID: _selectedPlaceID,
             markerActionPlaceID: _markerActionPlaceID,
@@ -1217,11 +1244,13 @@ final class HomeMapViewModel: ObservableObject {
 
             let isCluster = clusterCount > 1
             let isMenuVisible = _markerActionPlaceID == renderedPlace.id && !isDetailVisible
+            let isEnded = isPlaceEndedFast(renderedPlace, now: now)
             return MapMarkerEntry(
                 id: renderedPlace.id,
                 name: renderedPlace.name,
                 coordinate: renderedPlace.coordinate,
                 heType: renderedPlace.heType,
+                isEnded: isEnded,
                 isSelected: _selectedPlaceID == renderedPlace.id,
                 isCluster: isCluster,
                 clusterCount: clusterCount,
@@ -1245,6 +1274,7 @@ final class HomeMapViewModel: ObservableObject {
         to nextKey: MarkerEntriesCacheKey
     ) -> [MapMarkerEntry]? {
         guard previousKey.placesRevision == nextKey.placesRevision,
+              previousKey.statusTimeBucket == nextKey.statusTimeBucket,
               previousKey.filter == nextKey.filter,
               previousKey.overlapCenterLatE3 == nextKey.overlapCenterLatE3,
               previousKey.overlapSpanLatE4 == nextKey.overlapSpanLatE4,
@@ -1297,6 +1327,7 @@ final class HomeMapViewModel: ObservableObject {
                 name: previousEntry.name,
                 coordinate: previousEntry.coordinate,
                 heType: previousEntry.heType,
+                isEnded: previousEntry.isEnded,
                 isSelected: nextIsSelected,
                 isCluster: previousEntry.isCluster,
                 clusterCount: previousEntry.clusterCount,
@@ -1324,6 +1355,7 @@ final class HomeMapViewModel: ObservableObject {
                 name: place.name,
                 coordinate: place.coordinate,
                 heType: place.heType,
+                isEnded: true,
                 isSelected: _selectedPlaceID == place.id,
                 isCluster: false,
                 clusterCount: 1,
@@ -1836,6 +1868,21 @@ final class HomeMapViewModel: ObservableObject {
         EventStatusResolver.resolve(startAt: place.startAt, endAt: place.endAt, now: now)
     }
 
+    private func isPlaceEndedFast(_ place: HePlace, now: Date) -> Bool {
+        guard let startAt = place.startAt else {
+            return false
+        }
+        if now < startAt {
+            return false
+        }
+        if let endAt = place.endAt,
+           endAt >= startAt,
+           now <= endAt {
+            return false
+        }
+        return true
+    }
+
     func eventSnapshot(for place: HePlace, now: Date? = nil) -> EventStatusSnapshot {
         EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now ?? Date())
     }
@@ -2066,13 +2113,44 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func nearbyPlaces(now: Date = Date(), limit: Int = 10) -> [HePlace] {
-        // Coarse stage: expired events are excluded from nearby recommendation.
-        let coarseCandidates = nearbyRecommendationSourcePlaces().filter { place in
-            eventStatus(for: place, now: now) != .ended
+        let sorted = nearbyRankedEntries(now: now)
+        return Array(sorted.prefix(limit).map(\.place))
+    }
+
+    func nearbyCarouselItems(now: Date, limit: Int = 10) -> [NearbyCarouselItemModel] {
+        nearbyRankedEntries(now: now).prefix(limit).map { entry in
+            let place = entry.place
+            return NearbyCarouselItemModel(
+                id: place.id,
+                name: place.name,
+                snapshot: entry.snapshot,
+                distanceText: distanceText(for: place),
+                placeState: placeState(for: place.id),
+                stamp: stampPresentation(for: place),
+                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
+            )
         }
-        let ranked = coarseCandidates.map { place in
-            nearbyRecommendationSignal(for: place, now: now)
+    }
+
+    private func nearbyRankedEntries(now: Date) -> [NearbyRankedEntry] {
+        let nowBucket = Int64(floor(now.timeIntervalSince1970 / nearbyRankingTimeBucketSeconds))
+        let cacheKey = NearbyRankingCacheKey(
+            recommendationRevision: nearbyRecommendationRevision,
+            nowBucket: nowBucket,
+            filter: mapCategoryFilter
+        )
+        if nearbyRankingCacheKey == cacheKey {
+            return nearbyRankingCache
         }
+
+        let ranked = nearbyRecommendationSourcePlaces().compactMap { place -> NearbyRankedEntry? in
+            let snapshot = eventSnapshot(for: place, now: now)
+            guard snapshot.status != .ended else {
+                return nil
+            }
+            return nearbyRecommendationSignal(for: place, snapshot: snapshot, now: now)
+        }
+
         let sorted = ranked.sorted { lhs, rhs in
             let lhsUnknown = lhs.stage == 3
             let rhsUnknown = rhs.stage == 3
@@ -2101,21 +2179,9 @@ final class HomeMapViewModel: ObservableObject {
             return lhs.place.name.localizedStandardCompare(rhs.place.name) == .orderedAscending
         }
 
-        return Array(sorted.prefix(limit).map(\.place))
-    }
-
-    func nearbyCarouselItems(now: Date, limit: Int = 10) -> [NearbyCarouselItemModel] {
-        nearbyPlaces(now: now, limit: limit).map { place in
-            NearbyCarouselItemModel(
-                id: place.id,
-                name: place.name,
-                snapshot: eventSnapshot(for: place, now: now),
-                distanceText: distanceText(for: place),
-                placeState: placeState(for: place.id),
-                stamp: stampPresentation(for: place),
-                endpointIconName: TsugieSmallIcon.assetName(for: place.heType)
-            )
-        }
+        nearbyRankingCacheKey = cacheKey
+        nearbyRankingCache = sorted
+        return sorted
     }
 
     func mapPlaces() -> [HePlace] {
@@ -2247,7 +2313,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func recommendedPlace(now: Date = Date()) -> HePlace? {
-        nearbyPlaces(now: now, limit: 1).first
+        nearbyRankedEntries(now: now).first?.place
     }
 
     private func clusterTemporalScore(_ place: HePlace, now: Date) -> (stage: Int, delta: TimeInterval) {
@@ -2325,12 +2391,23 @@ final class HomeMapViewModel: ObservableObject {
         return isHigherPriority(lhs, rhs)
     }
 
-    private func nearbyRecommendationSignal(for place: HePlace, now: Date) -> (place: HePlace, score: Double, stage: Int, stageDelta: TimeInterval) {
-        let snapshot = eventSnapshot(for: place, now: now)
+    private func nearbyRecommendationSignal(
+        for place: HePlace,
+        snapshot: EventStatusSnapshot,
+        now: Date
+    ) -> NearbyRankedEntry {
         let distanceKm = max(place.distanceMeters, 0) / 1_000
         let spaceScore = Foundation.exp(-distanceKm / 5)
         let timeScore = nearbyTimeScore(snapshot: snapshot, now: now)
-        let heatScore = min(max(Double(place.heatScore) / 100, 0), 1)
+        let dynamicHeatScore = dynamicNearbyHeatScore(for: place, snapshot: snapshot, now: now)
+        let dynamicSurpriseScore = dynamicNearbySurpriseScore(
+            for: place,
+            snapshot: snapshot,
+            now: now,
+            distanceKm: distanceKm
+        )
+        let ongoingNearBoost = nearbyOngoingProximityBoost(snapshot: snapshot, distanceKm: distanceKm)
+        let imminentStartBoost = nearbyImminentUpcomingBoost(snapshot: snapshot, distanceKm: distanceKm, now: now)
 
         let categoryWeight: Double
         switch place.heType {
@@ -2346,13 +2423,17 @@ final class HomeMapViewModel: ObservableObject {
 
         let geoConfidencePenalty: Double = place.geoSource == "missing" || place.geoSource == "pref_center_fallback" ? 0.85 : 1.0
         let score = (
-            0.45 * spaceScore +
-            0.45 * timeScore +
-            0.10 * heatScore
+            0.33 * spaceScore +
+            0.35 * timeScore +
+            0.20 * dynamicHeatScore +
+            0.12 * dynamicSurpriseScore +
+            ongoingNearBoost +
+            imminentStartBoost
         ) * categoryWeight * geoConfidencePenalty
 
-        return (
+        return NearbyRankedEntry(
             place: place,
+            snapshot: snapshot,
             score: score,
             stage: nearbyStage(snapshot: snapshot),
             stageDelta: nearbyStageDelta(snapshot: snapshot, now: now)
@@ -2413,6 +2494,109 @@ final class HomeMapViewModel: ObservableObject {
         case .unknown:
             return .greatestFiniteMagnitude
         }
+    }
+
+    private func dynamicNearbyHeatScore(for place: HePlace, snapshot: EventStatusSnapshot, now: Date) -> Double {
+        let base = clampedUnit(Double(place.heatScore) / 100)
+        guard let startAt = place.startAt else {
+            return base * 0.92
+        }
+
+        let minimumDuration: TimeInterval = 2 * 3_600
+        let defaultEnd = startAt.addingTimeInterval(minimumDuration)
+        let endAt = max(place.endAt ?? defaultEnd, defaultEnd)
+
+        let rampLeadWindow: TimeInterval = 36 * 3_600
+        let rampStart = startAt.addingTimeInterval(-rampLeadWindow)
+
+        if now <= rampStart {
+            return base
+        }
+
+        if now < startAt {
+            let total = max(startAt.timeIntervalSince(rampStart), 1)
+            let progress = clampedUnit(now.timeIntervalSince(rampStart) / total)
+            let preheatBoost = 0.16 * pow(progress, 1.08)
+            return clampedUnit(base + preheatBoost)
+        }
+
+        if now <= endAt {
+            let total = max(endAt.timeIntervalSince(startAt), 1)
+            let progress = clampedUnit(now.timeIntervalSince(startAt) / total)
+            let ongoingBoost = 0.28 - (0.10 * progress)
+            return clampedUnit(base + ongoingBoost)
+        }
+
+        let coolDownWindow: TimeInterval = 6 * 3_600
+        let decay = clampedUnit(now.timeIntervalSince(endAt) / coolDownWindow)
+        let cooled = base + (0.12 * (1 - decay))
+        if snapshot.status == .ended {
+            return clampedUnit(max(cooled, 0.05))
+        }
+        return clampedUnit(cooled)
+    }
+
+    private func dynamicNearbySurpriseScore(
+        for place: HePlace,
+        snapshot: EventStatusSnapshot,
+        now: Date,
+        distanceKm: Double
+    ) -> Double {
+        let base = clampedUnit(Double(place.surpriseScore) / 100)
+        let proximity = clampedUnit(Foundation.exp(-distanceKm / 3.5))
+
+        switch snapshot.status {
+        case .ongoing:
+            return clampedUnit(base + 0.18 * proximity)
+        case .upcoming:
+            guard let startDate = snapshot.startDate else {
+                return clampedUnit(base * 0.94)
+            }
+            let deltaHours = max(startDate.timeIntervalSince(now), 0) / 3_600
+            if deltaHours <= 6 {
+                let imminence = 1 - (deltaHours / 6)
+                return clampedUnit(base + 0.03 + (0.14 * imminence * proximity))
+            }
+            if deltaHours <= 24 {
+                return clampedUnit(base + 0.05 * proximity)
+            }
+            return base
+        case .ended:
+            return clampedUnit(base * 0.72)
+        case .unknown:
+            return clampedUnit(base * 0.88)
+        }
+    }
+
+    private func nearbyOngoingProximityBoost(snapshot: EventStatusSnapshot, distanceKm: Double) -> Double {
+        guard snapshot.status == .ongoing else {
+            return 0
+        }
+        let proximity = clampedUnit(Foundation.exp(-distanceKm / 2.4))
+        return 0.18 + 0.22 * proximity
+    }
+
+    private func nearbyImminentUpcomingBoost(
+        snapshot: EventStatusSnapshot,
+        distanceKm: Double,
+        now: Date
+    ) -> Double {
+        guard snapshot.status == .upcoming,
+              let startDate = snapshot.startDate else {
+            return 0
+        }
+
+        let deltaHours = max(startDate.timeIntervalSince(now), 0) / 3_600
+        guard deltaHours <= 2 else {
+            return 0
+        }
+        let imminence = 1 - (deltaHours / 2)
+        let proximity = clampedUnit(Foundation.exp(-distanceKm / 3.0))
+        return 0.04 * imminence * proximity
+    }
+
+    private func clampedUnit(_ value: Double) -> Double {
+        min(max(value, 0), 1)
     }
 
     private func bootstrapNearbyPlacesIfNeeded() {
@@ -2584,6 +2768,8 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         nearbyRecommendationPlaces = limited
+        nearbyRecommendationRevision &+= 1
+        invalidateNearbyRankingCache()
     }
 
     private func sameRenderedPlaceIDs(lhs: [HePlace], rhs: [HePlace]) -> Bool {
@@ -3113,8 +3299,38 @@ final class HomeMapViewModel: ObservableObject {
         if nearbyNotificationEnabled, reason != "cameraMove", reason != "cameraMoveContained" {
             scheduleNearbyReminderSync()
         }
+        maybeApplyInitialRecommendationFocus(triggerReason: reason, now: effectiveNow)
         if !ranking.rendered.isEmpty {
             scheduleAutoOpenIfNeeded()
+        }
+    }
+
+    private func maybeApplyInitialRecommendationFocus(triggerReason: String, now: Date) {
+        guard !hasAppliedInitialRecommendationFocus else {
+            return
+        }
+        guard triggerReason == "bootstrap" || triggerReason == "viewAppear" else {
+            return
+        }
+
+        if let focusRevision = initialRecommendationFocusRevision,
+           cameraChangeRevision != focusRevision {
+            hasAppliedInitialRecommendationFocus = true
+            debugLog("skipInitialRecommendationFocus reason=userCameraChanged")
+            return
+        }
+
+        guard let target = recommendedPlace(now: now) else {
+            return
+        }
+        hasAppliedInitialRecommendationFocus = true
+        debugLog("applyInitialRecommendationFocus place=\(target.name)")
+        withAnimation(.easeInOut(duration: 0.24)) {
+            setProgrammaticMapPosition(
+                .region(nonExpandingFocusedRegion(for: target)),
+                source: "initialRecommendationFocus",
+                suppressionWindow: 0.35
+            )
         }
     }
 
@@ -3436,8 +3652,14 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func invalidateAllPlacesDerivedCaches() {
+        invalidateNearbyRankingCache()
         invalidateSideDrawerSnapshotCache()
         invalidateCalendarDetailSnapshotCache()
+    }
+
+    private func invalidateNearbyRankingCache() {
+        nearbyRankingCacheKey = nil
+        nearbyRankingCache = []
     }
 
     private func calendarDetailSnapshot(now: Date = Date()) -> [HePlace] {

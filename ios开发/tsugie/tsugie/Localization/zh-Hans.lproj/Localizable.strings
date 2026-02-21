@@ -72,7 +72,7 @@
 "detail.heat" = "热度";
 "detail.surprise" = "惊喜";
 "detail.progress_title.ongoing" = "活动进度";
-"detail.progress_title.upcoming" = "开始前时间轴";
+"detail.progress_title.upcoming" = "开始前进度";
 "detail.progress_title.ended" = "活动状态";
 "detail.progress_title.unknown" = "时间信息";
 "detail.upcoming_pending" = "开始时间确认中";
@@ -130,12 +130,12 @@
 "drawer.language.switch_a11y" = "切换语言，当前%@";
 
 "calendar.title" = "时巡日历";
-"calendar.subtitle" = "时间维度的へ统计（地图是位置维度）";
+"calendar.subtitle" = "按日期查看へ统计";
 "calendar.close_a11y" = "关闭日历";
 "calendar.empty" = "这个期间没有可用的へ。";
 "calendar.day_title" = "%@ 的へ";
 "calendar.day_title.fallback" = "日程へ";
-"calendar.drawer.summary" = "按时间轴提取，排序优先距离与开始时间。";
+"calendar.drawer.summary" = "按日期提取，排序优先距离与开始时间。";
 "calendar.drawer.no_match" = "无匹配项目";
 "calendar.selected_day.empty" = "所选日期没有可用的へ。";
 "calendar.category.all" = "全部";
@@ -147,7 +147,7 @@
 "calendar.category.other" = "其他";
 
 "placeholder.title" = "时巡";
-"placeholder.desc1" = "日历页是时间维度语义，与地图页的位置维度语义独立。";
+"placeholder.desc1" = "日历页用于按日期浏览活动。";
 "placeholder.desc2" = "第一阶段仅保留独立页面占位，后续阶段接入完整月历与当日抽屉。";
 
 "mock.sumida.hint" = "✨ (ง •̀_•́)ง 现在出发最合适";

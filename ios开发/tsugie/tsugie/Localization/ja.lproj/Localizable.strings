@@ -72,7 +72,7 @@
 "detail.heat" = "熱気";
 "detail.surprise" = "驚き";
 "detail.progress_title.ongoing" = "活動進行度";
-"detail.progress_title.upcoming" = "開始までの時間軸";
+"detail.progress_title.upcoming" = "開始まで";
 "detail.progress_title.ended" = "活動ステータス";
 "detail.progress_title.unknown" = "時間情報";
 "detail.upcoming_pending" = "開始時刻を確認中";
@@ -130,12 +130,12 @@
 "drawer.language.switch_a11y" = "言語を切り替える（現在: %@）";
 
 "calendar.title" = "時めぐりカレンダー";
-"calendar.subtitle" = "時間軸のへ統計（マップは位置軸）";
+"calendar.subtitle" = "日付ごとのへ統計";
 "calendar.close_a11y" = "カレンダーを閉じる";
 "calendar.empty" = "この期間のへはありません。";
 "calendar.day_title" = "%@ のへ";
 "calendar.day_title.fallback" = "日付のへ";
-"calendar.drawer.summary" = "時間軸から抽出。並び順は近さと開始の早さを優先。";
+"calendar.drawer.summary" = "日付で抽出。並び順は近さと開始の早さを優先。";
 "calendar.drawer.no_match" = "該当なし";
 "calendar.selected_day.empty" = "選択した日のへはありません。";
 "calendar.category.all" = "全部";
@@ -147,7 +147,7 @@
 "calendar.category.other" = "その他";
 
 "placeholder.title" = "時めぐり";
-"placeholder.desc1" = "カレンダーページは時間軸の意味を持ち、マップページの位置軸とは独立しています。";
+"placeholder.desc1" = "カレンダーページは日付でへを探すためのページです。";
 "placeholder.desc2" = "第1段階では独立ページのプレースホルダーのみを保持し、後続段階で月間カレンダーと当日ドロワーを接続します。";
 
 "mock.sumida.hint" = "✨ (ง •̀_•́)ง いま出発が最適";
