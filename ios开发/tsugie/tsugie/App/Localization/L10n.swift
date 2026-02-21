@@ -237,6 +237,8 @@ enum L10n {
         static var favoritesFastestTitle: String { text("drawer.favorites.fastest_title") }
         static var favoritesFastestEmpty: String { text("drawer.favorites.fastest.empty") }
         static var favoritesFastestHintToday: String { text("drawer.favorites.fastest.hint.today") }
+        static var favoritesFastestHintTodayLater: String { text("drawer.favorites.fastest.hint.today_later") }
+        static var favoritesFastestHintTodayEnded: String { text("drawer.favorites.fastest.hint.today_ended") }
         static var favoritesFastestHintOther: String { text("drawer.favorites.fastest.hint.other") }
         static var notificationsTitle: String { text("drawer.notifications.title") }
         static var startReminderTitle: String { text("drawer.notifications.start_reminder.title") }

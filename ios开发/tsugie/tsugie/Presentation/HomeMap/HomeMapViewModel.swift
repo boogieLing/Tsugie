@@ -1855,8 +1855,9 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func quickMetaText(for place: HePlace, now: Date? = nil) -> String {
-        let snapshot = eventSnapshot(for: place, now: now)
-        return "\(distanceText(for: place)) ・ \(quickStartDateText(for: snapshot))"
+        let resolvedNow = now ?? Date()
+        let snapshot = eventSnapshot(for: place, now: resolvedNow)
+        return "\(distanceText(for: place)) ・ \(quickStartDateText(for: snapshot, now: resolvedNow))"
     }
 
     func timeRangeText(for place: HePlace, now: Date? = nil) -> String {
@@ -2003,10 +2004,14 @@ final class HomeMapViewModel: ObservableObject {
 
     func fastestFavoriteIntroText(now: Date = Date()) -> String {
         guard let firstPlace = fastestFavoritePlaces(now: now, limit: 1).first else {
+            if hasEndedFavoritesToday(now: now) {
+                return L10n.SideDrawer.favoritesFastestHintTodayEnded
+            }
             return L10n.SideDrawer.favoritesFastestHintOther
         }
 
         let snapshot = eventSnapshot(for: firstPlace, now: now)
+        let calendar = Calendar.current
         switch snapshot.status {
         case .ongoing:
             return L10n.SideDrawer.favoritesFastestHintToday
@@ -2014,8 +2019,8 @@ final class HomeMapViewModel: ObservableObject {
             guard let startDate = snapshot.startDate else {
                 return L10n.SideDrawer.favoritesFastestHintOther
             }
-            if Calendar.current.isDateInToday(startDate) {
-                return L10n.SideDrawer.favoritesFastestHintToday
+            if calendar.isDateInToday(startDate) {
+                return L10n.SideDrawer.favoritesFastestHintTodayLater
             }
             let dayGap = daysUntil(date: startDate, from: now)
             if dayGap <= 7 {
@@ -2026,7 +2031,13 @@ final class HomeMapViewModel: ObservableObject {
                 return L10n.SideDrawer.favoritesFastestHintWithinMonth(weeks: weeks)
             }
             return L10n.SideDrawer.favoritesFastestHintOther
-        case .ended, .unknown:
+        case .ended:
+            if let referenceDate = snapshot.endDate ?? snapshot.startDate,
+               calendar.isDateInToday(referenceDate) {
+                return L10n.SideDrawer.favoritesFastestHintTodayEnded
+            }
+            return L10n.SideDrawer.favoritesFastestHintOther
+        case .unknown:
             return L10n.SideDrawer.favoritesFastestHintOther
         }
     }
@@ -2164,12 +2175,20 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
-    private func quickStartDateText(for snapshot: EventStatusSnapshot) -> String {
+    private func quickStartDateText(for snapshot: EventStatusSnapshot, now: Date) -> String {
+        if snapshot.status == .ended {
+            return L10n.EventStatus.ended
+        }
+
+        if let endDate = snapshot.endDate, endDate <= now {
+            return L10n.EventStatus.ended
+        }
+
         guard let startDate = snapshot.startDate else {
             return L10n.Common.dateUnknown
         }
 
-        if Calendar.current.isDateInToday(startDate) {
+        if snapshot.status == .upcoming, Calendar.current.isDateInToday(startDate) {
             return L10n.Home.quickDateTodaySoon
         }
 
@@ -2187,6 +2206,18 @@ final class HomeMapViewModel: ObservableObject {
         let startDay = calendar.startOfDay(for: referenceDate)
         let targetDay = calendar.startOfDay(for: date)
         return max(calendar.dateComponents([.day], from: startDay, to: targetDay).day ?? 0, 0)
+    }
+
+    private func hasEndedFavoritesToday(now: Date) -> Bool {
+        let calendar = Calendar.current
+        return favoritePlaces().contains { place in
+            let snapshot = eventSnapshot(for: place, now: now)
+            guard snapshot.status == .ended,
+                  let referenceDate = snapshot.endDate ?? snapshot.startDate else {
+                return false
+            }
+            return calendar.isDateInToday(referenceDate)
+        }
     }
 
     private func scheduleAutoOpenIfNeeded() {

@@ -95,8 +95,10 @@
 "drawer.favorites.fastest.empty" = "暂无可立即出发的收藏。";
 
 "drawer.favorites.fastest.hint.today" = "今天就有：马上出发！";
-"drawer.favorites.fastest.hint.within_week" = "一周内：再过%d天...";
-"drawer.favorites.fastest.hint.within_month" = "一个月内：再过%d周...";
+"drawer.favorites.fastest.hint.today_later" = "今天就有：把期待装进行囊，出发！";
+"drawer.favorites.fastest.hint.today_ended" = "今日活动已结束。";
+"drawer.favorites.fastest.hint.within_week" = "一周内见：还有%d天，期待正在升温";
+"drawer.favorites.fastest.hint.within_month" = "一月内见：还有%d周，把期待慢慢点亮";
 "drawer.favorites.fastest.hint.other" = "还有其他想去的吗？";
 "drawer.notifications.title" = "通知设置";
 "drawer.notifications.start_reminder.title" = "开始前提醒";

@@ -93,8 +93,10 @@
 "drawer.favorites.fastest.empty" = "No favorites starting soon.";
 
 "drawer.favorites.fastest.hint.today" = "Today available: leave now!";
-"drawer.favorites.fastest.hint.within_week" = "Within a week: in %d day(s)...";
-"drawer.favorites.fastest.hint.within_month" = "Within a month: in %d week(s)...";
+"drawer.favorites.fastest.hint.today_later" = "Happening today: bring the excitement and head out!";
+"drawer.favorites.fastest.hint.today_ended" = "Today's events have ended.";
+"drawer.favorites.fastest.hint.within_week" = "Within a week: %d day(s) to go, the excitement is building";
+"drawer.favorites.fastest.hint.within_month" = "Within a month: %d week(s) to go, let the anticipation glow";
 "drawer.favorites.fastest.hint.other" = "Any other places you want to visit?";
 "drawer.notifications.title" = "Notification settings";
 "drawer.notifications.start_reminder.title" = "Before-start reminder";

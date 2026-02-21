@@ -95,8 +95,10 @@
 "drawer.favorites.fastest.empty" = "いま向かえる栞はまだありません。";
 
 "drawer.favorites.fastest.hint.today" = "今日行ける：いま出発！";
-"drawer.favorites.fastest.hint.within_week" = "一週間以内：あと%d日...";
-"drawer.favorites.fastest.hint.within_month" = "一か月以内：あと%d週...";
+"drawer.favorites.fastest.hint.today_later" = "今日開催：ときめきを連れて、いざ出発！";
+"drawer.favorites.fastest.hint.today_ended" = "本日の開催は終了しました。";
+"drawer.favorites.fastest.hint.within_week" = "一週間以内：あと%d日、胸の高鳴りが近づく";
+"drawer.favorites.fastest.hint.within_month" = "一か月以内：あと%d週、楽しみをゆっくり育てよう";
 "drawer.favorites.fastest.hint.other" = "ほかに行きたい場所はある？";
 "drawer.notifications.title" = "しらせのしつらえ";
 "drawer.notifications.start_reminder.title" = "開始前リマインド";
