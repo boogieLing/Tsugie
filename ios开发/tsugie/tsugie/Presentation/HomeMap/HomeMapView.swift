@@ -252,66 +252,19 @@ struct HomeMapView: View {
                     .zIndex(13)
                 }
 
+                if !viewModel.isDetailVisible {
+                    topTrailingControls(
+                        locationIconColor: locationIconColor,
+                        sidebarIconColor: sidebarIconColor
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 14)
+                    .padding(.trailing, 14)
+                    .zIndex(12)
+                }
+
                 SideDrawerLayerView(viewModel: viewModel)
                     .zIndex(20)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if !viewModel.isCalendarPresented && !viewModel.isDetailVisible && !viewModel.isSideDrawerOpen {
-                HStack(spacing: 8) {
-                    Button {
-                        viewModel.closeMarkerActionBubble()
-                        onOpenCalendar()
-                    } label: {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.24, green: 0.40, blue: 0.46))
-                            .frame(width: 34, height: 34)
-                            .background(Color.white.opacity(0.66), in: Circle())
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.openCalendarA11y)
-
-                    Button {
-                        viewModel.resetToCurrentLocation()
-                    } label: {
-                        Image(systemName: "location.fill")
-                            .symbolRenderingMode(.monochrome)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(locationIconColor)
-                            .opacity(1)
-                            .frame(width: 34, height: 34)
-                            .background(Color.white.opacity(0.66), in: Circle())
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.resetLocationA11y)
-
-                    Button {
-                        viewModel.toggleSideDrawerPanel()
-                    } label: {
-                        Image("HomeSidebarIcon")
-                            .resizable()
-                            .renderingMode(.template)
-                            .scaledToFit()
-                            .frame(height: 19)
-                            .foregroundStyle(sidebarIconColor)
-                            .opacity(1)
-                            .shadow(color: sidebarIconColor.opacity(0.24), radius: 1.2, x: 0, y: 1)
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .background(Color.white.opacity(0.66), in: Capsule())
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .overlay(Capsule().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.openMenuA11y)
-                }
-                .padding(.top, 14)
-                .padding(.trailing, 14)
             }
         }
         .overlay(alignment: .top) {
@@ -385,6 +338,61 @@ struct HomeMapView: View {
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.topNotice?.id)
+    }
+
+    private func topTrailingControls(locationIconColor: Color, sidebarIconColor: Color) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.closeMarkerActionBubble()
+                onOpenCalendar()
+            } label: {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.24, green: 0.40, blue: 0.46))
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.66), in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Home.openCalendarA11y)
+
+            Button {
+                viewModel.resetToCurrentLocation()
+            } label: {
+                Image(systemName: "location.fill")
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(locationIconColor)
+                    .opacity(1)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.66), in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Home.resetLocationA11y)
+
+            Button {
+                viewModel.toggleSideDrawerPanel()
+            } label: {
+                Image("HomeSidebarIcon")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(height: 19)
+                    .foregroundStyle(sidebarIconColor)
+                    .opacity(1)
+                    .shadow(color: sidebarIconColor.opacity(0.24), radius: 1.2, x: 0, y: 1)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(Color.white.opacity(0.66), in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Home.openMenuA11y)
+        }
     }
 
     private func openAppleMapsNavigation(to place: HePlace) {

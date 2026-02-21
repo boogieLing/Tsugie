@@ -279,6 +279,27 @@ final class HomeMapViewModel: ObservableObject {
         let recommendationDroppedCount: Int
     }
 
+    private struct SideDrawerSnapshotCacheKey: Equatable {
+        let sourceRevision: UInt64
+        let usesRenderedSource: Bool
+        let placeStateRevision: UInt64
+    }
+
+    private struct CalendarDetailSnapshotCacheKey: Equatable {
+        let sourceRevision: UInt64
+        let usesRenderedSource: Bool
+        let daySerial: Int
+    }
+
+    private struct SideDrawerSnapshot {
+        let favoritesAll: [HePlace]
+        let favoritesPlanned: [HePlace]
+        let favoritesChecked: [HePlace]
+        let favoriteCounts: [FavoriteDrawerFilter: Int]
+        let mapCategoryCounts: [MapPlaceCategoryFilter: Int]
+        let mapCategoryFilters: [MapPlaceCategoryFilter]
+    }
+
     struct LocationFallbackNotice: Identifiable {
         let reason: AppLocationFallbackReason
 
@@ -418,9 +439,15 @@ final class HomeMapViewModel: ObservableObject {
     private var cameraChangeRevision: UInt64 = 0
     private var cameraMoveCountSinceHardRecycle: Int = 0
     private var placesRevision: UInt64 = 1
+    private var allPlacesRevision: UInt64 = 1
+    private var placeStateRevision: UInt64 = 0
     private var markerEntriesCacheKey: MarkerEntriesCacheKey?
     private var markerEntriesCache: [MapMarkerEntry] = []
     private var markerEntriesIndexByID: [UUID: Int] = [:]
+    private var sideDrawerSnapshotCacheKey: SideDrawerSnapshotCacheKey?
+    private var sideDrawerSnapshotCache: SideDrawerSnapshot?
+    private var calendarDetailSnapshotCacheKey: CalendarDetailSnapshotCacheKey?
+    private var calendarDetailSnapshotCache: [HePlace] = []
     private var hasAutoOpened = false
     private var hasStartedLaunchPrewarm = false
     private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
@@ -437,6 +464,9 @@ final class HomeMapViewModel: ObservableObject {
     private var didLoadPersistedVisualSettings = false
     private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
     private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
+    private let sideDrawerAnimation = Animation.spring(response: 0.40, dampingFraction: 0.88)
+    private let favoriteDrawerOpenAnimation = Animation.spring(response: 0.46, dampingFraction: 0.90)
+    private let favoriteDrawerCloseAnimation = Animation.spring(response: 0.62, dampingFraction: 0.94)
     private let startReminderNotificationPrefix = "tsugie.notify.start."
     private let nearbyReminderNotificationPrefix = "tsugie.notify.nearby."
     private let startReminderLeadTime: TimeInterval = 97 * 60
@@ -515,8 +545,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     var calendarDetailPlaces: [HePlace] {
-        let full = places.isEmpty ? renderedPlaces : places
-        return interactivePlaces(from: full, now: Date())
+        calendarDetailSnapshot()
     }
 
     var quickCardPlace: HePlace? {
@@ -735,6 +764,8 @@ final class HomeMapViewModel: ObservableObject {
         hasStartedLaunchPrewarm = true
         bootstrapNearbyPlacesIfNeeded()
         _ = mapMarkerEntries()
+        prewarmSideDrawerSnapshotForLaunch()
+        prewarmCalendarCacheForLaunch()
     }
 
     func prepareForCalendarPlaceNavigation() {
@@ -983,52 +1014,60 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         cancelPendingMapZoomRestore()
-        if !isSideDrawerOpen {
-            isSideDrawerOpen = true
-        }
-        if sideDrawerMenu != .favorites {
-            sideDrawerMenu = .favorites
-        }
-        if isFavoriteDrawerOpen {
-            isFavoriteDrawerOpen = false
-        }
-        if isThemePaletteOpen {
-            isThemePaletteOpen = false
+        withAnimation(sideDrawerAnimation) {
+            if !isSideDrawerOpen {
+                isSideDrawerOpen = true
+            }
+            if sideDrawerMenu != .favorites {
+                sideDrawerMenu = .favorites
+            }
+            if isFavoriteDrawerOpen {
+                isFavoriteDrawerOpen = false
+            }
+            if isThemePaletteOpen {
+                isThemePaletteOpen = false
+            }
         }
     }
 
     func closeSideDrawerPanel() {
-        if isSideDrawerOpen {
-            isSideDrawerOpen = false
-        }
-        if isFavoriteDrawerOpen {
-            isFavoriteDrawerOpen = false
-        }
-        if sideDrawerMenu != .none {
-            sideDrawerMenu = .none
-        }
-        if isThemePaletteOpen {
-            isThemePaletteOpen = false
+        withAnimation(sideDrawerAnimation) {
+            if isSideDrawerOpen {
+                isSideDrawerOpen = false
+            }
+            if isFavoriteDrawerOpen {
+                isFavoriteDrawerOpen = false
+            }
+            if sideDrawerMenu != .none {
+                sideDrawerMenu = .none
+            }
+            if isThemePaletteOpen {
+                isThemePaletteOpen = false
+            }
         }
     }
 
     func closeSideDrawerBackdrop() {
         if isFavoriteDrawerOpen {
-            isFavoriteDrawerOpen = false
+            withAnimation(favoriteDrawerCloseAnimation) {
+                isFavoriteDrawerOpen = false
+            }
             return
         }
         closeSideDrawerPanel()
     }
 
     func setSideDrawerMenu(_ menu: SideDrawerMenu) {
-        if !isSideDrawerOpen {
-            isSideDrawerOpen = true
-        }
-        if sideDrawerMenu != menu {
-            sideDrawerMenu = menu
-        }
-        if menu != .favorites, isFavoriteDrawerOpen {
-            isFavoriteDrawerOpen = false
+        withAnimation(sideDrawerAnimation) {
+            if !isSideDrawerOpen {
+                isSideDrawerOpen = true
+            }
+            if sideDrawerMenu != menu {
+                sideDrawerMenu = menu
+            }
+            if menu != .favorites, isFavoriteDrawerOpen {
+                isFavoriteDrawerOpen = false
+            }
         }
     }
 
@@ -1058,14 +1097,18 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func openFavoriteDrawer() {
-        isSideDrawerOpen = true
-        sideDrawerMenu = .favorites
-        favoriteFilter = .all
-        isFavoriteDrawerOpen = true
+        withAnimation(favoriteDrawerOpenAnimation) {
+            isSideDrawerOpen = true
+            sideDrawerMenu = .favorites
+            favoriteFilter = .all
+            isFavoriteDrawerOpen = true
+        }
     }
 
     func closeFavoriteDrawer() {
-        isFavoriteDrawerOpen = false
+        withAnimation(favoriteDrawerCloseAnimation) {
+            isFavoriteDrawerOpen = false
+        }
     }
 
     func setFavoriteFilter(_ filter: FavoriteDrawerFilter) {
@@ -1079,6 +1122,7 @@ final class HomeMapViewModel: ObservableObject {
 
     func clearLocalData() {
         placeStateStore.clearAll()
+        bumpPlaceStateRevision()
         placeStampStore.clearAll()
         placeDecorationStore.retainOnly(placeID: nil)
 
@@ -1291,45 +1335,27 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func filteredFavoritePlaces() -> [HePlace] {
-        let favorites = favoritePlaces()
-        return filteredFavoritePlacesByStatus(from: favorites)
+        let snapshot = sideDrawerSnapshot()
+        switch favoriteFilter {
+        case .all:
+            return snapshot.favoritesAll
+        case .planned:
+            return snapshot.favoritesPlanned
+        case .checked:
+            return snapshot.favoritesChecked
+        }
     }
 
     func favoriteFilterCount(_ filter: FavoriteDrawerFilter) -> Int {
-        let favorites = favoritePlaces()
-        switch filter {
-        case .all:
-            return favorites.count
-        case .planned:
-            return favorites.filter { !placeState(for: $0.id).isCheckedIn }.count
-        case .checked:
-            return favorites.filter { placeState(for: $0.id).isCheckedIn }.count
-        }
+        sideDrawerSnapshot().favoriteCounts[filter] ?? 0
     }
 
     func mapCategoryFilterCount(_ filter: MapPlaceCategoryFilter) -> Int {
-        let full = places.isEmpty ? renderedPlaces : places
-        guard filter != .all else {
-            return full.count
-        }
-        return full.filter { $0.heType.rawValue == filter.rawValue }.count
+        sideDrawerSnapshot().mapCategoryCounts[filter] ?? 0
     }
 
     func mapCategoryFiltersForSidebar() -> [MapPlaceCategoryFilter] {
-        let source = places.isEmpty ? renderedPlaces : places
-        let typeIDs = Set(source.map { $0.heType.rawValue })
-        let preferredOrder = [
-            MapPlaceCategoryFilter.hanabi.rawValue,
-            MapPlaceCategoryFilter.matsuri.rawValue,
-            MapPlaceCategoryFilter.sakura.rawValue,
-            MapPlaceCategoryFilter.momiji.rawValue,
-            MapPlaceCategoryFilter.nature.rawValue,
-            MapPlaceCategoryFilter.other.rawValue
-        ]
-        let ordered = preferredOrder.filter { typeIDs.contains($0) }
-        let remaining = typeIDs.subtracting(Set(ordered)).sorted()
-        let categoryFilters = (ordered + remaining).map(MapPlaceCategoryFilter.init(rawValue:))
-        return [.all] + categoryFilters
+        sideDrawerSnapshot().mapCategoryFilters
     }
 
     func mapCategoryFilterTitle(_ filter: MapPlaceCategoryFilter) -> String {
@@ -1351,6 +1377,87 @@ final class HomeMapViewModel: ObservableObject {
         default:
             return filter.rawValue.localizedCapitalized
         }
+    }
+
+    private func sideDrawerSnapshot() -> SideDrawerSnapshot {
+        let usesRenderedSource = places.isEmpty
+        let sourceRevision = usesRenderedSource ? placesRevision : allPlacesRevision
+        let cacheKey = SideDrawerSnapshotCacheKey(
+            sourceRevision: sourceRevision,
+            usesRenderedSource: usesRenderedSource,
+            placeStateRevision: placeStateRevision
+        )
+        if sideDrawerSnapshotCacheKey == cacheKey, let cached = sideDrawerSnapshotCache {
+            return cached
+        }
+
+        let source = usesRenderedSource ? renderedPlaces : places
+        let interactive = source.filter { isPlaceInteractionEnabled($0) }
+        let favoriteTuples: [(place: HePlace, isCheckedIn: Bool)] = interactive.compactMap { place in
+            let state = placeStateStore.state(for: place.id)
+            guard state.isFavorite else {
+                return nil
+            }
+            return (place, state.isCheckedIn)
+        }
+
+        let snapshotNow = Date()
+        let favoritesAll = favoriteTuples
+            .map(\.place)
+            .sorted { lhs, rhs in
+                isFavoriteDrawerHigherPriority(lhs, rhs, now: snapshotNow)
+            }
+
+        let checkedInByID = Dictionary(uniqueKeysWithValues: favoriteTuples.map { ($0.place.id, $0.isCheckedIn) })
+        let favoritesPlanned = favoritesAll.filter { !(checkedInByID[$0.id] ?? false) }
+        let favoritesChecked = favoritesAll.filter { checkedInByID[$0.id] ?? false }
+        let favoriteCounts: [FavoriteDrawerFilter: Int] = [
+            .all: favoritesAll.count,
+            .planned: favoritesPlanned.count,
+            .checked: favoritesChecked.count
+        ]
+
+        var mapCategoryCounts: [MapPlaceCategoryFilter: Int] = [.all: source.count]
+        for place in source {
+            let filter = MapPlaceCategoryFilter(rawValue: place.heType.rawValue)
+            mapCategoryCounts[filter, default: 0] += 1
+        }
+
+        let typeIDs = Set(source.map { $0.heType.rawValue })
+        let preferredOrder = [
+            MapPlaceCategoryFilter.hanabi.rawValue,
+            MapPlaceCategoryFilter.matsuri.rawValue,
+            MapPlaceCategoryFilter.sakura.rawValue,
+            MapPlaceCategoryFilter.momiji.rawValue,
+            MapPlaceCategoryFilter.nature.rawValue,
+            MapPlaceCategoryFilter.other.rawValue
+        ]
+        let ordered = preferredOrder.filter { typeIDs.contains($0) }
+        let remaining = typeIDs.subtracting(Set(ordered)).sorted()
+        let categoryFilters = (ordered + remaining).map(MapPlaceCategoryFilter.init(rawValue:))
+        let mapCategoryFilters = [.all] + categoryFilters
+
+        let snapshot = SideDrawerSnapshot(
+            favoritesAll: favoritesAll,
+            favoritesPlanned: favoritesPlanned,
+            favoritesChecked: favoritesChecked,
+            favoriteCounts: favoriteCounts,
+            mapCategoryCounts: mapCategoryCounts,
+            mapCategoryFilters: mapCategoryFilters
+        )
+        sideDrawerSnapshotCacheKey = cacheKey
+        sideDrawerSnapshotCache = snapshot
+        return snapshot
+    }
+
+    private func invalidateSideDrawerSnapshotCache() {
+        sideDrawerSnapshotCacheKey = nil
+        sideDrawerSnapshotCache = nil
+    }
+
+    private func bumpPlaceStateRevision() {
+        placeStateRevision &+= 1
+        invalidateSideDrawerSnapshotCache()
     }
 
     func openQuickFromDrawer(placeID: UUID) {
@@ -1803,6 +1910,8 @@ final class HomeMapViewModel: ObservableObject {
 
     func toggleFavorite(for placeID: UUID) {
         let nextState = placeStateStore.toggleFavorite(for: placeID)
+        bumpPlaceStateRevision()
+        prewarmSideDrawerSnapshotForLaunch()
         if nextState.isFavorite, let place = place(for: placeID) {
             placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
         }
@@ -1824,6 +1933,8 @@ final class HomeMapViewModel: ObservableObject {
             }
         }
         let nextState = placeStateStore.toggleCheckedIn(for: placeID)
+        bumpPlaceStateRevision()
+        prewarmSideDrawerSnapshotForLaunch()
         if let place = place(for: placeID) {
             if nextState.isFavorite {
                 placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
@@ -1853,11 +1964,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func favoritePlaces() -> [HePlace] {
-        let source = places.isEmpty ? renderedPlaces : places
-        return source
-            .filter { isPlaceInteractionEnabled($0) }
-            .filter { placeState(for: $0.id).isFavorite }
-            .sorted(by: isHigherPriority)
+        sideDrawerSnapshot().favoritesAll
     }
 
     func fastestFavoritePlaces(now: Date = Date(), limit: Int = 2) -> [HePlace] {
@@ -2021,17 +2128,6 @@ final class HomeMapViewModel: ObservableObject {
         return place.heType.rawValue == mapCategoryFilter.rawValue
     }
 
-    private func filteredFavoritePlacesByStatus(from places: [HePlace]) -> [HePlace] {
-        switch favoriteFilter {
-        case .all:
-            return places
-        case .planned:
-            return places.filter { !placeState(for: $0.id).isCheckedIn }
-        case .checked:
-            return places.filter { placeState(for: $0.id).isCheckedIn }
-        }
-    }
-
     private func reconcileSelectionForMapFilter() {
         let visiblePlaceIDs = Set(mapPlaces().map(\.id))
         let nextDetailPlaceID = _detailPlaceID.flatMap { visiblePlaceIDs.contains($0) ? $0 : nil }
@@ -2187,6 +2283,15 @@ final class HomeMapViewModel: ObservableObject {
             return lhs.scaleScore > rhs.scaleScore
         }
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private func isFavoriteDrawerHigherPriority(_ lhs: HePlace, _ rhs: HePlace, now: Date) -> Bool {
+        let lhsOngoing = eventStatus(for: lhs, now: now) == .ongoing
+        let rhsOngoing = eventStatus(for: rhs, now: now) == .ongoing
+        if lhsOngoing != rhsOngoing {
+            return lhsOngoing
+        }
+        return isHigherPriority(lhs, rhs)
     }
 
     private func nearbyRecommendationSignal(for place: HePlace, now: Date) -> (place: HePlace, score: Double, stage: Int, stageDelta: TimeInterval) {
@@ -2424,7 +2529,10 @@ final class HomeMapViewModel: ObservableObject {
 
     private func replaceAllPlaces(_ newPlaces: [HePlace]) {
         places = newPlaces
+        allPlacesRevision &+= 1
         invalidateAllPlacesDerivedCaches()
+        prewarmSideDrawerSnapshotForLaunch()
+        prewarmCalendarCacheForLaunch()
     }
 
     private func replaceRenderedPlaces(_ newPlaces: [HePlace]) {
@@ -3297,7 +3405,54 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func invalidateAllPlacesDerivedCaches() {
-        // Reserved for future place-derived caches.
+        invalidateSideDrawerSnapshotCache()
+        invalidateCalendarDetailSnapshotCache()
+    }
+
+    private func calendarDetailSnapshot(now: Date = Date()) -> [HePlace] {
+        let usesRenderedSource = places.isEmpty
+        let sourceRevision = usesRenderedSource ? placesRevision : allPlacesRevision
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let daySerial = Int(dayStart.timeIntervalSince1970 / 86_400)
+        let cacheKey = CalendarDetailSnapshotCacheKey(
+            sourceRevision: sourceRevision,
+            usesRenderedSource: usesRenderedSource,
+            daySerial: daySerial
+        )
+
+        if calendarDetailSnapshotCacheKey == cacheKey {
+            return calendarDetailSnapshotCache
+        }
+
+        let source = usesRenderedSource ? renderedPlaces : places
+        let interactive = interactivePlaces(from: source, now: now)
+        calendarDetailSnapshotCacheKey = cacheKey
+        calendarDetailSnapshotCache = interactive
+        return interactive
+    }
+
+    private func invalidateCalendarDetailSnapshotCache() {
+        calendarDetailSnapshotCacheKey = nil
+        calendarDetailSnapshotCache = []
+    }
+
+    private func prewarmCalendarCacheForLaunch() {
+        let sourcePlaces = places
+        let sourceDetailPlaces = calendarDetailPlaces
+        let referenceNow = Date()
+        let locale = selectedLanguageLocale
+        DispatchQueue.global(qos: .userInitiated).async {
+            CalendarPageView.prewarmCache(
+                places: sourcePlaces,
+                detailPlaces: sourceDetailPlaces,
+                now: referenceNow,
+                locale: locale
+            )
+        }
+    }
+
+    private func prewarmSideDrawerSnapshotForLaunch() {
+        _ = sideDrawerSnapshot()
     }
 
     private func restoreMapZoomAfterSelectionIfNeeded(focusedPlaceID: UUID?) {

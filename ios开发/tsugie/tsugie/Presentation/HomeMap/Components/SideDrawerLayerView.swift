@@ -36,19 +36,35 @@ struct SideDrawerLayerView: View {
                 .allowsHitTesting(isLayerOpen)
                 .zIndex(viewModel.isFavoriteDrawerOpen ? 5 : 3)
 
-                favoriteDrawer(width: favoriteWidth)
-                    .padding(.top, 12)
-                    .padding(.leading, 12)
-                    .padding(.bottom, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .zIndex(viewModel.isFavoriteDrawerOpen ? 6 : 4)
+                if viewModel.isFavoriteDrawerOpen {
+                    favoriteDrawer(width: favoriteWidth)
+                        .padding(.top, 12)
+                        .padding(.leading, 12)
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            )
+                        )
+                        .zIndex(6)
+                }
 
-                sideDrawer(width: sideWidth)
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
-                    .padding(.bottom, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                    .zIndex(viewModel.isFavoriteDrawerOpen ? 4 : 5)
+                if viewModel.isSideDrawerOpen {
+                    sideDrawer(width: sideWidth)
+                        .padding(.top, 12)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            )
+                        )
+                        .zIndex(viewModel.isFavoriteDrawerOpen ? 4 : 5)
+                }
 
                 if viewModel.isSideDrawerOpen {
                     homeCategoryFilterRail(sideWidth: sideWidth, topSafeInset: topSafeInset)
@@ -157,8 +173,6 @@ struct SideDrawerLayerView: View {
                 .stroke(Color(red: 0.89, green: 0.96, blue: 0.98, opacity: 0.92), lineWidth: 1)
         )
         .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.16), radius: 16, x: 0, y: 10)
-        .offset(x: viewModel.isSideDrawerOpen ? 0 : width + 16)
-        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: viewModel.isSideDrawerOpen)
         .alert(
             L10n.SideDrawer.clearLocalDataConfirmTitle,
             isPresented: $isClearLocalDataConfirmPresented
@@ -236,8 +250,6 @@ struct SideDrawerLayerView: View {
                 .stroke(Color(red: 0.89, green: 0.96, blue: 0.98, opacity: 0.92), lineWidth: 1)
         )
         .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.16), radius: 16, x: 0, y: 10)
-        .offset(x: viewModel.isFavoriteDrawerOpen ? 0 : -(width + 16))
-        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: viewModel.isFavoriteDrawerOpen)
     }
 
     private var languageSwitcher: some View {
