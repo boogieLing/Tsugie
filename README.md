@@ -122,9 +122,9 @@ Tsugie 将 AI 推荐与 AI 热度推算整合为统一决策内核，确保“�
 
 #### A. 多信号特征融合：空间 + 时间 + 动态热度 + 动态惊喜
 
-- 推荐信号升级为：`SpaceScore / TimeScore / DynamicHeatScore / DynamicSurpriseScore / OngoingNearBoost / ImminentUpcomingBoost`。
-- 当前综合评分公式：`(0.33 * SpaceScore + 0.35 * TimeScore + 0.20 * DynamicHeatScore + 0.12 * DynamicSurpriseScore + OngoingNearBoost + ImminentUpcomingBoost) * CategoryWeight * GeoConfidencePenalty`。
-- 空间信号维持距离衰减，时间信号决定时机，动态热度与动态惊喜共同决定“现在是否值得去”。
+- 推荐内核采用多目标信号融合：空间可达性、时间可行动性、动态热度、动态惊喜、近场增益与临场窗口增益并行建模。
+- 排序核使用分层融合器与置信度惩罚链路，将弱置信、低时效候选稳定压制在后排。
+- 空间衰减负责“去哪更顺路”，时间门控负责“什么时候更值得”，热度与惊喜负责“为什么此刻更想去”。
 
 #### B. 时间状态门禁：先判可行动，再做分数竞争
 
@@ -135,9 +135,9 @@ Tsugie 将 AI 推荐与 AI 热度推算整合为统一决策内核，确保“�
 
 #### C. 类别先验与同分策略：保证业务优先级稳定
 
-- 类别权重采用 `hanabi=1.2 / matsuri=1.0 / nature=0.8 / other=1.0`。
-- 在接近同分时，类别优先级继续参与决策，避免轮播首位频繁抖动。
-- 类别权重与时间门禁协同生效，不会让低时效候选仅凭类别越级。
+- 类别先验采用可配置策略矩阵，在同分与近同分区间参与最终裁决。
+- 同分处理加入稳定化规则，避免轮播首位因微小扰动频繁抖动。
+- 类别先验与时间门禁协同执行，保证低时效候选无法绕过时机约束。
 
 #### D. 热度推算：从静态分值到动态体感
 
