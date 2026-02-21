@@ -22,17 +22,12 @@ struct SideDrawerLayerView: View {
 
             ZStack {
                 Button(action: viewModel.closeSideDrawerBackdrop) {
-                    ZStack {
-                        Color(
-                            red: 0.10,
-                            green: 0.20,
-                            blue: 0.27,
-                            opacity: viewModel.isFavoriteDrawerOpen ? 0.16 : 0.10
-                        )
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .opacity(0.54)
-                    }
+                    Color(
+                        red: 0.10,
+                        green: 0.20,
+                        blue: 0.27,
+                        opacity: viewModel.isFavoriteDrawerOpen ? 0.20 : 0.14
+                    )
                     .opacity(isLayerOpen ? 1 : 0)
                     .ignoresSafeArea()
                     .animation(.easeInOut(duration: 0.24), value: isLayerOpen)
@@ -70,7 +65,6 @@ struct SideDrawerLayerView: View {
                 }
             }
             .allowsHitTesting(isLayerOpen)
-            .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.isSideDrawerOpen)
             .onAppear {
                 refreshFavoriteSubtitle()
             }
@@ -81,6 +75,11 @@ struct SideDrawerLayerView: View {
             }
             .onChange(of: viewModel.selectedLanguageCode) { _, _ in
                 refreshFavoriteSubtitle()
+            }
+            .onChange(of: viewModel.sideDrawerMenu) { _, menu in
+                if menu == .favorites, viewModel.isFavoriteDrawerOpen {
+                    refreshFavoriteSubtitle()
+                }
             }
         }
     }
@@ -195,7 +194,7 @@ struct SideDrawerLayerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             ScrollView {
-                VStack(spacing: 8) {
+                LazyVStack(spacing: 8) {
                     if favorites.isEmpty {
                         Text(L10n.SideDrawer.favoritesEmpty)
                             .font(.system(size: 12))
@@ -435,26 +434,25 @@ struct SideDrawerLayerView: View {
     }
 
     private var fastestFavoriteQuickBrowse: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let fastestPlaces = viewModel.fastestFavoritePlaces(now: context.date, limit: 2)
-            let introText = viewModel.fastestFavoriteIntroText(now: context.date)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(introText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(red: 0.35, green: 0.48, blue: 0.54))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        let now = Date()
+        let fastestPlaces = viewModel.fastestFavoritePlaces(now: now, limit: 2)
+        let introText = viewModel.fastestFavoriteIntroText(now: now)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(introText)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color(red: 0.35, green: 0.48, blue: 0.54))
+                .lineLimit(1)
+                .truncationMode(.tail)
 
-                if fastestPlaces.isEmpty {
-                    Text(L10n.SideDrawer.favoritesFastestEmpty)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    VStack(spacing: 8) {
-                        ForEach(fastestPlaces) { place in
-                            favoriteCard(place, now: context.date, forceProgress: true)
-                        }
+            if fastestPlaces.isEmpty {
+                Text(L10n.SideDrawer.favoritesFastestEmpty)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(fastestPlaces) { place in
+                        favoriteCard(place, now: now, forceProgress: true)
                     }
                 }
             }

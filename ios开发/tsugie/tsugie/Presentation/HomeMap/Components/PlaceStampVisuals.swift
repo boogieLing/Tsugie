@@ -194,16 +194,12 @@ struct StampWhiteBaseImageView: View {
 
 private enum StampImageLoader {
     nonisolated static func loadImage(resourceName: String, maxPixelSize: Int) -> UIImage? {
-        guard let baseURL = Bundle.main.resourceURL else {
-            return nil
+        guard let imageURL = resolveImageURL(resourceName: resourceName) else {
+            return fallbackBundleNamedImage(resourceName: resourceName)
         }
-        let primaryURL = baseURL.appendingPathComponent(resourceName, isDirectory: false)
-        let fallbackURL = baseURL.appendingPathComponent("stamps", isDirectory: true)
-            .appendingPathComponent(resourceName, isDirectory: false)
-        let imageURL = FileManager.default.fileExists(atPath: primaryURL.path) ? primaryURL : fallbackURL
 
         guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil) else {
-            return UIImage(contentsOfFile: imageURL.path)
+            return UIImage(contentsOfFile: imageURL.path) ?? fallbackBundleNamedImage(resourceName: resourceName)
         }
 
         let options: [CFString: Any] = [
@@ -217,7 +213,64 @@ private enum StampImageLoader {
             return UIImage(cgImage: downsampled)
         }
 
-        return UIImage(contentsOfFile: imageURL.path)
+        return UIImage(contentsOfFile: imageURL.path) ?? fallbackBundleNamedImage(resourceName: resourceName)
+    }
+
+    nonisolated private static func resolveImageURL(resourceName: String) -> URL? {
+        guard let baseURL = Bundle.main.resourceURL else {
+            return nil
+        }
+
+        let fileName = URL(fileURLWithPath: resourceName).lastPathComponent
+        let fileURL = URL(fileURLWithPath: fileName)
+        let stem = fileURL.deletingPathExtension().lastPathComponent
+        let ext = fileURL.pathExtension.isEmpty ? nil : fileURL.pathExtension
+
+        let directCandidates: [URL] = [
+            baseURL.appendingPathComponent(resourceName, isDirectory: false),
+            baseURL.appendingPathComponent(fileName, isDirectory: false),
+            baseURL.appendingPathComponent("stamps", isDirectory: true).appendingPathComponent(fileName, isDirectory: false),
+            baseURL.appendingPathComponent("marker-decorations", isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+        ]
+        for candidate in directCandidates where FileManager.default.fileExists(atPath: candidate.path) {
+            return candidate
+        }
+
+        let bundleCandidates: [URL?] = [
+            Bundle.main.url(forResource: stem, withExtension: ext),
+            Bundle.main.url(forResource: stem, withExtension: ext, subdirectory: "stamps"),
+            Bundle.main.url(forResource: stem, withExtension: ext, subdirectory: "marker-decorations")
+        ]
+        for candidate in bundleCandidates {
+            if let candidate {
+                return candidate
+            }
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: baseURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        for case let candidate as URL in enumerator {
+            guard candidate.lastPathComponent == fileName,
+                  (try? candidate.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+                continue
+            }
+            return candidate
+        }
+        return nil
+    }
+
+    nonisolated private static func fallbackBundleNamedImage(resourceName: String) -> UIImage? {
+        let fileURL = URL(fileURLWithPath: resourceName)
+        let fileName = fileURL.lastPathComponent
+        let stem = fileURL.deletingPathExtension().lastPathComponent
+        return UIImage(named: resourceName)
+            ?? UIImage(named: fileName)
+            ?? UIImage(named: stem)
     }
 
     nonisolated static func loadWhiteBaseImage(resourceName: String, maxPixelSize: Int) -> UIImage? {

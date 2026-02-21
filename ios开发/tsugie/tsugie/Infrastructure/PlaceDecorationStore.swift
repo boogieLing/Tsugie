@@ -30,7 +30,7 @@ final class PlaceDecorationStore {
         }
 
         if let sampled = sampleResourceName(for: heType) {
-            let assigned = PlaceDecorationPresentation(resourceName: sampled, isAssetCatalog: false)
+            let assigned = PlaceDecorationPresentation(resourceName: normalizedResourceName(sampled), isAssetCatalog: false)
             assignedDecorations[placeID] = assigned
             retainOnly(placeID: placeID)
             return assigned
@@ -64,10 +64,14 @@ final class PlaceDecorationStore {
                 Self.resourceName(resourceName, belongsTo: folder)
             }
             if let picked = candidates.randomElement() {
-                return picked
+                return normalizedResourceName(picked)
             }
         }
         return nil
+    }
+
+    private func normalizedResourceName(_ resourceName: String) -> String {
+        URL(fileURLWithPath: resourceName).lastPathComponent
     }
 
     private func folders(for heType: HeType) -> [DecorationFolder] {

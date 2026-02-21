@@ -48,3 +48,5 @@ ios开发/tsugie/tsugie/Resources/he_images.payload.bin
 ios开发/tsugie/tsugie/Resources/he_places.payload.bin
 ios开发/tsugie/tsugie/Resources/he_places.index.json
 数据端/scripts/.DS_Store
+
+logs/

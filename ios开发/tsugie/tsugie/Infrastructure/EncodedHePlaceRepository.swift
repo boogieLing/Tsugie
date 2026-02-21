@@ -6,6 +6,59 @@ import os
 import zlib
 
 enum EncodedHePlaceRepository {
+    private struct BucketDecodeResult {
+        let items: [EncodedHePlaceItem]
+        let cacheHit: Bool
+    }
+
+    private final class DecodedBucketLRU {
+        private let capacity: Int
+        private let lock = NSLock()
+        nonisolated(unsafe) private var storage: [String: [EncodedHePlaceItem]] = [:]
+        nonisolated(unsafe) private var order: [String] = []
+
+        nonisolated init(capacity: Int) {
+            self.capacity = max(1, capacity)
+        }
+
+        nonisolated func value(for key: String) -> [EncodedHePlaceItem]? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let value = storage[key] else {
+                return nil
+            }
+            touch(key)
+            return value
+        }
+
+        nonisolated func insert(_ value: [EncodedHePlaceItem], for key: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if storage[key] != nil {
+                storage[key] = value
+                touch(key)
+                return
+            }
+            storage[key] = value
+            order.append(key)
+            trimIfNeeded()
+        }
+
+        nonisolated private func touch(_ key: String) {
+            if let index = order.firstIndex(of: key) {
+                order.remove(at: index)
+            }
+            order.append(key)
+        }
+
+        nonisolated private func trimIfNeeded() {
+            while order.count > capacity, let oldest = order.first {
+                order.removeFirst()
+                storage.removeValue(forKey: oldest)
+            }
+        }
+    }
+
     nonisolated private static let indexResourceName = "he_places.index"
     nonisolated private static let indexResourceExtension = "json"
     nonisolated private static let payloadResourceName = "he_places.payload"
@@ -13,6 +66,7 @@ enum EncodedHePlaceRepository {
     nonisolated private static let obfuscationKey = "tsugie-ios-seed-v1"
     nonisolated private static let defaultStartupCenter = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
     nonisolated private static let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "EncodedHePlaceRepository")
+    nonisolated private static let decodedBucketCache = DecodedBucketLRU(capacity: 96)
 
     nonisolated static func load() -> [HePlace] {
         loadNearby(
@@ -110,6 +164,51 @@ enum EncodedHePlaceRepository {
         )
     }
 
+    nonisolated static func preheatNeighborhood(
+        center: CLLocationCoordinate2D,
+        radiusKm: Double = 20,
+        limit: Int = 240
+    ) {
+        guard let indexURL = resolveResourceURL(resourceName: indexResourceName, resourceExtension: indexResourceExtension),
+              let indexData = try? Data(contentsOf: indexURL),
+              let indexEnvelope = try? JSONDecoder().decode(HePlacesSpatialIndexEnvelope.self, from: indexData),
+              let payloadURL = resolvePayloadURL(indexEnvelope: indexEnvelope),
+              let fileHandle = try? FileHandle(forReadingFrom: payloadURL) else {
+            return
+        }
+
+        defer {
+            try? fileHandle.close()
+        }
+
+        let warmRadiusKm = min(max(radiusKm * 0.88, 8), 45)
+        let warmLimit = min(max(limit / 2, 120), 320)
+        let stepKm = min(max(warmRadiusKm * 0.62, 4), 18)
+        let sampleCenters = preheatSampleCenters(around: center, stepKm: stepKm)
+
+        for sampleCenter in sampleCenters {
+            if Task.isCancelled {
+                return
+            }
+            _ = loadNearby(
+                from: indexEnvelope,
+                center: sampleCenter,
+                radiusKm: warmRadiusKm,
+                limit: warmLimit,
+                payloadReader: { bucket in
+                    readChunk(
+                        with: fileHandle,
+                        offset: bucket.payloadOffset,
+                        length: bucket.payloadLength
+                    )
+                }
+            )
+        }
+        debugLog(
+            "preheatNeighborhood done center=(\(center.latitude),\(center.longitude)) warmRadiusKm=\(warmRadiusKm) warmLimit=\(warmLimit) samples=\(sampleCenters.count)"
+        )
+    }
+
     nonisolated static func loadNearby(
         from indexData: Data,
         payloadData: Data,
@@ -180,6 +279,7 @@ enum EncodedHePlaceRepository {
         var decodedFromCandidateBuckets = 0
         var decodedFromExpandedBuckets = 0
         var expandedRounds = 0
+        var bucketDecodeCacheHits = 0
 
         let normalizedRadiusKm = max(radiusKm, 0.5)
         let expansionRadii = [normalizedRadiusKm, min(normalizedRadiusKm * 2, 80), min(normalizedRadiusKm * 4, 140)]
@@ -217,13 +317,14 @@ enum EncodedHePlaceRepository {
                     continue
                 }
                 matchedBuckets += 1
-                guard let payload = payloadReader(bucket) else {
+                guard let decodeResult = decodedItems(for: bucket, payloadReader: payloadReader) else {
                     failedChunkRead += 1
                     continue
                 }
-                let decoded: [EncodedHePlaceItem] = autoreleasepool {
-                    decodeItems(payloadChunk: payload)
+                if decodeResult.cacheHit {
+                    bucketDecodeCacheHits += 1
                 }
+                let decoded = decodeResult.items
                 if index == 0 {
                     decodedFromCandidateBuckets += decoded.count
                 } else {
@@ -247,7 +348,7 @@ enum EncodedHePlaceRepository {
         let preciseInRange = precisePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
         let approximateInRange = approximatePlaces.filter { $0.distanceMeters <= radiusMeters * 1.2 }
         debugLog(
-            "loadNearby stats candidateKeys=\(initialCandidateKeys.count) scannedKeys=\(inspectedKeys.count) matchedBuckets=\(matchedBuckets) failedChunkRead=\(failedChunkRead) decodedCandidate=\(decodedFromCandidateBuckets) decodedExpanded=\(decodedFromExpandedBuckets) expandedRounds=\(expandedRounds) mappedPlaces=\(places.count) precise=\(precisePlaces.count) approximate=\(approximatePlaces.count) preciseInRange=\(preciseInRange.count) approximateInRange=\(approximateInRange.count)"
+            "loadNearby stats candidateKeys=\(initialCandidateKeys.count) scannedKeys=\(inspectedKeys.count) matchedBuckets=\(matchedBuckets) failedChunkRead=\(failedChunkRead) decodeCacheHits=\(bucketDecodeCacheHits) decodedCandidate=\(decodedFromCandidateBuckets) decodedExpanded=\(decodedFromExpandedBuckets) expandedRounds=\(expandedRounds) mappedPlaces=\(places.count) precise=\(precisePlaces.count) approximate=\(approximatePlaces.count) preciseInRange=\(preciseInRange.count) approximateInRange=\(approximateInRange.count)"
         )
 
         if preciseInRange.count >= cappedLimit {
@@ -282,6 +383,7 @@ enum EncodedHePlaceRepository {
         var items: [EncodedHePlaceItem] = []
         items.reserveCapacity(indexEnvelope.payloadBuckets.count * 4)
         var failedChunkRead = 0
+        var bucketDecodeCacheHits = 0
 
         let orderedBuckets = indexEnvelope.payloadBuckets.values.sorted {
             if $0.payloadOffset == $1.payloadOffset {
@@ -294,22 +396,79 @@ enum EncodedHePlaceRepository {
             if Task.isCancelled {
                 return []
             }
-            guard let payload = payloadReader(bucket) else {
+            guard let decodeResult = decodedItems(for: bucket, payloadReader: payloadReader) else {
                 failedChunkRead += 1
                 continue
             }
-            let decoded: [EncodedHePlaceItem] = autoreleasepool {
-                decodeItems(payloadChunk: payload)
+            if decodeResult.cacheHit {
+                bucketDecodeCacheHits += 1
             }
+            let decoded = decodeResult.items
             items.append(contentsOf: decoded)
         }
 
         var places = items.compactMap { mapToHePlace($0, center: center) }
         places.sort(by: isCloserAndHigherPriority)
         debugLog(
-            "loadAll stats buckets=\(orderedBuckets.count) failedChunkRead=\(failedChunkRead) decodedItems=\(items.count) mappedPlaces=\(places.count)"
+            "loadAll stats buckets=\(orderedBuckets.count) failedChunkRead=\(failedChunkRead) decodeCacheHits=\(bucketDecodeCacheHits) decodedItems=\(items.count) mappedPlaces=\(places.count)"
         )
         return places
+    }
+
+    private nonisolated static func decodedItems(
+        for bucket: EncodedPayloadBucketMeta,
+        payloadReader: (EncodedPayloadBucketMeta) -> Data?
+    ) -> BucketDecodeResult? {
+        let cacheKey = decodedBucketCacheKey(for: bucket)
+        if let cachedItems = decodedBucketCache.value(for: cacheKey) {
+            return BucketDecodeResult(items: cachedItems, cacheHit: true)
+        }
+
+        guard let payload = payloadReader(bucket) else {
+            return nil
+        }
+        let decodedItems: [EncodedHePlaceItem] = autoreleasepool {
+            decodeItems(payloadChunk: payload)
+        }
+        decodedBucketCache.insert(decodedItems, for: cacheKey)
+        return BucketDecodeResult(items: decodedItems, cacheHit: false)
+    }
+
+    private nonisolated static func decodedBucketCacheKey(for bucket: EncodedPayloadBucketMeta) -> String {
+        "\(bucket.payloadOffset):\(bucket.payloadLength):\(bucket.payloadSHA256 ?? "-")"
+    }
+
+    private nonisolated static func preheatSampleCenters(
+        around center: CLLocationCoordinate2D,
+        stepKm: Double
+    ) -> [CLLocationCoordinate2D] {
+        let clampedStepKm = max(1, stepKm)
+        let diagonal = clampedStepKm * 0.72
+        let vectors: [(Double, Double)] = [
+            (clampedStepKm, 0),
+            (-clampedStepKm, 0),
+            (0, clampedStepKm),
+            (0, -clampedStepKm),
+            (diagonal, diagonal),
+            (diagonal, -diagonal),
+            (-diagonal, diagonal),
+            (-diagonal, -diagonal)
+        ]
+
+        return vectors.map { northKm, eastKm in
+            shiftedCoordinate(center: center, northKm: northKm, eastKm: eastKm)
+        }
+    }
+
+    private nonisolated static func shiftedCoordinate(
+        center: CLLocationCoordinate2D,
+        northKm: Double,
+        eastKm: Double
+    ) -> CLLocationCoordinate2D {
+        let latitude = clampLatitude(center.latitude + (northKm / 110.574))
+        let metersPerLongitudeDegree = max(cos(center.latitude * .pi / 180) * 111.320, 0.1)
+        let longitude = wrapLongitude(center.longitude + (eastKm / metersPerLongitudeDegree))
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     private nonisolated static func resolveResourceURL(resourceName: String, resourceExtension: String?) -> URL? {

@@ -62,6 +62,155 @@ struct MapPlaceCategoryFilter: RawRepresentable, Hashable, Codable {
     static let momiji = Self(rawValue: "momiji")
 }
 
+private enum HomeMapSpatialCompute {
+    struct ClusterFilterResult {
+        let places: [HePlace]
+        let dropped: Int
+    }
+
+    nonisolated static func filteredPlacesInRegion(_ source: [HePlace], region: MKCoordinateRegion) -> [HePlace] {
+        let halfLat = region.span.latitudeDelta / 2
+        let halfLng = region.span.longitudeDelta / 2
+        return source.filter { place in
+            abs(place.coordinate.latitude - region.center.latitude) <= halfLat &&
+                abs(place.coordinate.longitude - region.center.longitude) <= halfLng
+        }
+    }
+
+    nonisolated static func nearestPlacesByDistance(
+        _ source: [HePlace],
+        limit: Int,
+        reference: CLLocationCoordinate2D
+    ) -> [HePlace] {
+        guard !source.isEmpty else {
+            return []
+        }
+        let sorted = source.sorted { lhs, rhs in
+            let lhsDistance = distanceMeters(from: reference, to: lhs.coordinate)
+            let rhsDistance = distanceMeters(from: reference, to: rhs.coordinate)
+            if lhsDistance != rhsDistance {
+                return lhsDistance < rhsDistance
+            }
+            if lhs.scaleScore != rhs.scaleScore {
+                return lhs.scaleScore > rhs.scaleScore
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+        return Array(sorted.prefix(max(1, limit)))
+    }
+
+    nonisolated static func ensureActivePlacesIncluded(
+        in candidates: [HePlace],
+        sourcePool: [HePlace],
+        activeIDs: Set<UUID>,
+        limit: Int,
+        reference: CLLocationCoordinate2D
+    ) -> [HePlace] {
+        guard !sourcePool.isEmpty, limit > 0 else {
+            return Array(candidates.prefix(max(0, limit)))
+        }
+
+        var result = Array(candidates.prefix(limit))
+        guard !activeIDs.isEmpty else {
+            return result
+        }
+
+        for activeID in activeIDs {
+            guard result.contains(where: { $0.id == activeID }) == false else {
+                continue
+            }
+            guard let activePlace = sourcePool.first(where: { $0.id == activeID }) else {
+                continue
+            }
+
+            if result.count < limit {
+                result.insert(activePlace, at: 0)
+                continue
+            }
+
+            if let replaceIndex = result.lastIndex(where: { !activeIDs.contains($0.id) }) {
+                result[replaceIndex] = activePlace
+            } else if !result.isEmpty {
+                result[result.count - 1] = activePlace
+            }
+        }
+
+        return nearestPlacesByDistance(result, limit: limit, reference: reference)
+    }
+
+    nonisolated static func filterSuspectCoordinateClusters(
+        _ source: [HePlace],
+        threshold: Int,
+        activeIDs: Set<UUID>
+    ) -> ClusterFilterResult {
+        guard source.count >= threshold else {
+            return ClusterFilterResult(places: source, dropped: 0)
+        }
+        let grouped = Dictionary(grouping: source, by: coordinateKey(for:))
+        let preservedRepresentativeByKey: [String: UUID] = grouped.compactMapValues { group in
+            guard group.count >= threshold,
+                  group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) else {
+                return nil
+            }
+            return group.max { lhs, rhs in
+                if lhs.scaleScore != rhs.scaleScore {
+                    return lhs.scaleScore < rhs.scaleScore
+                }
+                if lhs.heatScore != rhs.heatScore {
+                    return lhs.heatScore < rhs.heatScore
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+            }?.id
+        }
+
+        var filtered: [HePlace] = []
+        filtered.reserveCapacity(source.count)
+        var dropped = 0
+
+        for place in source {
+            let key = coordinateKey(for: place)
+            guard let group = grouped[key] else {
+                filtered.append(place)
+                continue
+            }
+            if group.count >= threshold &&
+                !activeIDs.contains(place.id) &&
+                group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) &&
+                preservedRepresentativeByKey[key] != place.id {
+                dropped += 1
+                continue
+            }
+            filtered.append(place)
+        }
+        return ClusterFilterResult(places: filtered, dropped: dropped)
+    }
+
+    nonisolated private static func coordinateKey(for place: HePlace) -> String {
+        "\(Int((place.coordinate.latitude * 1_000_000).rounded())):\(Int((place.coordinate.longitude * 1_000_000).rounded()))"
+    }
+
+    nonisolated private static func isLowConfidenceGeoSource(_ source: String) -> Bool {
+        source == "missing" ||
+            source == "pref_center_fallback" ||
+            source.hasPrefix("network_geocode")
+    }
+
+    nonisolated private static func distanceMeters(from lhs: CLLocationCoordinate2D, to rhs: CLLocationCoordinate2D) -> Double {
+        let earthRadiusMeters = 6_371_000.0
+        let lat1 = lhs.latitude * .pi / 180
+        let lon1 = lhs.longitude * .pi / 180
+        let lat2 = rhs.latitude * .pi / 180
+        let lon2 = rhs.longitude * .pi / 180
+        let dLat = lat2 - lat1
+        let dLon = lon2 - lon1
+
+        let a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        let c = 2 * atan2(sqrt(a), sqrt(max(1 - a, 0)))
+        return earthRadiusMeters * c
+    }
+}
+
 @MainActor
 final class HomeMapViewModel: ObservableObject {
     private struct MarkerEntriesCacheKey: Equatable {
@@ -103,10 +252,31 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
+    private struct NearbyPreheatSignature: Equatable {
+        let centerLatE2: Int
+        let centerLngE2: Int
+        let radiusKmE1: Int
+
+        init(center: CLLocationCoordinate2D, radiusKm: Double) {
+            centerLatE2 = Int((center.latitude * 100).rounded())
+            centerLngE2 = Int((center.longitude * 100).rounded())
+            radiusKmE1 = Int((radiusKm * 10).rounded())
+        }
+    }
+
     private struct LocalNotificationCandidate {
         let identifier: String
         let triggerDate: Date
         let body: String
+    }
+
+    private struct ViewportRankingPayload {
+        let rendered: [HePlace]
+        let recommendation: [HePlace]
+        let inRegionCount: Int
+        let recommendationInRegionCount: Int
+        let renderedDroppedCount: Int
+        let recommendationDroppedCount: Int
     }
 
     struct LocationFallbackNotice: Identifiable {
@@ -143,14 +313,26 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
     @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
     @Published var isThemePaletteOpen = false
-    @Published var selectedThemeScheme = "sunset"
-    @Published var themeAlphaRatio: Double = 1
-    @Published var themeSaturationRatio: Double = 1
-    @Published var themeGlowRatio: Double = 1
+    @Published var selectedThemeScheme = "sunset" {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
+    @Published var themeAlphaRatio: Double = 1 {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
+    @Published var themeSaturationRatio: Double = 1 {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
+    @Published var themeGlowRatio: Double = 1 {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
     @Published var selectedLanguageCode: String = L10n.languageCode
     @Published var worldMode = false
-    @Published var startNotificationEnabled = false
-    @Published var nearbyNotificationEnabled = false
+    @Published var startNotificationEnabled = false {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
+    @Published var nearbyNotificationEnabled = false {
+        didSet { persistVisualAndNotificationSettingsIfReady() }
+    }
 
     private let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "HomeMapViewModel")
     private let placeStateStore: PlaceStateStore
@@ -158,6 +340,13 @@ final class HomeMapViewModel: ObservableObject {
     private let placeDecorationStore: PlaceDecorationStore
     private let locationProvider: AppLocationProviding
     private let initialCenter = DefaultAppLocationProvider.developmentFixedCoordinate
+    private let settingsStore = UserDefaults.standard
+    private let themeSchemeDefaultsKey = "tsugie.settings.theme.scheme"
+    private let themeAlphaDefaultsKey = "tsugie.settings.theme.alphaRatio"
+    private let themeSaturationDefaultsKey = "tsugie.settings.theme.saturationRatio"
+    private let themeGlowDefaultsKey = "tsugie.settings.theme.glowRatio"
+    private let startNotificationDefaultsKey = "tsugie.settings.notifications.startEnabled"
+    private let nearbyNotificationDefaultsKey = "tsugie.settings.notifications.nearbyEnabled"
     private let defaultMapSpan = MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
     private let focusedMapSpan = MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
     private let focusedCenterLatitudeOffset: CLLocationDegrees = 0.0023
@@ -177,8 +366,11 @@ final class HomeMapViewModel: ObservableObject {
     private let idleViewportTrimDelayNanoseconds: UInt64 = 1_200_000_000
     private let minMoveForIdleRecycleKm: Double = 1.2
     private let minZoomRatioForIdleRecycle: Double = 1.22
-    private let minCameraMoveForViewportReloadKm: Double = 0.12
-    private let minCameraZoomRatioForViewportReload: Double = 1.05
+    private let minCameraMoveForViewportReloadKm: Double = 0.20
+    private let minCameraZoomRatioForViewportReload: Double = 1.08
+    private let cameraMotionQuietWindow: TimeInterval = 0.45
+    private let cameraEndDebounceNanoseconds: UInt64 = 320_000_000
+    private let periodicHardRecycleMotionQuietWindow: TimeInterval = 3.0
     private let programmaticCameraSuppressionWindow: TimeInterval = 0.28
     private let programmaticCameraCenterToleranceKm: Double = 0.9
     private let programmaticCameraSpanTolerance: CLLocationDegrees = 0.0035
@@ -187,12 +379,12 @@ final class HomeMapViewModel: ObservableObject {
     private let calendarDismissTransientCenterToleranceKm: Double = 0.7
     private let minimumViewportRadiusKm: Double
     private let nearbyLimit: Int
-    private let mapBufferScale: Double = 1.8
-    private let nearbyRecommendationBufferScale: Double = 3.2
+    private let mapBufferScale: Double = 2.25
+    private let nearbyRecommendationBufferScale: Double = 3.9
     private let idleTrimScale: Double = 1.25
     private let deferredLoadAllDelayNanoseconds: UInt64 = 650_000_000
-    private let maxRenderedPlaces = 180
-    private let maxNearbyRecommendationPlaces = 300
+    private let maxRenderedPlaces = 120
+    private let maxNearbyRecommendationPlaces = 220
     private let markerCollisionPointThreshold: Double = 30
     private let minMarkerCollisionMeters: Double = 10
     private var shouldBootstrapFromBundled: Bool
@@ -203,12 +395,15 @@ final class HomeMapViewModel: ObservableObject {
     private var bootstrapTask: Task<Void, Never>?
     private var deferredLoadAllTask: Task<Void, Never>?
     private var loadAllTask: Task<Void, Never>?
+    private var deferredCameraEndTask: Task<Void, Never>?
     private var viewportReloadTask: Task<Void, Never>?
     private var idleRecycleTask: Task<Void, Never>?
     private var periodicHardRecycleTask: Task<Void, Never>?
     private var memoryWatchdogTask: Task<Void, Never>?
     private var nearbyLoadTask: Task<[HePlace], Never>?
+    private var nearbyPreheatTask: Task<Void, Never>?
     private var activeNearbyQueryToken: UUID?
+    private var lastNearbyPreheatSignature: NearbyPreheatSignature?
     private var lastViewportQuerySignature: ViewportQuerySignature?
     private var lastLoadedExpandedRegion: MKCoordinateRegion?
     private var mapZoomRestoreTask: Task<Void, Never>?
@@ -233,9 +428,12 @@ final class HomeMapViewModel: ObservableObject {
     private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
     private var pendingProgrammaticCameraSource: String?
     private var pendingProgrammaticCameraExpiresAt: Date = .distantPast
+    private var suppressCalendarDismissRecenteringUntil: Date = .distantPast
+    private var pendingSettledCameraRegion: MKCoordinateRegion?
     private var suppressMapInteractionUpdatesUntil: Date = .distantPast
     private var lastCameraMotionAt: Date = .distantPast
     private var lastCameraMotionHeartbeatAt: Date = .distantPast
+    private var didLoadPersistedVisualSettings = false
     private let quickCardPresentationAnimation = Animation.spring(response: 0.24, dampingFraction: 0.92)
     private let quickCardDismissAnimation = Animation.spring(response: 0.40, dampingFraction: 0.92)
     private let startReminderNotificationPrefix = "tsugie.notify.start."
@@ -285,6 +483,7 @@ final class HomeMapViewModel: ObservableObject {
         self.lastMapRecycleCenter = region.center
         self.lastMapRecycleSpan = region.span
         self.lastHardRecycleCenter = region.center
+        loadPersistedVisualAndNotificationSettings()
         self.renderedPlaces = interactivePlaces(from: self.renderedPlaces, now: Date())
         self.nearbyRecommendationPlaces = interactivePlaces(from: self.nearbyRecommendationPlaces, now: Date())
     }
@@ -415,6 +614,43 @@ final class HomeMapViewModel: ObservableObject {
         }
     }
 
+    private func loadPersistedVisualAndNotificationSettings() {
+        if let scheme = settingsStore.string(forKey: themeSchemeDefaultsKey), !scheme.isEmpty {
+            selectedThemeScheme = scheme
+        }
+
+        if let storedAlpha = settingsStore.object(forKey: themeAlphaDefaultsKey) as? Double {
+            themeAlphaRatio = min(max(storedAlpha, 0.4), 1.5)
+        }
+        if let storedSaturation = settingsStore.object(forKey: themeSaturationDefaultsKey) as? Double {
+            themeSaturationRatio = min(max(storedSaturation, 0.4), 1.7)
+        }
+        if let storedGlow = settingsStore.object(forKey: themeGlowDefaultsKey) as? Double {
+            themeGlowRatio = min(max(storedGlow, 0.6), 1.8)
+        }
+
+        if settingsStore.object(forKey: startNotificationDefaultsKey) != nil {
+            startNotificationEnabled = settingsStore.bool(forKey: startNotificationDefaultsKey)
+        }
+        if settingsStore.object(forKey: nearbyNotificationDefaultsKey) != nil {
+            nearbyNotificationEnabled = settingsStore.bool(forKey: nearbyNotificationDefaultsKey)
+        }
+
+        didLoadPersistedVisualSettings = true
+    }
+
+    private func persistVisualAndNotificationSettingsIfReady() {
+        guard didLoadPersistedVisualSettings else {
+            return
+        }
+        settingsStore.set(selectedThemeScheme, forKey: themeSchemeDefaultsKey)
+        settingsStore.set(themeAlphaRatio, forKey: themeAlphaDefaultsKey)
+        settingsStore.set(themeSaturationRatio, forKey: themeSaturationDefaultsKey)
+        settingsStore.set(themeGlowRatio, forKey: themeGlowDefaultsKey)
+        settingsStore.set(startNotificationEnabled, forKey: startNotificationDefaultsKey)
+        settingsStore.set(nearbyNotificationEnabled, forKey: nearbyNotificationDefaultsKey)
+    }
+
     func onViewAppear() {
         registerMemoryWarningObserverIfNeeded()
         startPeriodicHardRecycleTask()
@@ -435,6 +671,9 @@ final class HomeMapViewModel: ObservableObject {
         bootstrapTask = nil
         deferredLoadAllTask?.cancel()
         deferredLoadAllTask = nil
+        deferredCameraEndTask?.cancel()
+        deferredCameraEndTask = nil
+        pendingSettledCameraRegion = nil
         viewportReloadTask?.cancel()
         viewportReloadTask = nil
         idleRecycleTask?.cancel()
@@ -445,7 +684,10 @@ final class HomeMapViewModel: ObservableObject {
         memoryWatchdogTask = nil
         nearbyLoadTask?.cancel()
         nearbyLoadTask = nil
+        nearbyPreheatTask?.cancel()
+        nearbyPreheatTask = nil
         activeNearbyQueryToken = nil
+        lastNearbyPreheatSignature = nil
         nearbyRecommendationPlaces = []
         startReminderSyncTask?.cancel()
         startReminderSyncTask = nil
@@ -476,10 +718,17 @@ final class HomeMapViewModel: ObservableObject {
             closeMarkerActionBubble()
         } else {
             suppressMapInteractionUpdatesUntil = Date().addingTimeInterval(calendarDismissMapStabilizationWindow)
-            if let pinnedRegion = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) {
+            let shouldSkipDismissRecentering = Date() <= suppressCalendarDismissRecenteringUntil
+            if shouldSkipDismissRecentering {
+                debugLog("skipCalendarDismissRecentering reason=externalNavigation")
+            } else if let pinnedRegion = normalizedRegion(lastKnownMapRegion ?? mapCameraPosition.region) {
                 setProgrammaticMapPosition(.region(pinnedRegion))
             }
         }
+    }
+
+    func prepareForCalendarPlaceNavigation() {
+        suppressCalendarDismissRecenteringUntil = Date().addingTimeInterval(1.5)
     }
 
     func tapMarker(placeID: UUID) {
@@ -536,11 +785,6 @@ final class HomeMapViewModel: ObservableObject {
 
     func handleMapBackgroundTap() {
         if let until = ignoreMapTapUntil, Date() < until {
-            return
-        }
-        if _markerActionPlaceID != nil {
-            // While marker action bubble is open, ignore background tap dismiss to prevent
-            // accidental cancellation during dense-marker interactions.
             return
         }
         if _quickCardPlaceID != nil || _expiredCardPlaceID != nil {
@@ -741,7 +985,6 @@ final class HomeMapViewModel: ObservableObject {
         if isThemePaletteOpen {
             isThemePaletteOpen = false
         }
-        closeMarkerActionBubble()
     }
 
     func closeSideDrawerPanel() {
@@ -1182,7 +1425,7 @@ final class HomeMapViewModel: ObservableObject {
         let focusedRegion = nonExpandingFocusedRegion(for: place)
         mutateInteractionState {
             _selectedPlaceID = place.id
-            _markerActionPlaceID = nil
+            _markerActionPlaceID = place.id
             _detailPlaceID = nil
             _quickCardPlaceID = nil
             _expiredCardPlaceID = place.id
@@ -1542,7 +1785,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func markerDecorationPresentation(for placeID: UUID, heType: HeType) -> PlaceDecorationPresentation? {
-        guard _selectedPlaceID == placeID else {
+        guard _selectedPlaceID == placeID || _markerActionPlaceID == placeID else {
             return nil
         }
         return placeDecorationStore.presentation(for: placeID, heType: heType)
@@ -1571,8 +1814,26 @@ final class HomeMapViewModel: ObservableObject {
             }
         }
         let nextState = placeStateStore.toggleCheckedIn(for: placeID)
-        if nextState.isFavorite, let place = place(for: placeID) {
-            placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
+        if let place = place(for: placeID) {
+            if nextState.isFavorite {
+                placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
+            }
+            if nextState.isCheckedIn {
+                mutateInteractionState {
+                    _selectedPlaceID = placeID
+                    if _detailPlaceID == nil {
+                        _markerActionPlaceID = placeID
+                    }
+                }
+                _ = placeDecorationStore.presentation(for: placeID, heType: place.heType)
+                return
+            }
+        }
+        if _selectedPlaceID == placeID, _detailPlaceID == nil {
+            mutateInteractionState {
+                _markerActionPlaceID = placeID
+            }
+            return
         }
         objectWillChange.send()
     }
@@ -2218,7 +2479,19 @@ final class HomeMapViewModel: ObservableObject {
         guard let normalizedRegion = normalizedRegion(region) else {
             return
         }
-        lastCameraMotionAt = Date()
+        let now = Date()
+        if now.timeIntervalSince(lastCameraMotionAt) < cameraMotionQuietWindow {
+            pendingSettledCameraRegion = normalizedRegion
+            scheduleDeferredCameraEndHandling()
+            return
+        }
+        deferredCameraEndTask?.cancel()
+        deferredCameraEndTask = nil
+        pendingSettledCameraRegion = nil
+        processSettledMapCameraChange(normalizedRegion)
+    }
+
+    private func processSettledMapCameraChange(_ normalizedRegion: MKCoordinateRegion) {
 
         if shouldSuppressCameraMoveSideEffects(for: normalizedRegion) {
             return
@@ -2248,7 +2521,21 @@ final class HomeMapViewModel: ObservableObject {
 
         cameraChangeRevision &+= 1
         scheduleIdleRecycleIfNeeded(revision: cameraChangeRevision)
-        scheduleViewportReload(for: normalizedRegion, reason: "cameraMove", debounceNanoseconds: 220_000_000)
+        scheduleViewportReload(for: normalizedRegion, reason: "cameraMove", debounceNanoseconds: 420_000_000)
+    }
+
+    private func scheduleDeferredCameraEndHandling() {
+        deferredCameraEndTask?.cancel()
+        deferredCameraEndTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: self.cameraEndDebounceNanoseconds)
+            guard !Task.isCancelled,
+                  let pendingRegion = self.pendingSettledCameraRegion else {
+                return
+            }
+            self.pendingSettledCameraRegion = nil
+            self.handleMapCameraChange(pendingRegion)
+        }
     }
 
     func handleMapCameraMotion(_ _: MKCoordinateRegion) {
@@ -2403,7 +2690,7 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         let now = Date()
-        if now.timeIntervalSince(lastCameraMotionAt) < 1.4 {
+        if now.timeIntervalSince(lastCameraMotionAt) < periodicHardRecycleMotionQuietWindow {
             debugLog("skipPeriodicHardRecycle reason=cameraMotionActive")
             return
         }
@@ -2424,7 +2711,10 @@ final class HomeMapViewModel: ObservableObject {
         _quickCardPlaceID != nil ||
         _expiredCardPlaceID != nil ||
         _temporaryExpiredMarkerPlaceID != nil ||
-        _detailPlaceID != nil
+        _detailPlaceID != nil ||
+        isSideDrawerOpen ||
+        isFavoriteDrawerOpen ||
+        isCalendarPresented
     }
 
     private func forceEmergencyMemoryRecovery(
@@ -2583,38 +2873,84 @@ final class HomeMapViewModel: ObservableObject {
 
         lastViewportQuerySignature = signature
         lastLoadedExpandedRegion = expandedRegion
-        let inRegion = filteredPlacesInRegion(sourcePlaces, region: expandedRegion)
-        let nearestByViewportCenter = nearestPlacesByDistance(
-            inRegion,
-            limit: maxRenderedPlaces,
-            reference: expandedRegion.center
+        scheduleNearbyPreheatIfNeeded(
+            center: expandedRegion.center,
+            radiusKm: queryRadiusKm,
+            limit: queryLimit,
+            sourceMode: sourceMode
         )
-        let rendered = ensureActivePlacesIncluded(
-            in: filterSuspectCoordinateClusters(nearestByViewportCenter),
-            sourcePool: inRegion,
-            limit: maxRenderedPlaces,
-            reference: expandedRegion.center
-        )
-        let rebasedRendered = rebasedPlaces(rendered, center: userCenter)
+        let recommendationRegion = expandedMapRegion(region, scale: nearbyRecommendationBufferScale)
+        let activeIDs = activePlaceIDsSnapshot()
+        let renderedLimit = maxRenderedPlaces
+        let recommendationLimit = maxNearbyRecommendationPlaces
+        let clusterThreshold = suspectCoordinateClusterThreshold
+
+        let rankingTask = Task.detached(priority: .userInitiated) {
+            let inRegion = HomeMapSpatialCompute.filteredPlacesInRegion(sourcePlaces, region: expandedRegion)
+            let nearestByViewportCenter = HomeMapSpatialCompute.nearestPlacesByDistance(
+                inRegion,
+                limit: renderedLimit,
+                reference: expandedRegion.center
+            )
+            let renderedClusterResult = HomeMapSpatialCompute.filterSuspectCoordinateClusters(
+                nearestByViewportCenter,
+                threshold: clusterThreshold,
+                activeIDs: activeIDs
+            )
+            let rendered = HomeMapSpatialCompute.ensureActivePlacesIncluded(
+                in: renderedClusterResult.places,
+                sourcePool: inRegion,
+                activeIDs: activeIDs,
+                limit: renderedLimit,
+                reference: expandedRegion.center
+            )
+
+            let recommendationInRegion = HomeMapSpatialCompute.filteredPlacesInRegion(
+                sourcePlaces,
+                region: recommendationRegion
+            )
+            let recommendationNearest = HomeMapSpatialCompute.nearestPlacesByDistance(
+                recommendationInRegion,
+                limit: recommendationLimit,
+                reference: recommendationRegion.center
+            )
+            let recommendationClusterResult = HomeMapSpatialCompute.filterSuspectCoordinateClusters(
+                recommendationNearest,
+                threshold: clusterThreshold,
+                activeIDs: activeIDs
+            )
+            let recommendation = HomeMapSpatialCompute.ensureActivePlacesIncluded(
+                in: recommendationClusterResult.places,
+                sourcePool: recommendationInRegion,
+                activeIDs: activeIDs,
+                limit: recommendationLimit,
+                reference: recommendationRegion.center
+            )
+
+            return ViewportRankingPayload(
+                rendered: rendered,
+                recommendation: recommendation,
+                inRegionCount: inRegion.count,
+                recommendationInRegionCount: recommendationInRegion.count,
+                renderedDroppedCount: renderedClusterResult.dropped,
+                recommendationDroppedCount: recommendationClusterResult.dropped
+            )
+        }
+        let ranking = await withTaskCancellationHandler(operation: {
+            await rankingTask.value
+        }, onCancel: {
+            rankingTask.cancel()
+        })
+        guard !Task.isCancelled else {
+            return
+        }
+
+        let rebasedRendered = rebasedPlaces(ranking.rendered, center: userCenter)
         debugLog(
-            "reloadRendered reason=\(reason) source=\(sourceMode) center=(\(region.center.latitude),\(region.center.longitude)) span=(\(region.span.latitudeDelta),\(region.span.longitudeDelta)) rawQueryRadiusKm=\(rawQueryRadiusKm) queryRadiusKm=\(queryRadiusKm) queryLimit=\(queryLimit) loaded=\(loadedCount) sourcePlaces=\(sourcePlaces.count) inRegion=\(inRegion.count) rendered=\(rendered.count)"
+            "reloadRendered reason=\(reason) source=\(sourceMode) center=(\(region.center.latitude),\(region.center.longitude)) span=(\(region.span.latitudeDelta),\(region.span.longitudeDelta)) rawQueryRadiusKm=\(rawQueryRadiusKm) queryRadiusKm=\(queryRadiusKm) queryLimit=\(queryLimit) loaded=\(loadedCount) sourcePlaces=\(sourcePlaces.count) inRegion=\(ranking.inRegionCount) rendered=\(ranking.rendered.count) droppedRendered=\(ranking.renderedDroppedCount) recRegion=\(ranking.recommendationInRegionCount) droppedRec=\(ranking.recommendationDroppedCount)"
         )
 
-        let recommendationRegion = expandedMapRegion(region, scale: nearbyRecommendationBufferScale)
-        let recommendationInRegion = filteredPlacesInRegion(sourcePlaces, region: recommendationRegion)
-        let recommendationSource = recommendationInRegion
-        let recommendationNearest = nearestPlacesByDistance(
-            recommendationSource,
-            limit: maxNearbyRecommendationPlaces,
-            reference: recommendationRegion.center
-        )
-        let recommendationPlaces = ensureActivePlacesIncluded(
-            in: filterSuspectCoordinateClusters(recommendationNearest),
-            sourcePool: recommendationSource,
-            limit: maxNearbyRecommendationPlaces,
-            reference: recommendationRegion.center
-        )
-        let rebasedRecommendationPlaces = rebasedPlaces(recommendationPlaces, center: userCenter)
+        let rebasedRecommendationPlaces = rebasedPlaces(ranking.recommendation, center: userCenter)
         replaceNearbyRecommendationPlaces(rebasedRecommendationPlaces)
 
         replaceRenderedPlaces(rebasedRendered)
@@ -2624,8 +2960,36 @@ final class HomeMapViewModel: ObservableObject {
         if nearbyNotificationEnabled, reason != "cameraMove", reason != "cameraMoveContained" {
             scheduleNearbyReminderSync()
         }
-        if !rendered.isEmpty {
+        if !ranking.rendered.isEmpty {
             scheduleAutoOpenIfNeeded()
+        }
+    }
+
+    private func scheduleNearbyPreheatIfNeeded(
+        center: CLLocationCoordinate2D,
+        radiusKm: Double,
+        limit: Int,
+        sourceMode: String
+    ) {
+        guard sourceMode == "bundledNearby", !didLoadAllPlaces else {
+            return
+        }
+        let signature = NearbyPreheatSignature(center: center, radiusKm: radiusKm)
+        guard signature != lastNearbyPreheatSignature else {
+            return
+        }
+        lastNearbyPreheatSignature = signature
+
+        nearbyPreheatTask?.cancel()
+        nearbyPreheatTask = Task.detached(priority: .utility) {
+            if Task.isCancelled {
+                return
+            }
+            EncodedHePlaceRepository.preheatNeighborhood(
+                center: center,
+                radiusKm: radiusKm,
+                limit: limit
+            )
         }
     }
 
@@ -2653,23 +3017,12 @@ final class HomeMapViewModel: ObservableObject {
         limit: Int,
         reference: CLLocationCoordinate2D? = nil
     ) -> [HePlace] {
-        guard !source.isEmpty else {
-            return []
-        }
         let referenceCoordinate = reference ?? resolvedCenter
-
-        let sorted = source.sorted { lhs, rhs in
-            let lhsDistance = distanceMeters(from: referenceCoordinate, to: lhs.coordinate)
-            let rhsDistance = distanceMeters(from: referenceCoordinate, to: rhs.coordinate)
-            if lhsDistance != rhsDistance {
-                return lhsDistance < rhsDistance
-            }
-            if lhs.scaleScore != rhs.scaleScore {
-                return lhs.scaleScore > rhs.scaleScore
-            }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-        }
-        return Array(sorted.prefix(max(1, limit)))
+        return HomeMapSpatialCompute.nearestPlacesByDistance(
+            source,
+            limit: limit,
+            reference: referenceCoordinate
+        )
     }
 
     private func ensureActivePlacesIncluded(
@@ -2678,12 +3031,18 @@ final class HomeMapViewModel: ObservableObject {
         limit: Int,
         reference: CLLocationCoordinate2D? = nil
     ) -> [HePlace] {
-        guard !sourcePool.isEmpty, limit > 0 else {
-            return Array(candidates.prefix(max(0, limit)))
-        }
+        let referenceCoordinate = reference ?? resolvedCenter
+        return HomeMapSpatialCompute.ensureActivePlacesIncluded(
+            in: candidates,
+            sourcePool: sourcePool,
+            activeIDs: activePlaceIDsSnapshot(),
+            limit: limit,
+            reference: referenceCoordinate
+        )
+    }
 
-        var result = Array(candidates.prefix(limit))
-        let activeIDs = Set([
+    private func activePlaceIDsSnapshot() -> Set<UUID> {
+        Set([
             _detailPlaceID,
             _quickCardPlaceID,
             _expiredCardPlaceID,
@@ -2691,32 +3050,6 @@ final class HomeMapViewModel: ObservableObject {
             _markerActionPlaceID,
             _temporaryExpiredMarkerPlaceID
         ].compactMap { $0 })
-        guard !activeIDs.isEmpty else {
-            return result
-        }
-
-        for activeID in activeIDs {
-            guard result.contains(where: { $0.id == activeID }) == false else {
-                continue
-            }
-            guard let activePlace = sourcePool.first(where: { $0.id == activeID }) else {
-                continue
-            }
-
-            if result.count < limit {
-                result.insert(activePlace, at: 0)
-                continue
-            }
-
-            if let replaceIndex = result.lastIndex(where: { !activeIDs.contains($0.id) }) {
-                result[replaceIndex] = activePlace
-            } else if !result.isEmpty {
-                result[result.count - 1] = activePlace
-            }
-        }
-
-        // Keep ordering stable after forced insertion.
-        return nearestPlacesByDistance(result, limit: limit, reference: reference)
     }
 
     private func rebasedPlaces(_ source: [HePlace], center: CLLocationCoordinate2D) -> [HePlace] {
@@ -2776,59 +3109,6 @@ final class HomeMapViewModel: ObservableObject {
 
     private func interactivePlaces(from source: [HePlace], now: Date) -> [HePlace] {
         source.filter { isPlaceInteractionEnabled($0, now: now) }
-    }
-
-    private func filterSuspectCoordinateClusters(_ source: [HePlace]) -> [HePlace] {
-        guard source.count >= suspectCoordinateClusterThreshold else {
-            return source
-        }
-        let grouped = Dictionary(grouping: source, by: coordinateKey(for:))
-        let activeIDs = Set([
-            _detailPlaceID,
-            _quickCardPlaceID,
-            _expiredCardPlaceID,
-            _selectedPlaceID,
-            _markerActionPlaceID,
-            _temporaryExpiredMarkerPlaceID
-        ].compactMap { $0 })
-        let preservedRepresentativeByKey: [String: UUID] = grouped.compactMapValues { group in
-            guard group.count >= suspectCoordinateClusterThreshold,
-                  group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) else {
-                return nil
-            }
-            return group.max { lhs, rhs in
-                if lhs.scaleScore != rhs.scaleScore {
-                    return lhs.scaleScore < rhs.scaleScore
-                }
-                if lhs.heatScore != rhs.heatScore {
-                    return lhs.heatScore < rhs.heatScore
-                }
-                return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
-            }?.id
-        }
-        var filtered: [HePlace] = []
-        filtered.reserveCapacity(source.count)
-        var dropped = 0
-
-        for place in source {
-            let key = coordinateKey(for: place)
-            guard let group = grouped[key] else {
-                filtered.append(place)
-                continue
-            }
-            if group.count >= suspectCoordinateClusterThreshold &&
-                !activeIDs.contains(place.id) &&
-                group.allSatisfy({ isLowConfidenceGeoSource($0.geoSource) }) &&
-                preservedRepresentativeByKey[key] != place.id {
-                dropped += 1
-                continue
-            }
-            filtered.append(place)
-        }
-        if dropped > 0 {
-            debugLog("filterSuspectCoordinateClusters dropped=\(dropped) threshold=\(suspectCoordinateClusterThreshold)")
-        }
-        return filtered
     }
 
     private func markerClusters(from source: [HePlace], region: MKCoordinateRegion) -> [MarkerClusterSummary] {
@@ -2928,16 +3208,6 @@ final class HomeMapViewModel: ObservableObject {
         return cluster.count > 1
     }
 
-    private func coordinateKey(for place: HePlace) -> String {
-        "\(Int((place.coordinate.latitude * 1_000_000).rounded())):\(Int((place.coordinate.longitude * 1_000_000).rounded()))"
-    }
-
-    private func isLowConfidenceGeoSource(_ source: String) -> Bool {
-        source == "missing" ||
-            source == "pref_center_fallback" ||
-            source.hasPrefix("network_geocode")
-    }
-
     private func isPlaceInteractionEnabled(_ place: HePlace, now: Date = Date()) -> Bool {
         !isPlaceArchivedAfterRetention(place, now: now)
     }
@@ -2984,12 +3254,7 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func filteredPlacesInRegion(_ source: [HePlace], region: MKCoordinateRegion) -> [HePlace] {
-        let halfLat = region.span.latitudeDelta / 2
-        let halfLng = region.span.longitudeDelta / 2
-        return source.filter { place in
-            abs(place.coordinate.latitude - region.center.latitude) <= halfLat &&
-                abs(place.coordinate.longitude - region.center.longitude) <= halfLng
-        }
+        HomeMapSpatialCompute.filteredPlacesInRegion(source, region: region)
     }
 
     private func isRegion(_ region: MKCoordinateRegion, containedIn envelope: MKCoordinateRegion) -> Bool {
@@ -3122,7 +3387,9 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
         mapCameraPosition = .region(normalizedIncomingRegion)
-        lastKnownMapRegion = normalizedIncomingRegion
+        // Keep lastKnownMapRegion stable during gesture updates.
+        // It is refreshed by handleMapCameraChange(.onEnd) after gesture settles,
+        // which avoids high-frequency marker overlap regrouping while panning.
     }
 
     private func shouldIgnoreTransientMapPositionAfterCalendarDismiss(_ region: MKCoordinateRegion) -> Bool {
@@ -3209,8 +3476,11 @@ final class HomeMapViewModel: ObservableObject {
             return
         }
 
-        // 跨区域大跳转时重建 Map 实例，避免旧瓦片/渲染缓存长期堆积。
-        forceMapViewRebuild(reason: "longDistanceJump:\(Int(distanceKm.rounded()))km")
+        // 跨区域大跳转时重建 Map 实例，直接钉在目标区域，避免先渲染旧视野再跳转造成闪烁/回拉。
+        forceMapViewRebuild(
+            reason: "longDistanceJump:\(Int(distanceKm.rounded()))km",
+            pinnedRegion: nextRegion
+        )
     }
 
     private func forceMapViewRebuild(reason: String, pinnedRegion: MKCoordinateRegion? = nil) {
@@ -3385,11 +3655,13 @@ final class HomeMapViewModel: ObservableObject {
         bootstrapTask?.cancel()
         deferredLoadAllTask?.cancel()
         loadAllTask?.cancel()
+        deferredCameraEndTask?.cancel()
         viewportReloadTask?.cancel()
         idleRecycleTask?.cancel()
         periodicHardRecycleTask?.cancel()
         memoryWatchdogTask?.cancel()
         nearbyLoadTask?.cancel()
+        nearbyPreheatTask?.cancel()
         activeNearbyQueryToken = nil
         mapZoomRestoreTask?.cancel()
         quickCardPresentationTask?.cancel()

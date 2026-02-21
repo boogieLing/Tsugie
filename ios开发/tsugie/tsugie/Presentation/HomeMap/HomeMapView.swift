@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 struct HomeMapView: View {
     @Environment(\.openURL) private var openURL
@@ -15,7 +16,6 @@ struct HomeMapView: View {
             saturationRatio: viewModel.themeSaturationRatio,
             glowRatio: viewModel.themeGlowRatio
         )
-        let markerActiveGradient = viewModel.activePillGradient
         let markerActiveGlowColor = viewModel.activeMapGlowColor
         let markerActionStyleHanabi = MarkerActionStyle(
             gradient: TsugieVisuals.markerGradient(for: .hanabi),
@@ -65,11 +65,11 @@ struct HomeMapView: View {
 
                     ForEach(markerEntries) { entry in
                         let placeState = viewModel.placeState(for: entry.id)
+                        let shouldShowDecoration = (entry.isMenuVisible || entry.isSelected) && placeState.isCheckedIn
                         Annotation(entry.name, coordinate: entry.coordinate, anchor: .bottom) {
                             MapMarkerAnnotationView(
                                 entry: entry,
                                 themeSignature: markerThemeSignature,
-                                activeGradient: markerActiveGradient,
                                 activeGlowColor: markerActiveGlowColor,
                                 markerActionStyle: markerActionStyle(
                                     for: entry.heType,
@@ -80,9 +80,9 @@ struct HomeMapView: View {
                                 stamp: entry.isMenuVisible
                                     ? viewModel.stampPresentation(for: entry.id, heType: entry.heType)
                                     : nil,
-                                isDecorationVisible: entry.isSelected && placeState.isCheckedIn,
+                                isDecorationVisible: shouldShowDecoration,
                                 isDecorationWhiteBaseEnabled: placeState.isCheckedIn,
-                                decoration: (entry.isSelected && placeState.isCheckedIn)
+                                decoration: shouldShowDecoration
                                     ? viewModel.markerDecorationPresentation(for: entry.id, heType: entry.heType)
                                     : nil,
                                 onFavoriteTap: {
@@ -128,8 +128,6 @@ struct HomeMapView: View {
                     },
                     including: .gesture
                 )
-
-                mapAmbientGlowLayer
 
                 if let detailPlace = viewModel.detailPlace {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -240,7 +238,7 @@ struct HomeMapView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(14)
                 } else if !viewModel.isSideDrawerOpen {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                    TimelineView(.periodic(from: .now, by: 8)) { context in
                         NearbyCarouselView(
                             items: viewModel.nearbyCarouselItems(now: context.date),
                             onSelectPlace: { placeID in
@@ -559,7 +557,6 @@ struct MapMarkerEntry: Identifiable, Equatable {
 private struct MapMarkerAnnotationView: View, Equatable {
     let entry: MapMarkerEntry
     let themeSignature: MarkerThemeSignature
-    let activeGradient: LinearGradient
     let activeGlowColor: Color
     let markerActionStyle: MarkerActionStyle
     let stamp: PlaceStampPresentation?
@@ -581,39 +578,46 @@ private struct MapMarkerAnnotationView: View, Equatable {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MarkerDecorationOverlayView(
-                isPresented: isDecorationVisible,
-                decoration: decoration,
-                useWhiteBase: isDecorationWhiteBaseEnabled,
-                onTap: onCheckedInTap
-            )
-            .offset(x: 14, y: -10)
-            .zIndex(3)
+            if isDecorationVisible, let decoration {
+                Button(action: onCheckedInTap) {
+                    MarkerDecorationBadgeView(
+                        decoration: decoration,
+                        useWhiteBase: isDecorationWhiteBaseEnabled
+                    )
+                    .padding(8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.Marker.checkedInA11y)
+                .offset(x: 14, y: -10)
+                .zIndex(5)
+            }
 
             MarkerBubbleView(
                 placeName: entry.name,
                 heType: entry.heType,
                 isSelected: entry.isSelected,
                 clusterCount: entry.clusterCount,
-                activeGradient: activeGradient,
                 activeGlowColor: activeGlowColor,
                 onTap: onTap
             )
             .allowsHitTesting(true)
             .zIndex(1)
 
-            MarkerActionBubbleView(
-                isVisible: entry.isMenuVisible,
-                placeState: entry.menuPlaceState ?? PlaceState(),
-                stamp: stamp,
-                activeGradient: markerActionStyle.gradient,
-                activeGlowColor: markerActionStyle.glowColor,
-                onFavoriteTap: onFavoriteTap,
-                onCheckedInTap: onCheckedInTap
-            )
-            .offset(y: -14)
-            .allowsHitTesting(entry.isMenuVisible)
-            .zIndex(4)
+            if entry.isMenuVisible {
+                MarkerActionBubbleView(
+                    isVisible: true,
+                    placeState: entry.menuPlaceState ?? PlaceState(),
+                    stamp: stamp,
+                    activeGradient: markerActionStyle.gradient,
+                    activeGlowColor: markerActionStyle.glowColor,
+                    onFavoriteTap: onFavoriteTap,
+                    onCheckedInTap: onCheckedInTap
+                )
+                .offset(y: -14)
+                .allowsHitTesting(true)
+                .zIndex(4)
+            }
         }
     }
 }
@@ -635,31 +639,13 @@ private struct MarkerDecorationBadgeView: View {
     let useWhiteBase: Bool
 
     var body: some View {
-        Group {
-            if decoration.isAssetCatalog {
-                Image(decoration.resourceName)
-                    .resizable()
-                    .interpolation(.high)
-                    .antialiased(true)
-            } else {
-                if useWhiteBase {
-                    ZStack {
-                        StampWhiteBaseImageView(
-                            resourceName: decoration.resourceName,
-                            maxPixelSize: 256
-                        )
-                        ImmediateStampImageView(
-                            resourceName: decoration.resourceName,
-                            maxPixelSize: 256
-                        )
-                    }
-                } else {
-                    ImmediateStampImageView(
-                        resourceName: decoration.resourceName,
-                        maxPixelSize: 256
-                    )
-                }
-            }
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(useWhiteBase ? 0.92 : 0.24))
+                .frame(width: 54, height: 54)
+
+            MarkerDecorationResolvedImageView(decoration: decoration)
+                .padding(4)
         }
         .scaledToFit()
         .frame(width: 58, height: 58)
@@ -667,98 +653,78 @@ private struct MarkerDecorationBadgeView: View {
     }
 }
 
-private struct MarkerDecorationOverlayView: View {
-    let isPresented: Bool
-    let decoration: PlaceDecorationPresentation?
-    let useWhiteBase: Bool
-    let onTap: () -> Void
-
-    @State private var displayedDecoration: PlaceDecorationPresentation?
-    @State private var progress: CGFloat = 0
-    @State private var pendingHide: DispatchWorkItem?
-
-    private let insertAnimation = Animation.spring(response: 0.46, dampingFraction: 0.76)
-    private let removeAnimation = Animation.easeInOut(duration: 0.32)
-    private let removeDuration: TimeInterval = 0.32
+private struct MarkerDecorationResolvedImageView: View {
+    let decoration: PlaceDecorationPresentation
+    @State private var image: UIImage?
 
     var body: some View {
         Group {
-            if let displayedDecoration {
-                Button(action: onTap) {
-                    MarkerDecorationBadgeView(
-                        decoration: displayedDecoration,
-                        useWhiteBase: useWhiteBase
-                    )
-                    .modifier(MarkerDecorationPhaseModifier(progress: progress))
-                    .padding(8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L10n.Marker.checkedInA11y)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+            } else {
+                Image(systemName: "sparkles")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(red: 0.98, green: 0.65, blue: 0.32))
+                    .padding(12)
             }
         }
         .onAppear {
-            syncAnimation()
+            reload()
         }
-        .onChange(of: isPresented) { _, _ in
-            syncAnimation()
-        }
-        .onChange(of: decoration?.resourceName) { _, _ in
-            syncAnimation()
-        }
-        .onDisappear {
-            pendingHide?.cancel()
-            pendingHide = nil
-            displayedDecoration = nil
-            progress = 0
+        .onChange(of: decoration.resourceName) { _, _ in
+            reload()
         }
     }
 
-    private func syncAnimation() {
-        pendingHide?.cancel()
-        pendingHide = nil
+    private func reload() {
+        if decoration.isAssetCatalog {
+            image = UIImage(named: decoration.resourceName)
+            return
+        }
 
-        if isPresented, let decoration {
-            displayedDecoration = decoration
-            progress = 0
-            DispatchQueue.main.async {
-                withAnimation(insertAnimation) {
-                    progress = 1
-                }
+        image = loadBundleImage(resourceName: decoration.resourceName)
+            ?? UIImage(named: decoration.resourceName)
+            ?? UIImage(named: URL(fileURLWithPath: decoration.resourceName).lastPathComponent)
+            ?? UIImage(named: URL(fileURLWithPath: decoration.resourceName).deletingPathExtension().lastPathComponent)
+    }
+
+    private func loadBundleImage(resourceName: String) -> UIImage? {
+        guard let baseURL = Bundle.main.resourceURL else {
+            return nil
+        }
+
+        let fileName = URL(fileURLWithPath: resourceName).lastPathComponent
+        let primary = baseURL.appendingPathComponent(fileName, isDirectory: false)
+        if FileManager.default.fileExists(atPath: primary.path) {
+            return UIImage(contentsOfFile: primary.path)
+        }
+        let secondary = baseURL
+            .appendingPathComponent("marker-decorations", isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
+        if FileManager.default.fileExists(atPath: secondary.path) {
+            return UIImage(contentsOfFile: secondary.path)
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: baseURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        for case let candidate as URL in enumerator {
+            guard candidate.lastPathComponent == fileName,
+                  (try? candidate.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
+                continue
             }
-            return
+            return UIImage(contentsOfFile: candidate.path)
         }
-
-        guard displayedDecoration != nil else {
-            return
-        }
-
-        withAnimation(removeAnimation) {
-            progress = 0
-        }
-        let hideWorkItem = DispatchWorkItem {
-            displayedDecoration = nil
-        }
-        pendingHide = hideWorkItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + removeDuration, execute: hideWorkItem)
-    }
-}
-
-private struct MarkerDecorationPhaseModifier: ViewModifier {
-    let progress: CGFloat
-
-    func body(content: Content) -> some View {
-        let clamped = min(max(progress, 0), 1)
-        let scale = 0.24 + (0.76 * clamped)
-        let rotation = -112 * (1 - clamped)
-        let xOffset = -14 * (1 - clamped)
-        let yOffset = 12 * (1 - clamped)
-
-        content
-            .scaleEffect(scale, anchor: .bottomLeading)
-            .rotationEffect(.degrees(Double(rotation)), anchor: .bottomLeading)
-            .offset(x: xOffset, y: yOffset)
-            .opacity(clamped)
+        return nil
     }
 }
 

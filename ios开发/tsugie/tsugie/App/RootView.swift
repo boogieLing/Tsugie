@@ -4,6 +4,7 @@ struct RootView: View {
     @StateObject private var viewModel = HomeMapViewModel()
     @State private var isCalendarPresented = false
     @State private var isLaunchSplashVisible = true
+    @State private var pendingCalendarNavigationPlaceID: UUID?
 
     var body: some View {
         ZStack {
@@ -19,6 +20,13 @@ struct RootView: View {
                 isPresented: $isCalendarPresented,
                 onDismiss: {
                     viewModel.setCalendarPresented(false)
+                    if let placeID = pendingCalendarNavigationPlaceID {
+                        pendingCalendarNavigationPlaceID = nil
+                        Task { @MainActor in
+                            await Task.yield()
+                            viewModel.openQuickFromCalendar(placeID: placeID)
+                        }
+                    }
                 }
             ) {
                 CalendarPageView(
@@ -27,13 +35,17 @@ struct RootView: View {
                     placeStateProvider: { viewModel.placeState(for: $0) },
                     stampProvider: { viewModel.stampPresentation(for: $0, heType: $1) },
                     onClose: {
+                        pendingCalendarNavigationPlaceID = nil
                         viewModel.setCalendarPresented(false)
                         isCalendarPresented = false
                     },
                     onSelectPlace: { placeID in
+                        // Close calendar visual state first (avoid white frame), then navigate on dismiss
+                        // to avoid camera race between cover transition and map jump.
+                        viewModel.prepareForCalendarPlaceNavigation()
                         viewModel.setCalendarPresented(false)
+                        pendingCalendarNavigationPlaceID = placeID
                         isCalendarPresented = false
-                        viewModel.openQuickFromCalendar(placeID: placeID)
                     },
                     now: viewModel.now,
                     activeGradient: viewModel.activePillGradient,

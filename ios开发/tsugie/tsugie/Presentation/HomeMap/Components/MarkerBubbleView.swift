@@ -5,7 +5,6 @@ struct MarkerBubbleView: View {
     let heType: HeType
     let isSelected: Bool
     let clusterCount: Int
-    let activeGradient: LinearGradient
     let activeGlowColor: Color
     let onTap: () -> Void
 
@@ -15,17 +14,15 @@ struct MarkerBubbleView: View {
 
     var body: some View {
         let palette = TsugieVisuals.palette(for: heType)
+        let showsHighlight = isSelected
 
         Button(action: onTap) {
             ZStack {
-                Circle()
-                    .fill(activeGlowColor.opacity(0))
-                    .frame(width: 48, height: 48)
-                    .blur(radius: 0)
-
-                Circle()
-                    .fill(palette.markerHalo.opacity(0.14))
-                    .frame(width: 32, height: 32)
+                if isSelected || isCluster {
+                    Circle()
+                        .fill(palette.markerHalo.opacity(isSelected ? 0.20 : 0.12))
+                        .frame(width: isSelected ? 36 : 32, height: isSelected ? 36 : 32)
+                }
 
                 Text("へ")
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
@@ -35,34 +32,10 @@ struct MarkerBubbleView: View {
                         markerGradient,
                             in: Circle()
                     )
-                    .opacity(isSelected ? 1 : 0.64)
+                    .opacity(isSelected ? 1 : 0.68)
                     .overlay(Circle().stroke(.white, lineWidth: 2))
-                    .shadow(
-                        color: Color(
-                            red: 0.08,
-                            green: 0.28,
-                            blue: 0.34,
-                            opacity: isSelected ? 0 : 0.20
-                        ),
-                        radius: isSelected ? 0 : 4,
-                        x: 0,
-                        y: 3
-                    )
-                    .tsugieActiveGlow(
-                        isActive: false,
-                        glowGradient: activeGradient,
-                        glowColor: activeGlowColor,
-                        cornerRadius: 12,
-                        blurRadius: 11,
-                        glowOpacity: 0.94,
-                        scale: 1.12,
-                        primaryOpacity: 0.92,
-                        primaryRadius: 16,
-                        primaryYOffset: 3,
-                        secondaryOpacity: 0.58,
-                        secondaryRadius: 24,
-                        secondaryYOffset: 6
-                    )
+                    .shadow(color: showsHighlight ? activeGlowColor.opacity(0.34) : .clear, radius: showsHighlight ? 8 : 0, x: 0, y: 2)
+                    .shadow(color: Color(red: 0.08, green: 0.28, blue: 0.34, opacity: 0.14), radius: 3, x: 0, y: 2)
             }
             .frame(width: 30, height: 30)
             .background(alignment: .bottomTrailing) {
