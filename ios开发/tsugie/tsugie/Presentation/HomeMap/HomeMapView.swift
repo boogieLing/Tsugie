@@ -1,6 +1,5 @@
 import MapKit
 import SwiftUI
-import UIKit
 
 struct HomeMapView: View {
     @Environment(\.openURL) private var openURL
@@ -640,91 +639,20 @@ private struct MarkerDecorationBadgeView: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(Color.white.opacity(useWhiteBase ? 0.92 : 0.24))
-                .frame(width: 54, height: 54)
-
-            MarkerDecorationResolvedImageView(decoration: decoration)
-                .padding(4)
+            if useWhiteBase {
+                StampWhiteBaseImageView(
+                    resourceName: decoration.resourceName,
+                    maxPixelSize: 256
+                )
+            }
+            ImmediateStampImageView(
+                resourceName: decoration.resourceName,
+                maxPixelSize: 256
+            )
         }
         .scaledToFit()
         .frame(width: 58, height: 58)
         .accessibilityHidden(true)
-    }
-}
-
-private struct MarkerDecorationResolvedImageView: View {
-    let decoration: PlaceDecorationPresentation
-    @State private var image: UIImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .antialiased(true)
-            } else {
-                Image(systemName: "sparkles")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(Color(red: 0.98, green: 0.65, blue: 0.32))
-                    .padding(12)
-            }
-        }
-        .onAppear {
-            reload()
-        }
-        .onChange(of: decoration.resourceName) { _, _ in
-            reload()
-        }
-    }
-
-    private func reload() {
-        if decoration.isAssetCatalog {
-            image = UIImage(named: decoration.resourceName)
-            return
-        }
-
-        image = loadBundleImage(resourceName: decoration.resourceName)
-            ?? UIImage(named: decoration.resourceName)
-            ?? UIImage(named: URL(fileURLWithPath: decoration.resourceName).lastPathComponent)
-            ?? UIImage(named: URL(fileURLWithPath: decoration.resourceName).deletingPathExtension().lastPathComponent)
-    }
-
-    private func loadBundleImage(resourceName: String) -> UIImage? {
-        guard let baseURL = Bundle.main.resourceURL else {
-            return nil
-        }
-
-        let fileName = URL(fileURLWithPath: resourceName).lastPathComponent
-        let primary = baseURL.appendingPathComponent(fileName, isDirectory: false)
-        if FileManager.default.fileExists(atPath: primary.path) {
-            return UIImage(contentsOfFile: primary.path)
-        }
-        let secondary = baseURL
-            .appendingPathComponent("marker-decorations", isDirectory: true)
-            .appendingPathComponent(fileName, isDirectory: false)
-        if FileManager.default.fileExists(atPath: secondary.path) {
-            return UIImage(contentsOfFile: secondary.path)
-        }
-
-        guard let enumerator = FileManager.default.enumerator(
-            at: baseURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return nil
-        }
-
-        for case let candidate as URL in enumerator {
-            guard candidate.lastPathComponent == fileName,
-                  (try? candidate.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else {
-                continue
-            }
-            return UIImage(contentsOfFile: candidate.path)
-        }
-        return nil
     }
 }
 

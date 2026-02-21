@@ -1819,15 +1819,19 @@ final class HomeMapViewModel: ObservableObject {
                 placeStampStore.lockStampIfNeeded(for: placeID, heType: place.heType)
             }
             if nextState.isCheckedIn {
+                // Re-sample decoration on every check-in action.
+                _ = placeDecorationStore.resamplePresentation(for: placeID, heType: place.heType)
                 mutateInteractionState {
                     _selectedPlaceID = placeID
                     if _detailPlaceID == nil {
                         _markerActionPlaceID = placeID
                     }
                 }
-                _ = placeDecorationStore.presentation(for: placeID, heType: place.heType)
                 return
             }
+
+            // Clearing check-in should clear current decoration so next check-in can re-randomize.
+            placeDecorationStore.clearPresentation(for: placeID)
         }
         if _selectedPlaceID == placeID, _detailPlaceID == nil {
             mutateInteractionState {

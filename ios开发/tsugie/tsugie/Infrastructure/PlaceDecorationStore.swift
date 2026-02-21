@@ -17,6 +17,7 @@ final class PlaceDecorationStore {
     ]
 
     private var assignedDecorations: [UUID: PlaceDecorationPresentation] = [:]
+    private var lastDecorationResourceByPlace: [UUID: String] = [:]
     private let allBundleResourceNames: [String]
 
     init(allBundleResourceNames: [String]? = nil) {
@@ -29,20 +30,17 @@ final class PlaceDecorationStore {
             return assigned
         }
 
-        if let sampled = sampleResourceName(for: heType) {
-            let assigned = PlaceDecorationPresentation(resourceName: normalizedResourceName(sampled), isAssetCatalog: false)
-            assignedDecorations[placeID] = assigned
-            retainOnly(placeID: placeID)
-            return assigned
-        }
+        return assignPresentation(for: placeID, heType: heType, excluding: nil)
+    }
 
-        guard let fallbackAsset = Self.fallbackAssetByType[heType] else {
-            return nil
-        }
-        let assigned = PlaceDecorationPresentation(resourceName: fallbackAsset, isAssetCatalog: true)
-        assignedDecorations[placeID] = assigned
-        retainOnly(placeID: placeID)
-        return assigned
+    func resamplePresentation(for placeID: UUID, heType: HeType) -> PlaceDecorationPresentation? {
+        let excludedResource = assignedDecorations[placeID]?.resourceName ?? lastDecorationResourceByPlace[placeID]
+        assignedDecorations.removeValue(forKey: placeID)
+        return assignPresentation(for: placeID, heType: heType, excluding: excludedResource)
+    }
+
+    func clearPresentation(for placeID: UUID) {
+        assignedDecorations.removeValue(forKey: placeID)
     }
 
     func retainOnly(placeID: UUID?) {
@@ -57,17 +55,46 @@ final class PlaceDecorationStore {
         assignedDecorations = [placeID: selectedDecoration]
     }
 
-    private func sampleResourceName(for heType: HeType) -> String? {
+    private func sampleResourceName(for heType: HeType, excluding excluded: String?) -> String? {
         let folders = folders(for: heType).shuffled()
         for folder in folders {
             let candidates = allBundleResourceNames.filter { resourceName in
                 Self.resourceName(resourceName, belongsTo: folder)
             }
-            if let picked = candidates.randomElement() {
-                return normalizedResourceName(picked)
+            let normalizedCandidates = Array(Set(candidates.map { normalizedResourceName($0) }))
+            let candidatesExcludingLast = normalizedCandidates.filter { $0 != excluded }
+
+            if let picked = candidatesExcludingLast.randomElement() {
+                return picked
+            }
+            if let picked = normalizedCandidates.randomElement() {
+                return picked
             }
         }
         return nil
+    }
+
+    private func assignPresentation(
+        for placeID: UUID,
+        heType: HeType,
+        excluding excludedResource: String?
+    ) -> PlaceDecorationPresentation? {
+        if let sampled = sampleResourceName(for: heType, excluding: excludedResource) {
+            let assigned = PlaceDecorationPresentation(resourceName: normalizedResourceName(sampled), isAssetCatalog: false)
+            assignedDecorations[placeID] = assigned
+            lastDecorationResourceByPlace[placeID] = assigned.resourceName
+            retainOnly(placeID: placeID)
+            return assigned
+        }
+
+        guard let fallbackAsset = Self.fallbackAssetByType[heType] else {
+            return nil
+        }
+        let assigned = PlaceDecorationPresentation(resourceName: fallbackAsset, isAssetCatalog: true)
+        assignedDecorations[placeID] = assigned
+        lastDecorationResourceByPlace[placeID] = assigned.resourceName
+        retainOnly(placeID: placeID)
+        return assigned
     }
 
     private func normalizedResourceName(_ resourceName: String) -> String {
