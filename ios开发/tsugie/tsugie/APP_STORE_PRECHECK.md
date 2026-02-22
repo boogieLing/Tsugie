@@ -139,7 +139,8 @@
 2) 不提供基于互联网的信息发布、复制、传播或互动服务；
 3) 除用户主动点击“导航”跳转至 Apple 地图或 Google 地图，或主动打开活动来源链接外，不向第三方共享可识别个人信息；
 4) 无账号体系，不接入第三方广告/统计/归因 SDK；
-5) 定位权限仅用于附近推荐，通知权限仅用于开始前提醒；拒绝权限后仍可继续浏览核心功能（定位回退默认地点、通知提醒不可用）。
+5) 当前版本为 App Store 付费下载（买断）模式，支付、兑换码与退款流程由 Apple 官方规则处理；
+6) 定位权限仅用于附近推荐，通知权限仅用于开始前提醒；拒绝权限后仍可继续浏览核心功能（定位回退默认地点、通知提醒不可用）。
 
 审核路径：
 打开 App -> 地图首页 -> 点击任一点位 -> quickCard -> 详情页。
@@ -156,7 +157,8 @@ Release notes for App Review:
 2) It does not provide internet-based information publishing, replication, dissemination, or interactive information services.
 3) Except when a user intentionally launches navigation to Apple Maps or Google Maps, or opens event source links, no personally identifiable information is shared with third parties.
 4) No account system and no third-party ad/analytics/attribution SDKs.
-5) Location permission is used only for nearby recommendations, and notification permission is used only for before-start reminders. If denied, core browsing remains available (location falls back to default area; reminders are unavailable).
+5) The current release is a paid-download (one-time purchase) app on the App Store; payment, promo-code redemption, and refund flows are handled under Apple's official rules.
+6) Location permission is used only for nearby recommendations, and notification permission is used only for before-start reminders. If denied, core browsing remains available (location falls back to default area; reminders are unavailable).
 
 Reviewer path:
 Launch app -> map home -> tap any marker -> quick card -> detail page.
@@ -173,7 +175,8 @@ Web URL: https://www.shyr0.com/idea/tsugie/privacy
 2) インターネットを通じた情報の発信・複製・伝達・相互交流サービスは提供しません。
 3) 利用者が自ら Apple マップ / Google マップへのナビ起動を行う場合、またはイベント情報ソースリンクを開く場合を除き、個人を識別できる情報を第三者へ共有しません。
 4) アカウント機能はなく、第三者広告/解析/アトリビューション SDK は未導入です。
-5) 位置情報権限は近傍おすすめ表示のためのみ、通知権限は開始前リマインドのためのみ利用します。拒否時も閲覧の主要機能は利用可能です（位置は既定地点表示、通知は無効）。
+5) 現行版は App Store の有料ダウンロード（買い切り）方式であり、決済・Promo Code 交換・返金は Apple 公式ルールに従って処理されます。
+6) 位置情報権限は近傍おすすめ表示のためのみ、通知権限は開始前リマインドのためのみ利用します。拒否時も閲覧の主要機能は利用可能です（位置は既定地点表示、通知は無効）。
 
 審査動線：
 アプリ起動 -> 地図ホーム -> 任意マーカーをタップ -> quickCard -> 詳細。

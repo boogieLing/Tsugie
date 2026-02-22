@@ -108,7 +108,7 @@
 "drawer.notifications.nearby.hint" = "稍远一点的候选也会提醒";
 "notification.starting_soon_title" = "即将开始...";
 "privacy.first_launch.title" = "首次使用隐私确认";
-"privacy.first_launch.message" = "Tsugie 当前版本为单机本地优先应用。除你主动发起导航跳转或打开活动来源链接外，不提供基于互联网的信息发布、复制、传播或互动服务。为提供附近推荐与开始前提醒，我们仅在你授权后处理定位与通知相关信息。继续使用前请先阅读隐私政策。";
+"privacy.first_launch.message" = "Tsugie 当前版本为单机本地优先应用。除你主动发起导航跳转或打开活动来源链接外，不提供基于互联网的信息发布、复制、传播或互动服务。当前版本为 App Store 付费下载（买断）模式，支付、兑换码与退款流程由 Apple 官方规则处理。为提供附近推荐与开始前提醒，我们仅在你授权后处理定位与通知相关信息。继续使用前请先阅读隐私政策。";
 "privacy.first_launch.open_policy" = "打开隐私政策";
 "privacy.first_launch.accept" = "我已阅读并同意";
 "privacy.first_launch.required_hint" = "点击“我已阅读并同意”即表示你已阅读并同意隐私政策，并将在适用法律法规范围内使用本应用。该确认仅首次需要，之后可在「联系我们」中再次查看。";
