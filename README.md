@@ -364,3 +364,11 @@ Tsugie 将“开抽屉卡顿”与“日历打开慢”作为独立性能课题�
 一个真正以“下一步决策”为核心的地图产品。
 
 Tsugie 从定位、推荐、交互、渲染到资源治理，形成完整系统能力。
+
+---
+
+## 隐私与合规文档
+
+- 隐私政策与提审口径（本地文档）：`记录/tsugie-隐私政策与提审口径-v1.md`
+- 提审预检清单：`ios开发/tsugie/tsugie/APP_STORE_PRECHECK.md`
+- 隐私声明页面（线上）：`https://www.shyr0.com/idea/tsugie/privacy`
