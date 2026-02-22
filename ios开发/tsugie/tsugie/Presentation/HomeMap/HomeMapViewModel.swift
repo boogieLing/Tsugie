@@ -1907,6 +1907,19 @@ final class HomeMapViewModel: ObservableObject {
         return "\(distanceText(for: place)) ・ \(quickStartDateText(for: snapshot, now: resolvedNow))"
     }
 
+    func quickMetaStatusText(for place: HePlace, now: Date? = nil) -> String {
+        let resolvedNow = now ?? Date()
+        let snapshot = eventSnapshot(for: place, now: resolvedNow)
+        if snapshot.status == .ended {
+            let dateText = quickDateOnlyText(snapshot.startDate)
+            guard dateText != L10n.Common.dateUnknown else {
+                return L10n.EventStatus.ended
+            }
+            return "\(L10n.EventStatus.ended) · \(dateText)"
+        }
+        return quickStartDateText(for: snapshot, now: resolvedNow)
+    }
+
     func timeRangeText(for place: HePlace, now: Date? = nil) -> String {
         let snapshot = eventSnapshot(for: place, now: now)
         guard snapshot.status != .unknown else {
@@ -2271,6 +2284,19 @@ final class HomeMapViewModel: ObservableObject {
         )
     }
 
+    private func quickDateOnlyText(_ date: Date?) -> String {
+        guard let date else {
+            return L10n.Common.dateUnknown
+        }
+        return date.formatted(
+            Date.FormatStyle()
+                .year(.defaultDigits)
+                .month(.twoDigits)
+                .day(.twoDigits)
+                .locale(selectedLanguageLocale)
+        )
+    }
+
     private func daysUntil(date: Date, from referenceDate: Date) -> Int {
         let calendar = Calendar.current
         let startDay = calendar.startOfDay(for: referenceDate)
@@ -2387,11 +2413,21 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func isFavoriteDrawerHigherPriority(_ lhs: HePlace, _ rhs: HePlace, now: Date) -> Bool {
-        let lhsOngoing = eventStatus(for: lhs, now: now) == .ongoing
-        let rhsOngoing = eventStatus(for: rhs, now: now) == .ongoing
+        let lhsStatus = eventStatus(for: lhs, now: now)
+        let rhsStatus = eventStatus(for: rhs, now: now)
+
+        let lhsOngoing = lhsStatus == .ongoing
+        let rhsOngoing = rhsStatus == .ongoing
         if lhsOngoing != rhsOngoing {
             return lhsOngoing
         }
+
+        let lhsEnded = lhsStatus == .ended
+        let rhsEnded = rhsStatus == .ended
+        if lhsEnded != rhsEnded {
+            return !lhsEnded
+        }
+
         return isHigherPriority(lhs, rhs)
     }
 

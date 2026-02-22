@@ -12,6 +12,8 @@ struct DetailPanelView: View {
     @Environment(\.locale) private var locale
     @State private var illustrationSelectionID = UUID()
     @State private var renderPhase: RenderPhase = .header
+    @State private var dismissDragOffset: CGFloat = 0
+    @State private var dismissDragStartAt: Date?
 
     let place: HePlace
     let snapshot: EventStatusSnapshot
@@ -143,13 +145,19 @@ struct DetailPanelView: View {
                 .stroke(Color(red: 0.86, green: 0.93, blue: 0.95, opacity: 0.9), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .offset(y: dismissDragOffset)
+        .simultaneousGesture(detailDismissGesture)
         .onAppear {
             illustrationSelectionID = UUID()
             renderPhase = .header
+            dismissDragOffset = 0
+            dismissDragStartAt = nil
         }
         .onChange(of: place.id) { _, _ in
             illustrationSelectionID = UUID()
             renderPhase = .header
+            dismissDragOffset = 0
+            dismissDragStartAt = nil
         }
         .task(id: place.id) {
             await advanceRenderPhase()
@@ -183,7 +191,7 @@ struct DetailPanelView: View {
     private var detailProgressBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(progressTitle)
+                Text(progressHeaderDateText)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
                 Spacer()
@@ -537,13 +545,17 @@ struct DetailPanelView: View {
         return Double(hash % 10_000) / 10_000.0
     }
 
-    private var progressTitle: String {
-        switch snapshot.status {
-        case .ongoing: L10n.Detail.progressTitleOngoing
-        case .upcoming: L10n.Detail.progressTitleUpcoming
-        case .ended: L10n.Detail.progressTitleEnded
-        case .unknown: L10n.Detail.progressTitleUnknown
+    private var progressHeaderDateText: String {
+        guard let startDate = snapshot.startDate ?? place.startAt else {
+            return L10n.Common.dateUnknown
         }
+        return startDate.formatted(
+            Date.FormatStyle()
+                .year(.defaultDigits)
+                .month(.twoDigits)
+                .day(.twoDigits)
+                .locale(locale)
+        )
     }
 
     private var progressMeta: String {
@@ -598,6 +610,31 @@ struct DetailPanelView: View {
             return 27
         }
         return 30
+    }
+
+    private var detailDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                guard value.startLocation.y <= 116 else {
+                    return
+                }
+                if dismissDragStartAt == nil {
+                    dismissDragStartAt = Date()
+                }
+                dismissDragOffset = min(max(value.translation.height, 0), 180)
+            }
+            .onEnded { _ in
+                let delta = dismissDragOffset
+                let elapsed = Date().timeIntervalSince(dismissDragStartAt ?? Date())
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                    dismissDragOffset = 0
+                }
+                dismissDragStartAt = nil
+
+                if delta >= 56 || (delta >= 26 && elapsed <= 0.22) {
+                    onClose()
+                }
+            }
     }
 }
 

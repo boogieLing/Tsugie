@@ -15,6 +15,13 @@ struct EventStatusSnapshot: Equatable {
 
 @MainActor
 enum EventStatusResolver {
+    private static let tokyoTimeZone = TimeZone(identifier: "Asia/Tokyo") ?? .current
+    private static let tokyoCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = tokyoTimeZone
+        return calendar
+    }()
+
     static func resolve(startAt: Date?, endAt: Date?, now: Date = Date()) -> EventStatus {
         snapshot(startAt: startAt, endAt: endAt, now: now).status
     }
@@ -63,7 +70,7 @@ enum EventStatusResolver {
         }
 
         if let endAt, endAt >= startAt, now >= startAt, now <= endAt {
-            if Calendar.current.startOfDay(for: startAt) != Calendar.current.startOfDay(for: endAt) {
+            if tokyoCalendar.startOfDay(for: startAt) != tokyoCalendar.startOfDay(for: endAt) {
                 return multiDaySnapshot(startAt: startAt, endAt: endAt, now: now)
             }
             let total = max(endAt.timeIntervalSince(startAt), 1)
@@ -116,7 +123,7 @@ enum EventStatusResolver {
     }
 
     private static func multiDaySnapshot(startAt: Date, endAt: Date, now: Date) -> EventStatusSnapshot {
-        let calendar = Calendar.current
+        let calendar = tokyoCalendar
         let startDay = calendar.startOfDay(for: startAt)
         let endDay = calendar.startOfDay(for: endAt)
         let nowDay = calendar.startOfDay(for: now)
@@ -249,7 +256,7 @@ enum EventStatusResolver {
     }
 
     private static func formatHm(_ date: Date) -> String {
-        let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: date)
+        let components = tokyoCalendar.dateComponents([.hour, .minute], from: date)
         let hour = components.hour ?? 0
         let minute = components.minute ?? 0
         return "\(String(format: "%02d", hour)):\(String(format: "%02d", minute))"

@@ -525,11 +525,18 @@ struct SideDrawerLayerView: View {
                     .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
             }
             HStack {
-                Text("\(startDateText) \(range)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 0) {
+                    Text(startDateText)
+                        .strikethrough(
+                            snapshot.status == .ended,
+                            color: Color(red: 0.36, green: 0.47, blue: 0.51, opacity: 0.78)
+                        )
+                    Text(" \(range)")
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(Color(red: 0.36, green: 0.47, blue: 0.51))
+                .lineLimit(1)
+                .truncationMode(.tail)
                 Spacer()
                 HStack(spacing: 6) {
                     FavoriteStateIconView(isFavorite: placeState.isFavorite, size: 17)

@@ -1120,6 +1120,15 @@ nonisolated private enum SeedDateParser {
         return formatter
     }()
 
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
     nonisolated static func startAt(_ item: EncodedHePlaceItem) -> Date? {
         guard let day = item.normalizedStartDate?.nonEmpty else {
             return nil
@@ -1139,10 +1148,24 @@ nonisolated private enum SeedDateParser {
             }
         }
 
+        if let startAt,
+           let endTime = item.normalizedEndTime?.nonEmpty,
+           let inferredEnd = inferEndDate(onSameDayAs: startAt, endTime: endTime) {
+            if inferredEnd < startAt {
+                return calendar.date(byAdding: .day, value: 1, to: inferredEnd) ?? inferredEnd
+            }
+            return inferredEnd
+        }
+
         if let startAt {
             return calendar.date(byAdding: .hour, value: 2, to: startAt)
         }
         return nil
+    }
+
+    private nonisolated static func inferEndDate(onSameDayAs startAt: Date, endTime: String) -> Date? {
+        let day = dayFormatter.string(from: startAt)
+        return dateTimeFormatter.date(from: "\(day) \(endTime)")
     }
 }
 

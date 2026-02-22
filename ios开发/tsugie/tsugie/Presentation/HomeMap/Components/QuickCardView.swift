@@ -9,7 +9,8 @@ struct QuickCardView: View {
     let place: HePlace
     let snapshot: EventStatusSnapshot
     let progress: Double?
-    let metaText: String
+    let distanceText: String
+    let metaStatusText: String
     let hintText: String
     let placeState: PlaceState
     let stamp: PlaceStampPresentation?
@@ -73,10 +74,20 @@ struct QuickCardView: View {
             )
             .padding(.top, 8)
 
-            Text(metaText)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
-                .padding(.top, 10)
+            HStack(spacing: 6) {
+                Text(distanceText)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
+                Text("・")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Color(red: 0.52, green: 0.60, blue: 0.64, opacity: 0.85))
+                Text(metaStatusText)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
+                    .saturation(snapshot.status == .ended ? 0.40 : 1.0)
+                    .opacity(snapshot.status == .ended ? 0.78 : 1.0)
+            }
+            .padding(.top, 10)
 
             Text(hintText)
                 .font(.system(size: 14, weight: .regular))
