@@ -208,17 +208,6 @@ struct DetailPanelView: View {
                 endpointIconIsColorized: placeState.isFavorite
             )
                 .padding(.top, 8)
-
-            HStack {
-                Text(progressLeft)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.16, green: 0.32, blue: 0.40))
-                Spacer()
-                Text(progressRight)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
-            }
-            .padding(.top, 9)
         }
     }
 
@@ -571,21 +560,6 @@ struct DetailPanelView: View {
             L10n.EventStatus.ended
         case .unknown:
             L10n.Common.unknownTime
-        }
-    }
-
-    private var progressLeft: String {
-        switch snapshot.status {
-        case .ongoing, .ended: L10n.Detail.startAt(snapshot.startLabel)
-        case .upcoming, .unknown: L10n.Common.now
-        }
-    }
-
-    private var progressRight: String {
-        switch snapshot.status {
-        case .ongoing, .ended: L10n.Detail.endAt(snapshot.endLabel)
-        case .upcoming: L10n.Detail.startAt(snapshot.startLabel)
-        case .unknown: L10n.Common.startUnknown
         }
     }
 
