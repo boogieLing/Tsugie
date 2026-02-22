@@ -2242,6 +2242,10 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func quickStartDateText(for snapshot: EventStatusSnapshot, now: Date) -> String {
+        if snapshot.status == .ongoing {
+            return L10n.Home.quickDateOngoingNow
+        }
+
         if snapshot.status == .ended {
             return L10n.EventStatus.ended
         }

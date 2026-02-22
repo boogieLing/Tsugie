@@ -22,6 +22,7 @@
 "home.location.reset_a11y" = "現在地へ戻る";
 "home.menu.open_a11y" = "メニューを開く";
 "home.quick.date_today_soon" = "本日開催！まもなく！";
+"home.quick.date_ongoing_now" = "この瞬間、さあ出発！";
 "home.check_in_blocked_upcoming" = "このイベントはまだ開始前のため、いまは打刻できません。";
 "home.location_fallback.title" = "位置情報はデフォルト地点を使用";
 "home.location_fallback.outside_japan" = "現在地が日本国外のため、デフォルト地点の東京スカイツリー（Tokyo Sky Tree）を使用します。";

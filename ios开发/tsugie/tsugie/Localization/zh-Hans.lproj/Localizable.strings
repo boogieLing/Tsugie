@@ -22,6 +22,7 @@
 "home.location.reset_a11y" = "回到当前位置";
 "home.menu.open_a11y" = "打开菜单";
 "home.quick.date_today_soon" = "今日開催！まもなく！";
+"home.quick.date_ongoing_now" = "气氛热烈中，现在就出发！";
 "home.check_in_blocked_upcoming" = "活动尚未开始，暂时不能打卡";
 "home.location_fallback.title" = "定位使用默认地点";
 "home.location_fallback.outside_japan" = "当前位置不在日本境内，定位使用默认地点：东京天空树（Tokyo Sky Tree）。";

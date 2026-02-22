@@ -122,6 +122,7 @@ enum L10n {
         static var resetLocationA11y: String { text("home.location.reset_a11y") }
         static var openMenuA11y: String { text("home.menu.open_a11y") }
         static var quickDateTodaySoon: String { text("home.quick.date_today_soon") }
+        static var quickDateOngoingNow: String { text("home.quick.date_ongoing_now") }
         static var checkInBlockedUpcoming: String { text("home.check_in_blocked_upcoming") }
         static var locationFallbackTitle: String { text("home.location_fallback.title") }
         static var locationFallbackOutsideJapanMessage: String {
