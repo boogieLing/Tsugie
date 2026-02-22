@@ -52,7 +52,7 @@ struct HePlace: Identifiable {
     let heatScore: Int
     let surpriseScore: Int
 
-    init(
+    nonisolated init(
         id: UUID,
         name: String,
         heType: HeType,
@@ -128,7 +128,7 @@ struct HePlace: Identifiable {
         self.surpriseScore = surpriseScore
     }
 
-    var isApproximateCoordinate: Bool {
+    nonisolated var isApproximateCoordinate: Bool {
         geoSource == "pref_center_fallback" || geoSource == "missing"
     }
 

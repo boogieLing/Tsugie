@@ -3,7 +3,18 @@ import Foundation
 enum L10n {
     private static let tableName = "Localizable"
     private static let languageStorageKey = "tsugie.app.language.v1"
+    private static let languageAutoInitializedKey = "tsugie.app.language.auto_initialized.v1"
+    private static let languageUserSelectedKey = "tsugie.app.language.user_selected.v1"
     private static let supportedLanguageCodes = ["zh-Hans", "en", "ja"]
+    private static let zhHansTimeZoneIdentifiers: Set<String> = [
+        "Asia/Shanghai",
+        "Asia/Chongqing",
+        "Asia/Harbin",
+        "Asia/Urumqi",
+        "Asia/Hong_Kong",
+        "Asia/Macau",
+        "Asia/Taipei"
+    ]
 
     private static var activeLanguageCode: String = {
         if let stored = UserDefaults.standard.string(forKey: languageStorageKey) {
@@ -28,6 +39,51 @@ enum L10n {
         guard normalized != activeLanguageCode else { return }
         activeLanguageCode = normalized
         UserDefaults.standard.set(normalized, forKey: languageStorageKey)
+    }
+
+    static func markLanguageSelectedByUser() {
+        UserDefaults.standard.set(true, forKey: languageUserSelectedKey)
+        UserDefaults.standard.set(true, forKey: languageAutoInitializedKey)
+    }
+
+    static func applyTimeZoneLanguageIfNeeded() -> String {
+        let defaults = UserDefaults.standard
+
+        if defaults.bool(forKey: languageUserSelectedKey) {
+            defaults.set(true, forKey: languageAutoInitializedKey)
+            return activeLanguageCode
+        }
+
+        if defaults.bool(forKey: languageAutoInitializedKey) {
+            return activeLanguageCode
+        }
+
+        // Legacy compatibility: if a language was already persisted, treat it as user-selected.
+        if defaults.string(forKey: languageStorageKey) != nil {
+            defaults.set(true, forKey: languageUserSelectedKey)
+            defaults.set(true, forKey: languageAutoInitializedKey)
+            return activeLanguageCode
+        }
+
+        let suggested = suggestedLanguageCodeForCurrentTimeZone()
+        setLanguageCode(suggested)
+        defaults.set(true, forKey: languageAutoInitializedKey)
+        return activeLanguageCode
+    }
+
+    static func suggestedLanguageCodeForCurrentTimeZone() -> String {
+        suggestedLanguageCode(for: .current)
+    }
+
+    static func suggestedLanguageCode(for timeZone: TimeZone) -> String {
+        let identifier = timeZone.identifier
+        if identifier == "Asia/Tokyo" {
+            return "ja"
+        }
+        if zhHansTimeZoneIdentifiers.contains(identifier) {
+            return "zh-Hans"
+        }
+        return "en"
     }
 
     static func text(_ key: String) -> String {
@@ -249,6 +305,8 @@ enum L10n {
         static var contactTitle: String { text("drawer.contact.title") }
         static var contactMailAction: String { text("drawer.contact.mail_action") }
         static var contactCopyMail: String { text("drawer.contact.copy_mail") }
+        static var contactPrivacyPolicyAction: String { text("drawer.contact.privacy_policy_action") }
+        static var contactPrivacyPolicyHint: String { text("drawer.contact.privacy_policy_hint") }
         static var clearLocalDataHint: String { text("drawer.local_data.clear_hint") }
         static var clearLocalDataAction: String { text("drawer.local_data.clear_action") }
         static var clearLocalDataConfirmTitle: String { text("drawer.local_data.clear_confirm_title") }
@@ -278,6 +336,17 @@ enum L10n {
             return URL(string: "mailto:\(contactMailAddress)?subject=\(encoded)")!
         }
 
+        static var privacyPolicyURL: URL {
+            let fallback = URL(string: "https://www.shyr0.com/idea/tsugie/privacy")!
+            let raw = text("drawer.contact.privacy_policy_url")
+            guard let url = URL(string: raw),
+                  url.scheme?.lowercased() == "https",
+                  url.host != nil else {
+                return fallback
+            }
+            return url
+        }
+
         static func favoritesFastestHintWithinWeek(days: Int) -> String {
             format("drawer.favorites.fastest.hint.within_week", days)
         }
@@ -289,6 +358,14 @@ enum L10n {
 
     enum Notification {
         static var startingSoonTitle: String { text("notification.starting_soon_title") }
+    }
+
+    enum Privacy {
+        static var firstLaunchTitle: String { text("privacy.first_launch.title") }
+        static var firstLaunchMessage: String { text("privacy.first_launch.message") }
+        static var firstLaunchOpenPolicy: String { text("privacy.first_launch.open_policy") }
+        static var firstLaunchAccept: String { text("privacy.first_launch.accept") }
+        static var firstLaunchRequiredHint: String { text("privacy.first_launch.required_hint") }
     }
 
     enum Calendar {

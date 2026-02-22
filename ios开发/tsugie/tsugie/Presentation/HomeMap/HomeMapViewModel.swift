@@ -370,7 +370,9 @@ final class HomeMapViewModel: ObservableObject {
         didSet { persistVisualAndNotificationSettingsIfReady() }
     }
 
-    private let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "HomeMapViewModel")
+#if DEBUG
+    private let logger = Logger(subsystem: "com.shyr0.tsugie", category: "HomeMapViewModel")
+#endif
     private let placeStateStore: PlaceStateStore
     private let placeStampStore: PlaceStampStore
     private let placeDecorationStore: PlaceDecorationStore
@@ -536,6 +538,7 @@ final class HomeMapViewModel: ObservableObject {
         self.lastMapRecycleCenter = region.center
         self.lastMapRecycleSpan = region.span
         self.lastHardRecycleCenter = region.center
+        applyLanguageFromTimeZoneIfNeeded()
         loadPersistedVisualAndNotificationSettings()
         self.renderedPlaces = interactivePlaces(from: self.renderedPlaces, now: Date())
         self.nearbyRecommendationPlaces = interactivePlaces(from: self.nearbyRecommendationPlaces, now: Date())
@@ -1109,6 +1112,14 @@ final class HomeMapViewModel: ObservableObject {
         let resolved = all.contains(code) ? code : "ja"
         selectedLanguageCode = resolved
         L10n.setLanguageCode(resolved)
+        L10n.markLanguageSelectedByUser()
+    }
+
+    func applyLanguageFromTimeZoneIfNeeded() {
+        let resolved = L10n.applyTimeZoneLanguageIfNeeded()
+        if selectedLanguageCode != resolved {
+            selectedLanguageCode = resolved
+        }
     }
 
     func cycleLanguage() {
@@ -2773,8 +2784,10 @@ final class HomeMapViewModel: ObservableObject {
     private func debugLog(_ message: String) {
 #if DEBUG
         print("[HomeMapViewModel] \(message)")
-#endif
         logger.info("\(message, privacy: .public)")
+#else
+        _ = message
+#endif
     }
 
     private func normalizedPlaces(_ loaded: [HePlace], fallbackToMockWhenEmpty: Bool) -> [HePlace] {

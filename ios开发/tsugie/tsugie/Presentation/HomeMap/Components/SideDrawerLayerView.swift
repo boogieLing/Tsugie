@@ -395,6 +395,22 @@ struct SideDrawerLayerView: View {
                     )
                     .foregroundStyle(Color(red: 0.30, green: 0.42, blue: 0.46))
 
+                    Link(L10n.SideDrawer.contactPrivacyPolicyAction, destination: L10n.SideDrawer.privacyPolicyURL)
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .drawerRoundedSurface(
+                            cornerRadius: 12,
+                            fillColor: drawerItemFillColor,
+                            borderColor: drawerItemBorderColor,
+                            borderOpacity: 0.88
+                        )
+                        .foregroundStyle(Color(red: 0.19, green: 0.36, blue: 0.43))
+
+                    Text(L10n.SideDrawer.contactPrivacyPolicyHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.43, green: 0.53, blue: 0.57))
+
                     Text(L10n.SideDrawer.clearLocalDataHint)
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.43, green: 0.53, blue: 0.57))

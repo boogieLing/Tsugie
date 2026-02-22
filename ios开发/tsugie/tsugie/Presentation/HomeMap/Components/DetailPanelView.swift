@@ -355,8 +355,7 @@ struct DetailPanelView: View {
 
     @ViewBuilder
     private var sourceBlock: some View {
-        if let sourceURLText = preferredSourceURL,
-           let sourceURL = URL(string: sourceURLText) {
+        if let sourceURL = sanitizedSourceURL {
             HStack {
                 Button {
                     openURL(sourceURL)
@@ -391,6 +390,17 @@ struct DetailPanelView: View {
             return primary
         }
         return place.sourceURLs.first
+    }
+
+    private var sanitizedSourceURL: URL? {
+        guard let raw = preferredSourceURL,
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "https" || scheme == "http"),
+              url.host != nil else {
+            return nil
+        }
+        return url
     }
 
     private var localizedDetailDescription: String {

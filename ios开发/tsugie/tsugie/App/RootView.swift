@@ -4,15 +4,20 @@ import UIKit
 
 struct RootView: View {
     @StateObject private var viewModel = HomeMapViewModel()
+    @AppStorage("tsugie.privacy.policy.accepted.v1") private var hasAcceptedPrivacyPolicy = false
     @State private var isCalendarPresented = false
     @State private var isLaunchSplashVisible = true
     @State private var pendingCalendarNavigationPlaceID: UUID?
+
+    private var shouldShowPrivacyConsent: Bool {
+        !isLaunchSplashVisible && !hasAcceptedPrivacyPolicy
+    }
 
     var body: some View {
         ZStack {
             HomeMapView(
                 viewModel: viewModel,
-                suppressLocationFallbackAlert: isLaunchSplashVisible,
+                suppressLocationFallbackAlert: isLaunchSplashVisible || shouldShowPrivacyConsent,
                 onOpenCalendar: {
                     viewModel.setCalendarPresented(true)
                     isCalendarPresented = true
@@ -62,6 +67,16 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(100)
             }
+
+            if shouldShowPrivacyConsent {
+                FirstLaunchPrivacyConsentView {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        hasAcceptedPrivacyPolicy = true
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(110)
+            }
         }
         .task(id: isLaunchSplashVisible) {
             guard isLaunchSplashVisible else {
@@ -74,6 +89,82 @@ struct RootView: View {
             }
             withAnimation(.easeOut(duration: 0.24)) {
                 isLaunchSplashVisible = false
+            }
+        }
+    }
+}
+
+private struct FirstLaunchPrivacyConsentView: View {
+    let onAccept: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.opacity(0.24)
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(L10n.Privacy.firstLaunchTitle)
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundStyle(Color(red: 0.16, green: 0.31, blue: 0.38))
+
+                    Text(L10n.Privacy.firstLaunchMessage)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color(red: 0.27, green: 0.42, blue: 0.49))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Link(destination: L10n.SideDrawer.privacyPolicyURL) {
+                        Text(L10n.Privacy.firstLaunchOpenPolicy)
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(Color(red: 0.80, green: 0.89, blue: 0.93), lineWidth: 1)
+                            )
+                            .foregroundStyle(Color(red: 0.17, green: 0.35, blue: 0.43))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: onAccept) {
+                        Text(L10n.Privacy.firstLaunchAccept)
+                            .font(.system(size: 14, weight: .heavy))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 42)
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.36, green: 0.66, blue: 0.82),
+                                        Color(red: 0.17, green: 0.46, blue: 0.64)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text(L10n.Privacy.firstLaunchRequiredHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.42, green: 0.53, blue: 0.58))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .frame(maxWidth: min(max(proxy.size.width - 32, 280), 420))
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(red: 0.95, green: 0.98, blue: 0.99, opacity: 0.98))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color(red: 0.86, green: 0.93, blue: 0.96), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.14), radius: 20, x: 0, y: 10)
+                .padding(.horizontal, 16)
             }
         }
     }

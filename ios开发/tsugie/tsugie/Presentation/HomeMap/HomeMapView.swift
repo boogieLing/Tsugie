@@ -292,6 +292,8 @@ struct HomeMapView: View {
                     .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .padding(5)
+            .contentShape(Rectangle())
             .accessibilityLabel(L10n.Home.openCalendarA11y)
 
             Button {
@@ -308,6 +310,8 @@ struct HomeMapView: View {
                     .overlay(Circle().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .padding(5)
+            .contentShape(Rectangle())
             .accessibilityLabel(L10n.Home.resetLocationA11y)
 
             Button {
@@ -328,6 +332,8 @@ struct HomeMapView: View {
                     .overlay(Capsule().stroke(Color(red: 0.91, green: 0.96, blue: 0.98, opacity: 0.84), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
             .accessibilityLabel(L10n.Home.openMenuA11y)
         }
     }
@@ -766,16 +772,20 @@ private struct TopNoticeBubbleView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(red: 0.86, green: 0.42, blue: 0.20))
-            Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.24))
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+        Button(action: onDismiss) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.86, green: 0.42, blue: 0.20))
+                    .accessibilityHidden(true)
+                Text(message)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.24))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color.white.opacity(0.92), in: Capsule())
@@ -787,6 +797,6 @@ private struct TopNoticeBubbleView: View {
         .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityLabel(message)
-        .onTapGesture(perform: onDismiss)
+        .accessibilityHint(L10n.Common.close)
     }
 }

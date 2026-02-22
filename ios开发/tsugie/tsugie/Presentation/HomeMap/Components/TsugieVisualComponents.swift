@@ -394,6 +394,9 @@ struct TsugieClosePillButton: View {
                 .foregroundStyle(Color(red: 0.37, green: 0.49, blue: 0.53))
         }
         .buttonStyle(.plain)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 2)
+        .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel)
     }
 }

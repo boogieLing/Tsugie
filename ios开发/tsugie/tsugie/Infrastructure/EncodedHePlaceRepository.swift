@@ -65,7 +65,9 @@ enum EncodedHePlaceRepository {
     nonisolated private static let payloadResourceExtension = "bin"
     nonisolated private static let obfuscationKey = "tsugie-ios-seed-v1"
     nonisolated private static let defaultStartupCenter = CLLocationCoordinate2D(latitude: 35.7101, longitude: 139.8107)
-    nonisolated private static let logger = Logger(subsystem: "com.ushouldknowr0.tsugie", category: "EncodedHePlaceRepository")
+#if DEBUG
+    nonisolated private static let logger = Logger(subsystem: "com.shyr0.tsugie", category: "EncodedHePlaceRepository")
+#endif
     nonisolated private static let decodedBucketCache = DecodedBucketLRU(capacity: 96)
 
     nonisolated static func load() -> [HePlace] {
@@ -340,7 +342,7 @@ enum EncodedHePlaceRepository {
 
         let radiusMeters = max(radiusKm, 0.5) * 1_000
         let cappedLimit = max(1, limit)
-
+        
         var places = items.compactMap { mapToHePlace($0, center: center) }
         places.sort(by: isCloserAndHigherPriority)
         let precisePlaces = places.filter { !$0.isApproximateCoordinate }
@@ -493,8 +495,10 @@ enum EncodedHePlaceRepository {
     private nonisolated static func debugLog(_ message: String) {
 #if DEBUG
         print("[EncodedHePlaceRepository] \(message)")
-#endif
         logger.info("\(message, privacy: .public)")
+#else
+        _ = message
+#endif
     }
 
     private nonisolated static func decodeItems(payloadChunk: Data) -> [EncodedHePlaceItem] {

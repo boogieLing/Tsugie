@@ -91,6 +91,7 @@ struct TsugieFilterPill: View {
 
     @State private var pillScale: CGFloat = 1.0
     @State private var bounceNonce: Int = 0
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     var body: some View {
         Button {
@@ -118,17 +119,22 @@ struct TsugieFilterPill: View {
                     }
                 } else {
                     Text(leadingText)
-                        .font(.system(size: 11, weight: .heavy))
+                        .font(.caption2.weight(.heavy))
                         .foregroundStyle(Color(red: 0.27, green: 0.42, blue: 0.49))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
                 }
 
                 Text(trailingText)
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(.caption2.weight(.heavy))
                     .foregroundStyle(Color(red: 0.30, green: 0.44, blue: 0.50))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             .padding(.horizontal, fixedWidth == nil ? 10 : 0)
-            .frame(width: fixedWidth, height: fixedHeight)
-            .frame(height: fixedHeight)
+            .padding(.vertical, fixedWidth == nil ? 4 : 0)
+            .frame(width: fixedWidth)
+            .frame(minHeight: fixedHeight)
             .background(Color.white, in: Capsule())
             .overlay(
                 Capsule()
@@ -178,6 +184,11 @@ struct TsugieFilterPill: View {
     }
 
     private func triggerJellyBounce() {
+        if accessibilityReduceMotion {
+            pillScale = 1.0
+            return
+        }
+
         bounceNonce += 1
         let current = bounceNonce
 
