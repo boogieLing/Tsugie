@@ -91,6 +91,11 @@ struct RootView: View {
                 isLaunchSplashVisible = false
             }
         }
+        .onChange(of: isLaunchSplashVisible) { _, isVisible in
+            if !isVisible {
+                viewModel.handleLaunchSplashDismissed()
+            }
+        }
     }
 }
 

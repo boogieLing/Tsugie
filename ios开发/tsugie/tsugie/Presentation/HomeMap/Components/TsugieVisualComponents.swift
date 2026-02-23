@@ -22,13 +22,21 @@ enum TsugieVisuals {
     )
 
     static func pillGradient(scheme: String, alphaRatio: Double, saturationRatio: Double) -> LinearGradient {
-        let base = schemeBaseColors(scheme)
         let points = schemeGradientPoints(scheme)
         return LinearGradient(
-            colors: base.map { adjustedColor($0, alphaRatio: alphaRatio, saturationRatio: saturationRatio) },
+            colors: pillGradientColors(
+                scheme: scheme,
+                alphaRatio: alphaRatio,
+                saturationRatio: saturationRatio
+            ),
             startPoint: points.start,
             endPoint: points.end
         )
+    }
+
+    static func pillGradientColors(scheme: String, alphaRatio: Double, saturationRatio: Double) -> [Color] {
+        let base = schemeBaseColors(scheme)
+        return base.map { adjustedColor($0, alphaRatio: alphaRatio, saturationRatio: saturationRatio) }
     }
 
     static func drawerBackground(scheme: String, alphaRatio: Double, saturationRatio: Double) -> LinearGradient {

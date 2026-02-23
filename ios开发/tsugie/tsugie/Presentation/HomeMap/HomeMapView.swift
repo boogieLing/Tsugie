@@ -4,6 +4,12 @@ import SwiftUI
 struct HomeMapView: View {
     @Environment(\.openURL) private var openURL
     @State private var routeNavigationPlace: HePlace?
+    @State private var launchBridgeRevealProgress: Double = 0
+    @State private var launchBridgeRevealTask: Task<Void, Never>?
+    @State private var launchBridgeAnimationGeneration: Int = 0
+    @State private var launchBridgeCacheKey: LaunchBridgeCacheKey?
+    @State private var launchBridgeBaseBars: [LaunchBridgeVerticalBarTemplate] = []
+    @State private var launchBridgeGradientStops: [LaunchBridgeGradientStop] = []
 
     @ObservedObject var viewModel: HomeMapViewModel
     let suppressLocationFallbackAlert: Bool
@@ -217,9 +223,16 @@ struct HomeMapView: View {
         }
         .onAppear {
             viewModel.onViewAppear()
+            updateLaunchBridgeCacheIfNeeded()
+            restartLaunchBridgeAnimationIfNeeded()
         }
         .onDisappear {
             viewModel.onViewDisappear()
+            teardownLaunchBridgeAnimation(clearCache: true)
+        }
+        .onChange(of: viewModel.launchRecommendationBridge?.targetPlaceID) { _, _ in
+            updateLaunchBridgeCacheIfNeeded()
+            restartLaunchBridgeAnimationIfNeeded()
         }
         .alert(
             item: Binding(
@@ -357,6 +370,38 @@ struct HomeMapView: View {
                 .allowsHitTesting(false)
             }
             .annotationTitles(.hidden)
+
+            if let launchBridge = viewModel.launchRecommendationBridge {
+                let bridgeFixedStops = launchBridgeGradientStops.isEmpty
+                    ? launchBridgeFixedSchemeStops(for: launchBridge)
+                    : launchBridgeGradientStops
+                let bridgeBars = launchBridgeVerticalBars(revealProgress: launchBridgeRevealProgress)
+
+                ForEach(bridgeBars) { bar in
+                    MapPolyline(coordinates: [bar.baseCoordinate, bar.tipCoordinate])
+                        .stroke(
+                            launchBridgeBarGlassColor(for: launchBridge, intensity: bar.intensity),
+                            style: StrokeStyle(
+                                lineWidth: bar.strokeWidth + 0.45,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                    MapPolyline(coordinates: [bar.baseCoordinate, bar.tipCoordinate])
+                        .stroke(
+                            launchBridgeBarCoreColor(
+                                from: bridgeFixedStops,
+                                progress: bar.trackProgress,
+                                intensity: bar.intensity
+                            ),
+                            style: StrokeStyle(
+                                lineWidth: bar.strokeWidth,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                }
+            }
 
             ForEach(markerEntries) { entry in
                 let placeState = viewModel.placeState(for: entry.id)
@@ -515,6 +560,360 @@ struct HomeMapView: View {
             get: { viewModel.mapPosition },
             set: { viewModel.updateMapPositionFromInteraction($0) }
         )
+    }
+
+    private struct LaunchBridgeVerticalBar: Identifiable {
+        let id: Int
+        let baseCoordinate: CLLocationCoordinate2D
+        var tipCoordinate: CLLocationCoordinate2D
+        var intensity: Double
+        let strokeWidth: Double
+        let trackProgress: Double
+    }
+
+    private struct LaunchBridgeVerticalBarTemplate {
+        let id: Int
+        let baseCoordinate: CLLocationCoordinate2D
+        var fullHeightLat: Double
+        var baseIntensity: Double
+        let strokeWidth: Double
+        let trackProgress: Double
+    }
+
+    private struct LaunchBridgeCacheKey: Equatable {
+        let targetPlaceID: UUID
+        let barCount: Int
+        let palette: HomeMapViewModel.LaunchRecommendationBridge.Palette
+        let trackCount: Int
+        let fromLatE6: Int
+        let fromLonE6: Int
+        let toLatE6: Int
+        let toLonE6: Int
+        let midLatE6: Int
+        let midLonE6: Int
+    }
+
+    private struct LaunchBridgeGradientStop {
+        let location: Double
+        let rgba: (r: Double, g: Double, b: Double, a: Double)
+    }
+
+    private func teardownLaunchBridgeAnimation(clearCache: Bool) {
+        launchBridgeAnimationGeneration += 1
+        launchBridgeRevealTask?.cancel()
+        launchBridgeRevealTask = nil
+        launchBridgeRevealProgress = 0
+        guard clearCache else {
+            return
+        }
+        launchBridgeCacheKey = nil
+        launchBridgeBaseBars = []
+        launchBridgeGradientStops = []
+    }
+
+    private func updateLaunchBridgeCacheIfNeeded() {
+        guard let bridge = viewModel.launchRecommendationBridge else {
+            launchBridgeCacheKey = nil
+            launchBridgeBaseBars = []
+            launchBridgeGradientStops = []
+            return
+        }
+        let nextKey = launchBridgeCacheKey(for: bridge)
+        guard nextKey != launchBridgeCacheKey else {
+            return
+        }
+        launchBridgeCacheKey = nextKey
+        launchBridgeBaseBars = launchBridgeBaseBars(for: bridge)
+        launchBridgeGradientStops = launchBridgeFixedSchemeStops(for: bridge)
+    }
+
+    private func launchBridgeCacheKey(
+        for bridge: HomeMapViewModel.LaunchRecommendationBridge
+    ) -> LaunchBridgeCacheKey {
+        let track = bridge.trackCoordinates
+        let midpoint = track[track.count / 2]
+        return LaunchBridgeCacheKey(
+            targetPlaceID: bridge.targetPlaceID,
+            barCount: bridge.barCount,
+            palette: bridge.palette,
+            trackCount: track.count,
+            fromLatE6: quantizedE6(bridge.fromCoordinate.latitude),
+            fromLonE6: quantizedE6(bridge.fromCoordinate.longitude),
+            toLatE6: quantizedE6(bridge.toCoordinate.latitude),
+            toLonE6: quantizedE6(bridge.toCoordinate.longitude),
+            midLatE6: quantizedE6(midpoint.latitude),
+            midLonE6: quantizedE6(midpoint.longitude)
+        )
+    }
+
+    private func quantizedE6(_ value: Double) -> Int {
+        Int((value * 1_000_000).rounded())
+    }
+
+    private func restartLaunchBridgeAnimationIfNeeded() {
+        guard viewModel.launchRecommendationBridge != nil else {
+            teardownLaunchBridgeAnimation(clearCache: true)
+            return
+        }
+        launchBridgeAnimationGeneration += 1
+        let generation = launchBridgeAnimationGeneration
+        launchBridgeRevealTask?.cancel()
+        launchBridgeRevealTask = nil
+        launchBridgeRevealProgress = 0
+        launchBridgeRevealTask = Task { @MainActor in
+            let startedAt = Date()
+            let duration: TimeInterval = 3.0
+            while !Task.isCancelled {
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let raw = min(max(elapsed / duration, 0), 1)
+                let eased = raw * raw * (3 - 2 * raw)
+                launchBridgeRevealProgress = eased
+                if raw >= 1 {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 16_000_000)
+            }
+            if launchBridgeAnimationGeneration == generation {
+                launchBridgeRevealTask = nil
+            }
+        }
+    }
+
+    private func launchBridgeBarGlassColor(
+        for bridge: HomeMapViewModel.LaunchRecommendationBridge,
+        intensity: Double
+    ) -> Color {
+        switch bridge.palette {
+        case .theme:
+            return Color.white.opacity(0.22 + 0.18 * intensity)
+        case .subdued:
+            return Color.white.opacity(0.18 + 0.16 * intensity)
+        }
+    }
+
+    private func launchBridgeFixedSchemeStops(
+        for _: HomeMapViewModel.LaunchRecommendationBridge
+    ) -> [LaunchBridgeGradientStop] {
+        let fixedScheme = "ocean" // Side drawer selectable theme list's 2nd scheme.
+        let colors = TsugieVisuals.pillGradientColors(
+            scheme: fixedScheme,
+            alphaRatio: 1,
+            saturationRatio: 1
+        )
+        guard !colors.isEmpty else {
+            return [
+                LaunchBridgeGradientStop(location: 0, rgba: (1, 1, 1, 1)),
+                LaunchBridgeGradientStop(location: 1, rgba: (1, 1, 1, 1))
+            ]
+        }
+        if colors.count == 1, let first = colors.first {
+            let rgba = launchBridgeRGBA(from: first)
+            return [
+                LaunchBridgeGradientStop(location: 0, rgba: rgba),
+                LaunchBridgeGradientStop(location: 1, rgba: rgba)
+            ]
+        }
+
+        let denominator = max(colors.count - 1, 1)
+        return colors.enumerated().map { index, color in
+            LaunchBridgeGradientStop(
+                location: Double(index) / Double(denominator),
+                rgba: launchBridgeRGBA(from: color)
+            )
+        }
+    }
+
+    private func launchBridgeBarCoreColor(
+        from stops: [LaunchBridgeGradientStop],
+        progress: Double,
+        intensity: Double
+    ) -> Color {
+        guard stops.count >= 2 else {
+            return .white.opacity(0.9)
+        }
+        let clampedProgress = min(max(progress, 0), 1)
+        var lower = stops[0]
+        var upper = stops[stops.count - 1]
+        for idx in 1..<stops.count {
+            let candidate = stops[idx]
+            if candidate.location >= clampedProgress {
+                lower = stops[idx - 1]
+                upper = candidate
+                break
+            }
+        }
+        let span = max(upper.location - lower.location, 0.0001)
+        let localT = min(max((clampedProgress - lower.location) / span, 0), 1)
+        let red = lower.rgba.r + (upper.rgba.r - lower.rgba.r) * localT
+        let green = lower.rgba.g + (upper.rgba.g - lower.rgba.g) * localT
+        let blue = lower.rgba.b + (upper.rgba.b - lower.rgba.b) * localT
+        let baseAlpha = lower.rgba.a + (upper.rgba.a - lower.rgba.a) * localT
+        let alpha = min(max(baseAlpha * (0.82 + 0.18 * intensity), 0), 1)
+        return Color(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    private func launchBridgeRGBA(from color: Color) -> (r: Double, g: Double, b: Double, a: Double) {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        if uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            return (Double(red), Double(green), Double(blue), Double(alpha))
+        }
+        var white: CGFloat = 0
+        if uiColor.getWhite(&white, alpha: &alpha) {
+            let channel = Double(white)
+            return (channel, channel, channel, Double(alpha))
+        }
+        return (1, 1, 1, 1)
+    }
+
+    private func launchBridgeBaseBars(
+        for bridge: HomeMapViewModel.LaunchRecommendationBridge
+    ) -> [LaunchBridgeVerticalBarTemplate] {
+        let track = bridge.trackCoordinates
+        let visibleTrack = track
+        guard visibleTrack.count >= 2 else {
+            return []
+        }
+
+        let preferredBarCount = min(max(10, bridge.barCount), 37)
+        let visualBarCount = min(max(12, preferredBarCount - 11), 26)
+        guard visualBarCount > 0 else {
+            return []
+        }
+        let maxIndex = visibleTrack.count - 1
+        var cumulativeDistanceKm: [Double] = Array(repeating: 0, count: visibleTrack.count)
+        if visibleTrack.count >= 2 {
+            for idx in 1..<visibleTrack.count {
+                cumulativeDistanceKm[idx] = cumulativeDistanceKm[idx - 1] +
+                    bridgeDistanceKm(from: visibleTrack[idx - 1], to: visibleTrack[idx])
+            }
+        }
+        let totalTrackDistanceKm = max(cumulativeDistanceKm.last ?? 0, 0.0001)
+        var segmentCursor = 0
+        let sigma = 0.22
+        let edgeGaussian = Foundation.exp(-0.5 * Foundation.pow(0.5 / sigma, 2))
+
+        var bars: [LaunchBridgeVerticalBarTemplate] = []
+        bars.reserveCapacity(visualBarCount)
+
+        for index in 0..<visualBarCount {
+            let t = visualBarCount <= 1 ? 0 : Double(index) / Double(visualBarCount - 1)
+            let targetDistanceKm = totalTrackDistanceKm * t
+            while segmentCursor < maxIndex && cumulativeDistanceKm[segmentCursor + 1] < targetDistanceKm {
+                segmentCursor += 1
+            }
+            let segmentStart = visibleTrack[segmentCursor]
+            let segmentEnd = visibleTrack[min(segmentCursor + 1, maxIndex)]
+            let segmentStartDistance = cumulativeDistanceKm[segmentCursor]
+            let segmentEndDistance = cumulativeDistanceKm[min(segmentCursor + 1, maxIndex)]
+            let segmentLength = max(segmentEndDistance - segmentStartDistance, 0.000001)
+            let segmentProgress = min(max((targetDistanceKm - segmentStartDistance) / segmentLength, 0), 1)
+            let baseCoordinate = CLLocationCoordinate2D(
+                latitude: segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * segmentProgress,
+                longitude: segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * segmentProgress
+            )
+
+            let z = (t - 0.5) / sigma
+            let gaussianHeight = Foundation.exp(-0.5 * z * z)
+            let normalizedHeight = (gaussianHeight - edgeGaussian) / max(1 - edgeGaussian, 0.0001)
+            let shapedHeight = min(max(0.14 + normalizedHeight * 0.86, 0), 1)
+            let fullBarHeightKm = 0.026 + 0.165 * shapedHeight
+            let fullBarHeightLat = fullBarHeightKm / 111.0
+
+            bars.append(
+                LaunchBridgeVerticalBarTemplate(
+                    id: index,
+                    baseCoordinate: baseCoordinate,
+                    fullHeightLat: fullBarHeightLat,
+                    baseIntensity: min(1, 0.20 + 0.80 * shapedHeight),
+                    strokeWidth: 4.10 + 1.35 * shapedHeight,
+                    trackProgress: t
+                )
+            )
+        }
+
+        guard bars.count >= 4 else {
+            return bars
+        }
+
+        let startThirdIndex = 2
+        let endFirstIndex = bars.count - 1
+        let startThirdHeightLat = max(bars[startThirdIndex].fullHeightLat, 0)
+        let endFirstHeightLat = max(bars[endFirstIndex].fullHeightLat, 0)
+
+        if endFirstHeightLat <= startThirdHeightLat {
+            bars[endFirstIndex].fullHeightLat = startThirdHeightLat * 1.10
+            bars[endFirstIndex].baseIntensity = min(
+                1,
+                max(bars[endFirstIndex].baseIntensity, bars[startThirdIndex].baseIntensity + 0.08)
+            )
+        }
+
+        return bars
+    }
+
+    private func launchBridgeVerticalBars(
+        revealProgress: Double
+    ) -> [LaunchBridgeVerticalBar] {
+        guard !launchBridgeBaseBars.isEmpty else {
+            return []
+        }
+        let clampedReveal = min(max(revealProgress, 0), 1)
+        let visualBarCount = launchBridgeBaseBars.count
+        let revealInBars = clampedReveal * Double(visualBarCount)
+        let fullyGrownCount = min(max(Int(revealInBars.rounded(.down)), 0), max(visualBarCount - 1, 0))
+        let activeBarFractionRaw = revealInBars - Double(fullyGrownCount)
+        let activeBarGrowth = activeBarFractionRaw * activeBarFractionRaw * (3 - 2 * activeBarFractionRaw)
+
+        var bars: [LaunchBridgeVerticalBar] = []
+        bars.reserveCapacity(visualBarCount)
+
+        for template in launchBridgeBaseBars {
+            let growth: Double
+            if template.id < fullyGrownCount {
+                growth = 1
+            } else if template.id == fullyGrownCount {
+                growth = activeBarGrowth
+            } else {
+                continue
+            }
+
+            let tipCoordinate = CLLocationCoordinate2D(
+                latitude: min(template.baseCoordinate.latitude + template.fullHeightLat * growth, 85),
+                longitude: template.baseCoordinate.longitude
+            )
+
+            bars.append(
+                LaunchBridgeVerticalBar(
+                    id: template.id,
+                    baseCoordinate: template.baseCoordinate,
+                    tipCoordinate: tipCoordinate,
+                    intensity: min(1, template.baseIntensity * (0.35 + 0.65 * growth)),
+                    strokeWidth: template.strokeWidth,
+                    trackProgress: template.trackProgress
+                )
+            )
+        }
+
+        return bars
+    }
+
+    private func bridgeDistanceKm(from lhs: CLLocationCoordinate2D, to rhs: CLLocationCoordinate2D) -> Double {
+        let earthRadiusKm = 6_371.0
+        let lat1 = lhs.latitude * .pi / 180
+        let lon1 = lhs.longitude * .pi / 180
+        let lat2 = rhs.latitude * .pi / 180
+        let lon2 = rhs.longitude * .pi / 180
+        let dLat = lat2 - lat1
+        let dLon = lon2 - lon1
+        let a = Foundation.sin(dLat / 2) * Foundation.sin(dLat / 2) +
+            Foundation.cos(lat1) * Foundation.cos(lat2) *
+            Foundation.sin(dLon / 2) * Foundation.sin(dLon / 2)
+        let c = 2 * Foundation.atan2(Foundation.sqrt(a), Foundation.sqrt(max(1 - a, 0)))
+        return earthRadiusKm * c
     }
 
     private func markerActionStyle(

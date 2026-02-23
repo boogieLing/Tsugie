@@ -328,6 +328,20 @@ final class HomeMapViewModel: ObservableObject {
         let message: String
     }
 
+    struct LaunchRecommendationBridge {
+        enum Palette: Equatable {
+            case subdued
+            case theme
+        }
+
+        let targetPlaceID: UUID
+        let fromCoordinate: CLLocationCoordinate2D
+        let toCoordinate: CLLocationCoordinate2D
+        let trackCoordinates: [CLLocationCoordinate2D]
+        let barCount: Int
+        let palette: Palette
+    }
+
     private var mapCameraPosition: MapCameraPosition
     @Published private(set) var mapViewInstanceID = UUID()
     @Published private(set) var places: [HePlace]
@@ -345,6 +359,7 @@ final class HomeMapViewModel: ObservableObject {
     @Published private(set) var isFavoriteDrawerOpen = false
     @Published private(set) var locationFallbackNotice: LocationFallbackNotice?
     @Published private(set) var topNotice: TopNotice?
+    @Published private(set) var launchRecommendationBridge: LaunchRecommendationBridge?
     @Published private(set) var sideDrawerMenu: SideDrawerMenu = .none
     @Published private(set) var favoriteFilter: FavoriteDrawerFilter = .all
     @Published private(set) var mapCategoryFilter: MapPlaceCategoryFilter = .all
@@ -474,8 +489,11 @@ final class HomeMapViewModel: ObservableObject {
     private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
+    private var hasLaunchSplashDismissed = false
     private var hasAppliedInitialRecommendationFocus = false
-    private var initialRecommendationFocusRevision: UInt64?
+    private var postSplashRecommendationFocusEarliestAt: Date?
+    private var postSplashRecommendationFocusTask: Task<Void, Never>?
+    private var launchRecommendationBridgeDismissTask: Task<Void, Never>?
     private var pendingProgrammaticCameraTargetRegion: MKCoordinateRegion?
     private var pendingProgrammaticCameraSource: String?
     private var pendingProgrammaticCameraExpiresAt: Date = .distantPast
@@ -498,6 +516,8 @@ final class HomeMapViewModel: ObservableObject {
     private let minimumNotificationLeadTime: TimeInterval = 8
     private let maxStartReminderCount = 36
     private let maxNearbyReminderCount = 16
+    private let postSplashRecommendationFocusDelayNanoseconds: UInt64 = 500_000_000
+    private let launchRecommendationBridgeDisplayDurationNanoseconds: UInt64 = 2_200_000_000
     private var startReminderSyncTask: Task<Void, Never>?
     private var nearbyReminderSyncTask: Task<Void, Never>?
     private var topNoticeDismissTask: Task<Void, Never>?
@@ -710,9 +730,6 @@ final class HomeMapViewModel: ObservableObject {
         registerMemoryWarningObserverIfNeeded()
         startPeriodicHardRecycleTask()
         startMemoryWatchdogTask()
-        if initialRecommendationFocusRevision == nil {
-            initialRecommendationFocusRevision = cameraChangeRevision
-        }
         debugLog("onViewAppear allPlaces=\(self.places.count) renderedPlaces=\(self.renderedPlaces.count) mapFilter=\(self.mapCategoryFilter.rawValue)")
         beginLaunchPrewarmIfNeeded()
         scheduleAutoOpenIfNeeded()
@@ -747,6 +764,12 @@ final class HomeMapViewModel: ObservableObject {
         activeNearbyQueryToken = nil
         lastNearbyPreheatSignature = nil
         nearbyRecommendationPlaces = []
+        postSplashRecommendationFocusTask?.cancel()
+        postSplashRecommendationFocusTask = nil
+        postSplashRecommendationFocusEarliestAt = nil
+        launchRecommendationBridgeDismissTask?.cancel()
+        launchRecommendationBridgeDismissTask = nil
+        launchRecommendationBridge = nil
         startReminderSyncTask?.cancel()
         startReminderSyncTask = nil
         nearbyReminderSyncTask?.cancel()
@@ -798,6 +821,36 @@ final class HomeMapViewModel: ObservableObject {
 
     func prepareForCalendarPlaceNavigation() {
         suppressCalendarDismissRecenteringUntil = Date().addingTimeInterval(1.5)
+    }
+
+    func handleLaunchSplashDismissed() {
+        guard !hasLaunchSplashDismissed else {
+            return
+        }
+        hasLaunchSplashDismissed = true
+
+        focusMapOnCurrentLocationAnchor(reason: "launchSplashDismissed")
+        postSplashRecommendationFocusEarliestAt = Date().addingTimeInterval(0.5)
+        launchRecommendationBridgeDismissTask?.cancel()
+        launchRecommendationBridgeDismissTask = nil
+        launchRecommendationBridge = nil
+
+        postSplashRecommendationFocusTask?.cancel()
+        postSplashRecommendationFocusTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.postSplashRecommendationFocusDelayNanoseconds)
+            } catch {
+                self.postSplashRecommendationFocusTask = nil
+                return
+            }
+            guard !Task.isCancelled else {
+                self.postSplashRecommendationFocusTask = nil
+                return
+            }
+            self.maybeApplyInitialRecommendationFocus(triggerReason: "postSplash", now: Date())
+            self.postSplashRecommendationFocusTask = nil
+        }
     }
 
     func tapMarker(placeID: UUID) {
@@ -3362,29 +3415,183 @@ final class HomeMapViewModel: ObservableObject {
         guard !hasAppliedInitialRecommendationFocus else {
             return
         }
-        guard triggerReason == "bootstrap" || triggerReason == "viewAppear" else {
+        guard hasLaunchSplashDismissed else {
             return
         }
-
-        if let focusRevision = initialRecommendationFocusRevision,
-           cameraChangeRevision != focusRevision {
-            hasAppliedInitialRecommendationFocus = true
-            debugLog("skipInitialRecommendationFocus reason=userCameraChanged")
+        guard triggerReason == "bootstrap" || triggerReason == "viewAppear" || triggerReason == "postSplash" else {
+            return
+        }
+        if let earliest = postSplashRecommendationFocusEarliestAt, now < earliest {
             return
         }
 
         guard let target = recommendedPlace(now: now) else {
             return
         }
+        presentLaunchRecommendationBridge(to: target, now: now)
+        postSplashRecommendationFocusEarliestAt = nil
         hasAppliedInitialRecommendationFocus = true
         debugLog("applyInitialRecommendationFocus place=\(target.name)")
-        withAnimation(.easeInOut(duration: 0.24)) {
+        withAnimation(.easeInOut(duration: 0.36)) {
             setProgrammaticMapPosition(
                 .region(nonExpandingFocusedRegion(for: target)),
                 source: "initialRecommendationFocus",
                 suppressionWindow: 0.35
             )
         }
+    }
+
+    private func presentLaunchRecommendationBridge(to place: HePlace, now: Date) {
+        let path = buildLaunchRecommendationBridgePath(
+            from: resolvedCenter,
+            to: place.coordinate
+        )
+        guard path.count >= 2 else {
+            return
+        }
+
+        let snapshot = eventSnapshot(for: place, now: now)
+        let shouldUseSubduedPalette = snapshot.status == .upcoming &&
+            (snapshot.startDate?.timeIntervalSince(now) ?? 0) > 24 * 60 * 60
+        let palette: LaunchRecommendationBridge.Palette = shouldUseSubduedPalette ? .subdued : .theme
+
+        let nextBridge = LaunchRecommendationBridge(
+            targetPlaceID: place.id,
+            fromCoordinate: resolvedCenter,
+            toCoordinate: place.coordinate,
+            trackCoordinates: path,
+            barCount: launchRecommendationBridgeBarCount(for: path.count),
+            palette: palette
+        )
+
+        if let existing = launchRecommendationBridge,
+           existing.targetPlaceID == nextBridge.targetPlaceID,
+           existing.palette == nextBridge.palette {
+            let fromDeltaKm = distanceKm(from: existing.fromCoordinate, to: nextBridge.fromCoordinate)
+            let toDeltaKm = distanceKm(from: existing.toCoordinate, to: nextBridge.toCoordinate)
+            if fromDeltaKm < 0.04, toDeltaKm < 0.04 {
+                return
+            }
+        }
+
+        if launchRecommendationBridge != nil {
+            launchRecommendationBridgeDismissTask?.cancel()
+            launchRecommendationBridgeDismissTask = nil
+        }
+
+        launchRecommendationBridge = nextBridge
+        scheduleLaunchRecommendationBridgeDismiss(for: nextBridge)
+    }
+
+    private func scheduleLaunchRecommendationBridgeDismiss(for bridge: LaunchRecommendationBridge) {
+        launchRecommendationBridgeDismissTask?.cancel()
+        launchRecommendationBridgeDismissTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.launchRecommendationBridgeDisplayDurationNanoseconds)
+            } catch {
+                self.launchRecommendationBridgeDismissTask = nil
+                return
+            }
+            guard !Task.isCancelled else {
+                self.launchRecommendationBridgeDismissTask = nil
+                return
+            }
+            while !Task.isCancelled {
+                guard let activeBridge = self.launchRecommendationBridge else {
+                    self.launchRecommendationBridgeDismissTask = nil
+                    return
+                }
+                guard activeBridge.targetPlaceID == bridge.targetPlaceID else {
+                    self.launchRecommendationBridgeDismissTask = nil
+                    return
+                }
+                if self.shouldKeepLaunchRecommendationBridgeVisible(for: activeBridge) {
+                    do {
+                        try await Task.sleep(nanoseconds: 220_000_000)
+                    } catch {
+                        self.launchRecommendationBridgeDismissTask = nil
+                        return
+                    }
+                    continue
+                }
+                break
+            }
+            guard !Task.isCancelled else {
+                self.launchRecommendationBridgeDismissTask = nil
+                return
+            }
+            self.launchRecommendationBridge = nil
+            self.launchRecommendationBridgeDismissTask = nil
+        }
+    }
+
+    private func shouldKeepLaunchRecommendationBridgeVisible(for bridge: LaunchRecommendationBridge) -> Bool {
+        let targetID = bridge.targetPlaceID
+        return _selectedPlaceID == targetID ||
+            _markerActionPlaceID == targetID ||
+            _quickCardPlaceID == targetID ||
+            _detailPlaceID == targetID ||
+            _expiredCardPlaceID == targetID
+    }
+
+    private func launchRecommendationBridgeBarCount(for trackPointCount: Int) -> Int {
+        _ = trackPointCount
+        return 37
+    }
+
+    private func buildLaunchRecommendationBridgePath(
+        from start: CLLocationCoordinate2D,
+        to end: CLLocationCoordinate2D
+    ) -> [CLLocationCoordinate2D] {
+        let distance = distanceKm(from: start, to: end)
+        guard distance > 0.03 else {
+            return []
+        }
+
+        let arcHeightKm = min(max(distance * 0.38, 0.9), 5.6)
+        let control = launchRecommendationBridgeControlPoint(
+            from: start,
+            to: end,
+            arcHeightKm: arcHeightKm
+        )
+
+        let sampleCount = 48
+        var path: [CLLocationCoordinate2D] = []
+        path.reserveCapacity(sampleCount + 1)
+
+        for step in 0...sampleCount {
+            let t = Double(step) / Double(sampleCount)
+            let inv = 1 - t
+            let lat = inv * inv * start.latitude +
+                2 * inv * t * control.latitude +
+                t * t * end.latitude
+            let lng = inv * inv * start.longitude +
+                2 * inv * t * control.longitude +
+                t * t * end.longitude
+
+            path.append(
+                CLLocationCoordinate2D(
+                    latitude: min(max(lat, -85), 85),
+                    longitude: min(max(lng, -180), 180)
+                )
+            )
+        }
+        return path
+    }
+
+    private func launchRecommendationBridgeControlPoint(
+        from start: CLLocationCoordinate2D,
+        to end: CLLocationCoordinate2D,
+        arcHeightKm: Double
+    ) -> CLLocationCoordinate2D {
+        let midLat = (start.latitude + end.latitude) / 2
+        let midLng = (start.longitude + end.longitude) / 2
+        let latOffset = arcHeightKm / 111.0
+        return CLLocationCoordinate2D(
+            latitude: min(max(midLat + latOffset, -85), 85),
+            longitude: min(max(midLng, -180), 180)
+        )
     }
 
     private func scheduleNearbyPreheatIfNeeded(
@@ -4140,6 +4347,8 @@ final class HomeMapViewModel: ObservableObject {
         activeNearbyQueryToken = nil
         mapZoomRestoreTask?.cancel()
         quickCardPresentationTask?.cancel()
+        postSplashRecommendationFocusTask?.cancel()
+        launchRecommendationBridgeDismissTask?.cancel()
         startReminderSyncTask?.cancel()
         nearbyReminderSyncTask?.cancel()
         topNoticeDismissTask?.cancel()
