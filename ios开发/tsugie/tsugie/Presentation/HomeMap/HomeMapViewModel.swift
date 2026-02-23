@@ -487,6 +487,7 @@ final class HomeMapViewModel: ObservableObject {
     private var hasAutoOpened = false
     private var hasStartedLaunchPrewarm = false
     private var shownLocationFallbackReasons: Set<AppLocationFallbackReason> = []
+    private var lastLocationFallbackDismissedAt: Date = .distantPast
     private var ignoreMapTapUntil: Date?
     private var memoryWarningObserver: NSObjectProtocol?
     private var hasLaunchSplashDismissed = false
@@ -778,6 +779,10 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     func dismissLocationFallbackNotice() {
+        if let reason = locationFallbackNotice?.reason {
+            shownLocationFallbackReasons.insert(reason)
+        }
+        lastLocationFallbackDismissedAt = Date()
         locationFallbackNotice = nil
     }
 
@@ -2808,6 +2813,12 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func presentLocationFallbackNoticeIfNeeded(for reason: AppLocationFallbackReason) {
+        if Date().timeIntervalSince(lastLocationFallbackDismissedAt) < 0.9 {
+            return
+        }
+        if locationFallbackNotice?.reason == reason {
+            return
+        }
         guard shownLocationFallbackReasons.contains(reason) == false else {
             return
         }

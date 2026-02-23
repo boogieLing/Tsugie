@@ -211,15 +211,28 @@ struct HomeMapView: View {
             }
         }
         .overlay(alignment: .top) {
-            if let notice = viewModel.topNotice {
-                TopNoticeBubbleView(message: notice.message) {
-                    viewModel.dismissTopNotice()
+            VStack(spacing: 8) {
+                if !suppressLocationFallbackAlert,
+                   let locationFallbackNotice = viewModel.locationFallbackNotice {
+                    LocationFallbackInlineNoticeView(
+                        title: viewModel.locationFallbackAlertTitle,
+                        message: viewModel.locationFallbackAlertMessage(for: locationFallbackNotice)
+                    ) {
+                        viewModel.dismissLocationFallbackNotice()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .padding(.top, 8)
-                .padding(.horizontal, 14)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(200)
+
+                if let notice = viewModel.topNotice {
+                    TopNoticeBubbleView(message: notice.message) {
+                        viewModel.dismissTopNotice()
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
+            .padding(.top, 8)
+            .padding(.horizontal, 14)
+            .zIndex(200)
         }
         .onAppear {
             viewModel.onViewAppear()
@@ -233,25 +246,6 @@ struct HomeMapView: View {
         .onChange(of: viewModel.launchRecommendationBridge?.targetPlaceID) { _, _ in
             updateLaunchBridgeCacheIfNeeded()
             restartLaunchBridgeAnimationIfNeeded()
-        }
-        .alert(
-            item: Binding(
-                get: {
-                    guard !suppressLocationFallbackAlert else {
-                        return nil
-                    }
-                    return viewModel.locationFallbackNotice
-                },
-                set: { _ in viewModel.dismissLocationFallbackNotice() }
-            )
-        ) { notice in
-            Alert(
-                title: Text(viewModel.locationFallbackAlertTitle),
-                message: Text(viewModel.locationFallbackAlertMessage(for: notice)),
-                dismissButton: .default(Text(L10n.Common.close)) {
-                    viewModel.dismissLocationFallbackNotice()
-                }
-            )
         }
         .confirmationDialog(
             L10n.QuickCard.navigationChooserTitle,
@@ -287,6 +281,7 @@ struct HomeMapView: View {
         }
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.quickCardPlaceID)
         .animation(.spring(response: 0.40, dampingFraction: 0.92), value: viewModel.expiredCardPlaceID)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.locationFallbackNotice?.id)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: viewModel.topNotice?.id)
     }
 
@@ -1196,6 +1191,59 @@ private struct TopNoticeBubbleView: View {
         .shadow(color: .black.opacity(0.16), radius: 10, x: 0, y: 4)
         .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityLabel(message)
+        .accessibilityHint(L10n.Common.close)
+    }
+}
+
+private struct LocationFallbackInlineNoticeView: View {
+    let title: String
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "location.slash.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(red: 0.22, green: 0.31, blue: 0.38))
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.24))
+                    .lineLimit(1)
+
+                Text(message)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(red: 0.26, green: 0.31, blue: 0.36))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(red: 0.40, green: 0.45, blue: 0.50))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel(L10n.Common.close)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.white.opacity(0.90), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(Color(red: 0.90, green: 0.94, blue: 0.98, opacity: 0.96), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.14), radius: 10, x: 0, y: 4)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title)。\(message)")
         .accessibilityHint(L10n.Common.close)
     }
 }
