@@ -1,6 +1,7 @@
 
 r0-submit/
 r0-review/
+r0/request/
 
 .DS_Store
 **/.DS_Store
@@ -50,3 +51,6 @@ ios开发/tsugie/tsugie/Resources/he_places.index.json
 数据端/scripts/.DS_Store
 
 logs/
+
+# SOP 本地可视化（不入库）
+记录/sop-可视化.local.html
