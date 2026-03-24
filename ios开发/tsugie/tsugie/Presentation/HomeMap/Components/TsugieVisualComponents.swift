@@ -626,12 +626,18 @@ struct TsugieStatusTrackView: View {
     }
 }
 
+enum TsugieMiniProgressRenderMode {
+    case standard
+    case lightweight
+}
+
 struct TsugieMiniProgressView: View {
     let snapshot: EventStatusSnapshot
     var trackHeight: CGFloat = 10
     var glowBoost: CGFloat = 1
     var endpointIconName: String? = nil
     var endpointIconIsColorized: Bool = true
+    var renderMode: TsugieMiniProgressRenderMode = .standard
 
     var body: some View {
         GeometryReader { proxy in
@@ -648,14 +654,27 @@ struct TsugieMiniProgressView: View {
                 Capsule()
                     .fill(fillGradient)
                     .frame(width: fillWidth, height: trackHeight)
-                    .shadow(color: fillGlowColor, radius: fillGlowRadius, x: 0, y: 0)
+                    .shadow(
+                        color: renderMode == .standard ? fillGlowColor : .clear,
+                        radius: renderMode == .standard ? fillGlowRadius : 0,
+                        x: 0,
+                        y: 0
+                    )
 
                 endpointBubbleContent
                     .frame(minWidth: endpointBubbleMinWidth, minHeight: endpointBubbleMinHeight)
                     .padding(.horizontal, endpointBubbleHorizontalPadding)
                     .background(endpointBackground, in: Capsule())
-                    .overlay(Capsule().stroke(endpointBorder, lineWidth: 1))
-                    .shadow(color: endpointGlowColor, radius: endpointGlowRadius, x: 0, y: 0)
+                    .overlay(
+                        Capsule()
+                            .stroke(endpointBorder, lineWidth: renderMode == .standard ? 1 : 0.6)
+                    )
+                    .shadow(
+                        color: renderMode == .standard ? endpointGlowColor : .clear,
+                        radius: renderMode == .standard ? endpointGlowRadius : 0,
+                        x: 0,
+                        y: 0
+                    )
                     .position(x: endpointX, y: trackHeight / 2)
             }
         }
@@ -687,8 +706,8 @@ struct TsugieMiniProgressView: View {
     }
 
     private var endpointBubbleMinWidth: CGFloat { 26 }
-    private var endpointBubbleMinHeight: CGFloat { 23 }
-    private var endpointBubbleHorizontalPadding: CGFloat { 8 }
+    private var endpointBubbleMinHeight: CGFloat { renderMode == .standard ? 23 : 18 }
+    private var endpointBubbleHorizontalPadding: CGFloat { renderMode == .standard ? 8 : 6 }
     private var endpointBubbleHalfWidth: CGFloat {
         (endpointBubbleMinWidth + endpointBubbleHorizontalPadding * 2) / 2
     }
@@ -746,11 +765,21 @@ struct TsugieMiniProgressView: View {
     }
 
     private var endpointBackground: Color {
-        snapshot.status == .ongoing ? .white : Color(red: 0.98, green: 0.99, blue: 1.00)
+        if renderMode == .lightweight {
+            return snapshot.status == .ongoing
+                ? Color.white.opacity(0.98)
+                : Color(red: 0.96, green: 0.98, blue: 0.99)
+        }
+        return snapshot.status == .ongoing ? .white : Color(red: 0.98, green: 0.99, blue: 1.00)
     }
 
     private var endpointBorder: Color {
-        snapshot.status == .ongoing ? Color.white.opacity(0.96) : Color(red: 0.93, green: 0.96, blue: 0.98)
+        if renderMode == .lightweight {
+            return snapshot.status == .ongoing
+                ? Color.white.opacity(0.88)
+                : Color(red: 0.90, green: 0.94, blue: 0.96)
+        }
+        return snapshot.status == .ongoing ? Color.white.opacity(0.96) : Color(red: 0.93, green: 0.96, blue: 0.98)
     }
 
     private var endpointTextColor: Color {
@@ -832,8 +861,8 @@ struct TsugieMiniProgressView: View {
                         .scaledToFit()
                         .frame(width: 12, height: 12)
                         .scaleEffect(1.65 * 1.3)
-                        .saturation(1.18)
-                        .contrast(1.05)
+                        .saturation(renderMode == .standard ? 1.18 : 1.0)
+                        .contrast(renderMode == .standard ? 1.05 : 1.0)
                 }
             } else {
                 Image(endpointIconName)
@@ -843,8 +872,8 @@ struct TsugieMiniProgressView: View {
                     .frame(width: 12, height: 12)
                     .scaleEffect(1.65 * 1.3)
                     .rotationEffect(.degrees(endpointIconName == TsugieSmallIcon.hanabiAsset ? 23 : 0))
-                    .saturation(0)
-                    .contrast(0.95)
+                    .saturation(renderMode == .standard ? 0 : 0.2)
+                    .contrast(renderMode == .standard ? 0.95 : 0.98)
                     .foregroundStyle(Color(red: 0.54, green: 0.61, blue: 0.67))
             }
         } else {

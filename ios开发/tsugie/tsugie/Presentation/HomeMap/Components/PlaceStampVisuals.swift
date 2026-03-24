@@ -7,9 +7,15 @@ enum StampLoadMode {
     case deferred
 }
 
+enum FavoriteStateIconRenderMode {
+    case standard
+    case lightweight
+}
+
 struct FavoriteStateIconView: View {
     let isFavorite: Bool
     var size: CGFloat = 19
+    var renderMode: FavoriteStateIconRenderMode = .standard
 
     var body: some View {
         ZStack {
@@ -24,8 +30,8 @@ struct FavoriteStateIconView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
-                .saturation(isFavorite ? 1 : 0)
-                .opacity(isFavorite ? 1 : 0.88)
+                .saturation(isFavorite ? 1 : (renderMode == .standard ? 0 : 0.15))
+                .opacity(isFavorite ? 1 : (renderMode == .standard ? 0.88 : 0.76))
         }
         .accessibilityLabel(L10n.PlaceState.favoriteA11y)
     }
@@ -66,11 +72,12 @@ struct StampIconView: View {
     let stamp: PlaceStampPresentation?
     let isColorized: Bool
     var size: CGFloat = 18
+    var loadMode: StampLoadMode = .immediate
 
     var body: some View {
         Group {
             if let stamp {
-                ImmediateStampImageView(resourceName: stamp.resourceName, maxPixelSize: Int(size * 2))
+                stampImage(resourceName: stamp.resourceName)
                     .saturation(isColorized ? 1 : 0)
                     .opacity(isColorized ? 1 : 0.72)
             } else {
@@ -82,6 +89,16 @@ struct StampIconView: View {
             }
         }
         .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private func stampImage(resourceName: String) -> some View {
+        switch loadMode {
+        case .immediate:
+            ImmediateStampImageView(resourceName: resourceName, maxPixelSize: Int(size * 2))
+        case .deferred:
+            DeferredStampImageView(resourceName: resourceName, maxPixelSize: Int(size * 2))
+        }
     }
 }
 

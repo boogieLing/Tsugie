@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 private struct CalendarCategoryMeta: Identifiable {
@@ -15,15 +16,15 @@ private struct CalendarScoredItem: Identifiable {
     let dayKey: String
 }
 
-private struct CalendarBucket: Identifiable {
+private struct CalendarBucket: Identifiable, Equatable {
     let id: String
     let dayDate: Date
     let counts: [String: Int]
     let totalCount: Int
 }
 
-private struct CalendarMonthBlock: Identifiable {
-    struct Cell: Identifiable {
+private struct CalendarMonthBlock: Identifiable, Equatable {
+    struct Cell: Identifiable, Equatable {
         let id: String
         let day: Int?
         let dayKey: String?
@@ -35,6 +36,8 @@ private struct CalendarMonthBlock: Identifiable {
     let title: String
     let cells: [Cell]
 }
+
+private let calendarDayCellCategoryIDs = ["hanabi", "matsuri", "nature", "other"]
 
 private struct CalendarPrewarmedPayload {
     let signature: String
@@ -69,12 +72,18 @@ private struct DayDrawerFilterRail: View {
                     activeGlowColor: activeGlowColor,
                     fixedWidth: 82,
                     fixedHeight: 32,
+                    renderMode: .lightweight,
                     onTap: { onSelect(id) }
                 )
                 .accessibilityLabel("\(category.label) \(count)")
             }
         }
     }
+}
+
+enum TsugieFilterPillRenderMode {
+    case standard
+    case lightweight
 }
 
 struct TsugieFilterPill: View {
@@ -86,6 +95,7 @@ struct TsugieFilterPill: View {
     let activeGlowColor: Color
     var fixedWidth: CGFloat? = nil
     var fixedHeight: CGFloat = 34
+    var renderMode: TsugieFilterPillRenderMode = .standard
     let onTap: () -> Void
 
     @State private var pillScale: CGFloat = 1.0
@@ -113,8 +123,8 @@ struct TsugieFilterPill: View {
                             .scaledToFit()
                             .frame(width: 28, height: 28)
                             .scaleEffect(1.5)
-                            .saturation(1.25)
-                            .contrast(1.06)
+                            .saturation(renderMode == .standard ? 1.25 : 1.0)
+                            .contrast(renderMode == .standard ? 1.06 : 1.0)
                     }
                 } else {
                     Text(leadingText)
@@ -134,41 +144,47 @@ struct TsugieFilterPill: View {
             .padding(.vertical, fixedWidth == nil ? 4 : 0)
             .frame(width: fixedWidth)
             .frame(minHeight: fixedHeight)
-            .background(Color.white, in: Capsule())
+            .background(pillBackground, in: Capsule())
             .overlay(
-                Capsule()
-                    .stroke(
-                        Color(red: 0.82, green: 0.90, blue: 0.94, opacity: 0.90),
-                        lineWidth: 1
-                    )
+                Group {
+                    if renderMode == .standard || !isActive {
+                        Capsule()
+                            .stroke(
+                                Color(red: 0.82, green: 0.90, blue: 0.94, opacity: 0.90),
+                                lineWidth: 1
+                            )
+                    }
+                }
             )
             .shadow(
-                color: Color(red: 0.12, green: 0.30, blue: 0.38, opacity: 0.09),
-                radius: 4,
+                color: Color(
+                    red: 0.12,
+                    green: 0.30,
+                    blue: 0.38,
+                    opacity: renderMode == .standard ? 0.09 : 0.04
+                ),
+                radius: renderMode == .standard ? 4 : 2,
                 x: 0,
-                y: 2
+                y: renderMode == .standard ? 2 : 1
             )
             .scaleEffect(pillScale)
         }
         .buttonStyle(.plain)
-        .tsugieActiveGlow(
-            isActive: isActive,
-            glowGradient: activeGradient,
-            glowColor: activeGlowColor,
-            cornerRadius: fixedHeight * 0.5,
-            blurRadius: 12,
-            glowOpacity: 0.68,
-            scale: 1.04,
-            primaryOpacity: 0.54,
-            primaryRadius: 14,
-            primaryYOffset: 4,
-            secondaryOpacity: 0.34,
-            secondaryRadius: 22,
-            secondaryYOffset: 7
+        .modifier(
+            TsugieFilterPillGlowModifier(
+                isEnabled: renderMode == .standard,
+                isActive: isActive,
+                activeGradient: activeGradient,
+                activeGlowColor: activeGlowColor,
+                fixedHeight: fixedHeight
+            )
         )
         .opacity(isActive ? 1.0 : 0.56)
         .scaleEffect(isActive ? 1.0 : 0.97)
-        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isActive)
+        .animation(
+            renderMode == .standard ? .spring(response: 0.24, dampingFraction: 0.78) : nil,
+            value: isActive
+        )
     }
 
     private var hanabiIconGradient: LinearGradient {
@@ -183,7 +199,7 @@ struct TsugieFilterPill: View {
     }
 
     private func triggerJellyBounce() {
-        if accessibilityReduceMotion {
+        if accessibilityReduceMotion || renderMode == .lightweight {
             pillScale = 1.0
             return
         }
@@ -209,6 +225,292 @@ struct TsugieFilterPill: View {
             }
         }
     }
+
+    private var pillBackground: AnyShapeStyle {
+        return AnyShapeStyle(Color.white)
+    }
+}
+
+private struct TsugieFilterPillGlowModifier: ViewModifier {
+    let isEnabled: Bool
+    let isActive: Bool
+    let activeGradient: LinearGradient
+    let activeGlowColor: Color
+    let fixedHeight: CGFloat
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.tsugieActiveGlow(
+                isActive: isActive,
+                glowGradient: activeGradient,
+                glowColor: activeGlowColor,
+                cornerRadius: fixedHeight * 0.5,
+                blurRadius: 12,
+                glowOpacity: 0.68,
+                scale: 1.04,
+                primaryOpacity: 0.54,
+                primaryRadius: 14,
+                primaryYOffset: 4,
+                secondaryOpacity: 0.34,
+                secondaryRadius: 22,
+                secondaryYOffset: 7
+            )
+        } else if isActive {
+            content
+                .shadow(
+                    color: activeGlowColor.opacity(0.18),
+                    radius: 10,
+                    x: 0,
+                    y: 3
+                )
+                .shadow(
+                    color: activeGlowColor.opacity(0.10),
+                    radius: 18,
+                    x: 0,
+                    y: 6
+                )
+        } else {
+            content
+        }
+    }
+}
+
+private struct CalendarMonthPagerView: View, Equatable {
+    let width: CGFloat
+    let previousBlock: CalendarMonthBlock
+    let currentBlock: CalendarMonthBlock
+    let nextBlock: CalendarMonthBlock
+    let weekdaySymbols: [String]
+    let monthPageDragOffset: CGFloat
+    let isMonthPaging: Bool
+    let todayDayKey: String
+    let onSelectDay: (String) -> Void
+    let onDragChanged: (DragGesture.Value) -> Void
+    let onDragEnded: (DragGesture.Value) -> Void
+
+    static func == (lhs: CalendarMonthPagerView, rhs: CalendarMonthPagerView) -> Bool {
+        lhs.width == rhs.width &&
+        lhs.previousBlock == rhs.previousBlock &&
+        lhs.currentBlock == rhs.currentBlock &&
+        lhs.nextBlock == rhs.nextBlock &&
+        lhs.weekdaySymbols == rhs.weekdaySymbols &&
+        lhs.monthPageDragOffset == rhs.monthPageDragOffset &&
+        lhs.isMonthPaging == rhs.isMonthPaging &&
+        lhs.todayDayKey == rhs.todayDayKey
+    }
+
+    var body: some View {
+        let shouldRenderAdjacentMonths = isMonthPaging || abs(monthPageDragOffset) > 0.5
+
+        ZStack(alignment: .top) {
+            if shouldRenderAdjacentMonths {
+                CalendarMonthBlockView(
+                    block: previousBlock,
+                    weekdaySymbols: weekdaySymbols,
+                    todayDayKey: todayDayKey,
+                    onSelectDay: onSelectDay
+                )
+                .frame(width: width)
+                .offset(x: -width + monthPageDragOffset)
+            }
+
+            CalendarMonthBlockView(
+                block: currentBlock,
+                weekdaySymbols: weekdaySymbols,
+                todayDayKey: todayDayKey,
+                onSelectDay: onSelectDay
+            )
+            .frame(width: width)
+            .offset(x: monthPageDragOffset)
+
+            if shouldRenderAdjacentMonths {
+                CalendarMonthBlockView(
+                    block: nextBlock,
+                    weekdaySymbols: weekdaySymbols,
+                    todayDayKey: todayDayKey,
+                    onSelectDay: onSelectDay
+                )
+                .frame(width: width)
+                .offset(x: width + monthPageDragOffset)
+            }
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
+        .clipped()
+        .gesture(
+            DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                .onChanged(onDragChanged)
+                .onEnded(onDragEnded)
+        )
+    }
+}
+
+private struct CalendarMonthBlockView: View, Equatable {
+    let block: CalendarMonthBlock
+    let weekdaySymbols: [String]
+    let todayDayKey: String
+    let onSelectDay: (String) -> Void
+
+    static func == (lhs: CalendarMonthBlockView, rhs: CalendarMonthBlockView) -> Bool {
+        lhs.block == rhs.block &&
+        lhs.weekdaySymbols == rhs.weekdaySymbols &&
+        lhs.todayDayKey == rhs.todayDayKey
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(block.title)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(Color(red: 0.21, green: 0.37, blue: 0.44))
+                .padding(.horizontal, 4)
+
+            HStack(spacing: 6) {
+                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { index, label in
+                    Text(label)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(
+                            index == 0
+                            ? Color(red: 0.88, green: 0.48, blue: 0.53)
+                            : (index == 6 ? Color(red: 0.35, green: 0.53, blue: 0.79) : Color(red: 0.42, green: 0.53, blue: 0.57))
+                        )
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+                ForEach(block.cells) { cell in
+                    CalendarDayCellView(
+                        cell: cell,
+                        todayDayKey: todayDayKey,
+                        onSelectDay: onSelectDay
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+    }
+}
+
+private struct CalendarDayCellView: View, Equatable {
+    let cell: CalendarMonthBlock.Cell
+    let todayDayKey: String
+    let onSelectDay: (String) -> Void
+
+    static func == (lhs: CalendarDayCellView, rhs: CalendarDayCellView) -> Bool {
+        lhs.cell == rhs.cell && lhs.todayDayKey == rhs.todayDayKey
+    }
+
+    var body: some View {
+        if let day = cell.day, let dayKey = cell.dayKey {
+            let isToday = dayKey == todayDayKey
+            let isWeekend = cell.date.map { Calendar.current.component(.weekday, from: $0) } ?? 0
+            let dayColor: Color = isWeekend == 1
+                ? Color(red: 0.88, green: 0.47, blue: 0.53)
+                : (isWeekend == 7 ? Color(red: 0.35, green: 0.53, blue: 0.79) : Color(red: 0.24, green: 0.38, blue: 0.44))
+            let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+            Button {
+                guard cell.bucket != nil else { return }
+                onSelectDay(dayKey)
+            } label: {
+                if let bucket = cell.bucket {
+                    ZStack(alignment: .bottomTrailing) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(day)")
+                                .font(.system(size: 11, weight: .heavy))
+                                .foregroundStyle(dayColor)
+
+                            VStack(alignment: .leading, spacing: 1) {
+                                ForEach(calendarDayCellCategoryIDs, id: \.self) { categoryID in
+                                    if let count = bucket.counts[categoryID], count > 0 {
+                                        HStack(spacing: 2) {
+                                            if categoryID == "hanabi" {
+                                                Image(TsugieSmallIcon.assetName(for: categoryID))
+                                                    .resizable()
+                                                    .renderingMode(.template)
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                                    .foregroundStyle(Self.hanabiCategoryGradient)
+                                            } else {
+                                                Image(TsugieSmallIcon.assetName(for: categoryID))
+                                                    .resizable()
+                                                    .renderingMode(.original)
+                                                    .scaledToFit()
+                                                    .frame(width: 14, height: 14)
+                                            }
+                                            Text("\(count)")
+                                                .font(.system(size: 10, weight: .heavy))
+                                                .foregroundStyle(Color(red: 0.35, green: 0.47, blue: 0.53))
+                                                .lineLimit(1)
+                                                .fixedSize(horizontal: true, vertical: false)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                    .padding(.top, 6)
+                    .padding(.leading, 7)
+                    .padding(.trailing, 7)
+                    .padding(.bottom, 6)
+                    .background(shape.fill(Color.white))
+                    .overlay(
+                        Group {
+                            if isToday {
+                                shape
+                                    .stroke(
+                                        Color(red: 0.72, green: 0.82, blue: 0.87, opacity: 0.98),
+                                        lineWidth: 1.4
+                                    )
+                            }
+                        }
+                    )
+                    .shadow(
+                        color: isToday ? Color(red: 0.13, green: 0.25, blue: 0.31, opacity: 0.13) : .clear,
+                        radius: isToday ? 8 : 0,
+                        x: 0,
+                        y: isToday ? 4 : 0
+                    )
+                    .opacity(isToday ? 1.0 : 0.62)
+                } else {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(day)")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(dayColor)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                    .padding(.top, 6)
+                    .padding(.leading, 7)
+                    .padding(.trailing, 7)
+                    .padding(.bottom, 6)
+                    .background(shape.fill(Color.white.opacity(0.92)))
+                    .opacity(isToday ? 1.0 : 0.62)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(cell.bucket == nil)
+            .id(dayKey)
+        } else {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.clear)
+                .frame(minHeight: 72)
+        }
+    }
+
+    private static var hanabiCategoryGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 250.0 / 255.0, green: 112.0 / 255.0, blue: 154.0 / 255.0),
+                Color(red: 254.0 / 255.0, green: 225.0 / 255.0, blue: 64.0 / 255.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 struct CalendarPageView: View {
@@ -228,6 +530,7 @@ struct CalendarPageView: View {
     @State private var selectedDayKey: String?
     @State private var dayFilterID = "all"
     @State private var cachedBucketsByDayKey: [String: CalendarBucket] = [:]
+    @State private var cachedDetailPlacesByDayKey: [String: [HePlace]] = [:]
     @State private var cachedDetailItemsByDayKey: [String: [CalendarScoredItem]] = [:]
     @State private var cachedPlacesSignature = ""
     @State private var isCalendarCacheLoading = true
@@ -242,7 +545,18 @@ struct CalendarPageView: View {
     @State private var monthBlockPoolBuildToken: Int = 0
     @State private var weekdaySymbolsCache: [String] = Self.defaultWeekdaySymbols
     @State private var dayDrawerVisibleItemLimit = 24
+    @State private var loadingDetailDayKeys: Set<String> = []
     private static let dayDrawerPageSize = 24
+
+#if DEBUG
+    private static func debugTimestamp() -> CFTimeInterval {
+        CACurrentMediaTime()
+    }
+
+    private static func debugLog(_ message: String) {
+        print("[CalendarPerf] \(message)")
+    }
+#endif
 
     static func prewarmCache(
         places: [HePlace],
@@ -302,19 +616,11 @@ struct CalendarPageView: View {
 
                 if isDayDrawerOpen {
                     dayDrawerLayer(proxy: proxy)
-                        .transition(
-                            .asymmetric(
-                                insertion: .move(edge: .trailing)
-                                    .combined(with: .opacity)
-                                    .combined(with: .scale(scale: 0.96, anchor: .trailing)),
-                                removal: .opacity
-                            )
-                        )
+                        .transition(.move(edge: .trailing))
                         .zIndex(8)
                 }
             }
             .ignoresSafeArea()
-            .animation(.spring(response: 0.34, dampingFraction: 0.88), value: isDayDrawerOpen)
             .onAppear {
                 weekdaySymbolsCache = Self.buildWeekdaySymbols(locale: L10n.locale)
                 refreshCalendarCacheIfNeeded(force: true)
@@ -369,29 +675,24 @@ struct CalendarPageView: View {
                 } else if let previousBlock = previousMonthBlock,
                           let currentBlock = currentMonthBlock,
                           let nextBlock = nextMonthBlock {
-                    let shouldRenderAdjacentMonths = isMonthPaging || abs(monthPageDragOffset) > 0.5
-                    ZStack(alignment: .top) {
-                        if shouldRenderAdjacentMonths {
-                            monthBlock(previousBlock)
-                                .frame(width: width)
-                                .offset(x: -width + monthPageDragOffset)
+                    CalendarMonthPagerView(
+                        width: width,
+                        previousBlock: previousBlock,
+                        currentBlock: currentBlock,
+                        nextBlock: nextBlock,
+                        weekdaySymbols: weekdaySymbolsCache,
+                        monthPageDragOffset: monthPageDragOffset,
+                        isMonthPaging: isMonthPaging,
+                        todayDayKey: dayKeyOf(now),
+                        onSelectDay: handleDaySelection,
+                        onDragChanged: { value in
+                            handleMonthPagingChanged(value, width: width)
+                        },
+                        onDragEnded: { value in
+                            handleMonthPagingEnded(value, width: width)
                         }
-
-                        monthBlock(currentBlock)
-                            .frame(width: width)
-                            .offset(x: monthPageDragOffset)
-
-                        if shouldRenderAdjacentMonths {
-                            monthBlock(nextBlock)
-                                .frame(width: width)
-                                .offset(x: width + monthPageDragOffset)
-                        }
-                    }
-                    .frame(width: width)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .contentShape(Rectangle())
-                    .clipped()
-                    .gesture(monthPagingGesture(width: width))
+                    )
+                    .equatable()
                 } else {
                     monthListSkeleton
                 }
@@ -419,57 +720,78 @@ struct CalendarPageView: View {
         )
     }
 
+    private func handleDaySelection(_ dayKey: String) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            selectedDayKey = dayKey
+        }
+        dayFilterID = "all"
+        resetDayDrawerVisibleItemLimit()
+        loadDetailItemsIfNeeded(for: dayKey)
+    }
+
+    private func handleMonthPagingChanged(_ value: DragGesture.Value, width: CGFloat) {
+        guard !isMonthPaging else { return }
+        let horizontal = value.translation.width
+        let vertical = value.translation.height
+        guard abs(horizontal) > abs(vertical) else {
+            monthPageDragOffset = 0
+            return
+        }
+        monthPageDragOffset = max(-width, min(width, horizontal))
+    }
+
+    private func handleMonthPagingEnded(_ value: DragGesture.Value, width: CGFloat) {
+        guard !isMonthPaging else { return }
+
+        let horizontal = value.translation.width
+        let predicted = value.predictedEndTranslation.width
+        let threshold = max(56, width * 0.18)
+        let decision: Int
+        if horizontal <= -threshold || predicted <= -threshold * 1.25 {
+            decision = 1
+        } else if horizontal >= threshold || predicted >= threshold * 1.25 {
+            decision = -1
+        } else {
+            decision = 0
+        }
+
+        guard decision != 0 else {
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                monthPageDragOffset = 0
+            }
+            return
+        }
+
+        isMonthPaging = true
+        let targetOffset = decision > 0 ? -width : width
+        scheduleImmediateMonthBlockWarmup(
+            anchorMonth: currentMonthCursor,
+            relativeOffsets: [decision > 0 ? 2 : -2]
+        )
+        withAnimation(.easeOut(duration: 0.22)) {
+            monthPageDragOffset = targetOffset
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.23) {
+            let calendar = Calendar.current
+            let baseMonth = startOfMonth(currentMonthCursor)
+            let nextMonth = calendar.date(byAdding: .month, value: decision, to: baseMonth) ?? baseMonth
+            currentMonthCursor = startOfMonth(nextMonth)
+            rebuildVisibleMonthBlocks()
+            scheduleMonthBlockPoolPrebuild(anchorMonth: currentMonthCursor, force: false)
+            monthPageDragOffset = 0
+            isMonthPaging = false
+        }
+    }
+
     private func monthPagingGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .local)
             .onChanged { value in
-                guard !isMonthPaging else { return }
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                guard abs(horizontal) > abs(vertical) else {
-                    monthPageDragOffset = 0
-                    return
-                }
-                monthPageDragOffset = max(-width, min(width, horizontal))
+                handleMonthPagingChanged(value, width: width)
             }
             .onEnded { value in
-                guard !isMonthPaging else { return }
-
-                let horizontal = value.translation.width
-                let predicted = value.predictedEndTranslation.width
-                let threshold = max(56, width * 0.18)
-                let decision: Int
-                if horizontal <= -threshold || predicted <= -threshold * 1.25 {
-                    decision = 1
-                } else if horizontal >= threshold || predicted >= threshold * 1.25 {
-                    decision = -1
-                } else {
-                    decision = 0
-                }
-
-                guard decision != 0 else {
-                    withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
-                        monthPageDragOffset = 0
-                    }
-                    return
-                }
-
-                isMonthPaging = true
-                let targetOffset = decision > 0 ? -width : width
-                withAnimation(.easeOut(duration: 0.22)) {
-                    monthPageDragOffset = targetOffset
-                }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.23) {
-                let calendar = Calendar.current
-                let baseMonth = startOfMonth(currentMonthCursor)
-                let nextMonth = calendar.date(byAdding: .month, value: decision, to: baseMonth) ?? baseMonth
-                currentMonthCursor = startOfMonth(nextMonth)
-                rebuildVisibleMonthBlocks()
-                scheduleMonthBlockPoolPrebuild(anchorMonth: currentMonthCursor, force: false)
-                monthPageDragOffset = 0
-                isMonthPaging = false
+                handleMonthPagingEnded(value, width: width)
             }
-    }
     }
 
     private var monthListSkeleton: some View {
@@ -526,45 +848,47 @@ struct CalendarPageView: View {
 
     private func calendarDayCell(day: Int, dayKey: String, date: Date?, bucket: CalendarBucket?) -> some View {
         let isToday = dayKey == dayKeyOf(now)
-        let hasEvents = bucket != nil
         let isWeekend: Int = date.map { Calendar.current.component(.weekday, from: $0) } ?? 0
         let dayColor: Color = isWeekend == 1
             ? Color(red: 0.88, green: 0.47, blue: 0.53)
             : (isWeekend == 7 ? Color(red: 0.35, green: 0.53, blue: 0.79) : Color(red: 0.24, green: 0.38, blue: 0.44))
 
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
         return Button {
             guard bucket != nil else { return }
-            loadDetailItemsIfNeeded(for: dayKey)
-            selectedDayKey = dayKey
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                selectedDayKey = dayKey
+            }
             dayFilterID = "all"
             resetDayDrawerVisibleItemLimit()
+            loadDetailItemsIfNeeded(for: dayKey)
         } label: {
-            ZStack(alignment: .bottomTrailing) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("\(day)")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(dayColor)
+            if let bucket {
+                ZStack(alignment: .bottomTrailing) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(day)")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(dayColor)
 
-                    if let bucket {
                         VStack(alignment: .leading, spacing: 1) {
-                            ForEach(categories.filter { $0.id != "all" }, id: \.id) { category in
+                            ForEach(Self.dayCellCategoryIDs, id: \.self) { categoryID in
+                                let category = categoryMeta(for: categoryID)
                                 if let count = bucket.counts[category.id], count > 0 {
                                     HStack(spacing: 2) {
                                         if category.id == "hanabi" {
-                                            Image(TsugieSmallIcon.assetName(for: category.id))
+                                            Image(category.iconName)
                                                 .resizable()
                                                 .renderingMode(.template)
                                                 .scaledToFit()
                                                 .frame(width: 14, height: 14)
                                                 .foregroundStyle(hanabiCategoryGradient)
                                         } else {
-                                            Image(TsugieSmallIcon.assetName(for: category.id))
+                                            Image(category.iconName)
                                                 .resizable()
                                                 .renderingMode(.original)
                                                 .scaledToFit()
                                                 .frame(width: 14, height: 14)
-                                                .saturation(1.25)
-                                                .contrast(1.06)
                                         }
                                         Text("\(count)")
                                             .font(.system(size: 10, weight: .heavy))
@@ -577,38 +901,48 @@ struct CalendarPageView: View {
                         }
                     }
                 }
-
+                .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                .padding(.top, 6)
+                .padding(.leading, 7)
+                .padding(.trailing, 7)
+                .padding(.bottom, 6)
+                .background(
+                    shape
+                        .fill(cellBackground(isToday: isToday, hasEvents: true))
+                )
+                .overlay(
+                    Group {
+                        if isToday {
+                            shape
+                                .stroke(
+                                    Color(red: 0.72, green: 0.82, blue: 0.87, opacity: 0.98),
+                                    lineWidth: 1.4
+                                )
+                        }
+                    }
+                )
+                .shadow(
+                    color: isToday ? Color(red: 0.13, green: 0.25, blue: 0.31, opacity: 0.13) : .clear,
+                    radius: isToday ? 8 : 0,
+                    x: 0,
+                    y: isToday ? 4 : 0
+                )
+                .opacity(isToday ? 1.0 : 0.62)
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(day)")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(dayColor)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                .padding(.top, 6)
+                .padding(.leading, 7)
+                .padding(.trailing, 7)
+                .padding(.bottom, 6)
+                .background(shape.fill(Color.white.opacity(0.92)))
+                .opacity(isToday ? 1.0 : 0.62)
             }
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
-            .padding(.top, 6)
-            .padding(.leading, 7)
-            .padding(.trailing, 7)
-            .padding(.bottom, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(cellBackground(isToday: isToday, hasEvents: hasEvents))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        hasEvents
-                        ? (isToday
-                           ? Color(red: 0.72, green: 0.82, blue: 0.87, opacity: 0.98)
-                           : Color(red: 0.77, green: 0.87, blue: 0.92, opacity: 0.96))
-                        : .clear,
-                        lineWidth: hasEvents ? (isToday ? 1.4 : 1.1) : 0
-                    )
-            )
-            .shadow(
-                color: hasEvents
-                    ? Color(red: 0.13, green: 0.25, blue: 0.31, opacity: isToday ? 0.13 : 0.08)
-                    : .clear,
-                radius: hasEvents ? (isToday ? 8 : 4) : 0,
-                x: 0,
-                y: hasEvents ? (isToday ? 4 : 2) : 0
-            )
-            .opacity(isToday ? 1.0 : 0.62)
         }
         .buttonStyle(.plain)
         .disabled(bucket == nil)
@@ -662,6 +996,7 @@ struct CalendarPageView: View {
         let bucket = selectedBucket
         let filteredItems = selectedDayItems
         let renderedItems = Array(filteredItems.prefix(dayDrawerVisibleItemLimit))
+        let isLoadingSelectedDayItems = selectedDayKey.map { loadingDetailDayKeys.contains($0) } ?? false
 
         return VStack(spacing: 10) {
             HStack {
@@ -688,7 +1023,11 @@ struct CalendarPageView: View {
                                     }
                             }
 
-                            if filteredItems.isEmpty {
+                            if renderedItems.isEmpty && isLoadingSelectedDayItems {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .frame(maxWidth: .infinity, minHeight: 72)
+                            } else if filteredItems.isEmpty {
                                 Text(L10n.Calendar.drawerNoMatch)
                                     .font(.system(size: 12))
                                     .foregroundStyle(Color(red: 0.39, green: 0.51, blue: 0.56))
@@ -720,7 +1059,7 @@ struct CalendarPageView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color(red: 0.89, green: 0.96, blue: 0.98, opacity: 0.92), lineWidth: 1)
         )
-        .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.16), radius: 16, x: -2, y: 10)
+        .shadow(color: Color(red: 0.11, green: 0.30, blue: 0.38, opacity: 0.10), radius: 9, x: -1, y: 5)
     }
 
     private func dayFilterIDs(for bucket: CalendarBucket) -> [String] {
@@ -752,8 +1091,6 @@ struct CalendarPageView: View {
                             .renderingMode(.original)
                             .scaledToFit()
                             .frame(width: 28, height: 28)
-                            .saturation(1.25)
-                            .contrast(1.06)
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -783,17 +1120,22 @@ struct CalendarPageView: View {
 
                     VStack(alignment: .trailing, spacing: 5) {
                         HStack(spacing: 6) {
-                            FavoriteStateIconView(isFavorite: state.isFavorite, size: 24)
+                            FavoriteStateIconView(
+                                isFavorite: state.isFavorite,
+                                size: 24,
+                                renderMode: .lightweight
+                            )
                             StampIconView(
                                 stamp: stamp,
                                 isColorized: state.isCheckedIn,
-                                size: 25
+                                size: 25,
+                                loadMode: .deferred
                             )
                         }
                     }
                 }
 
-                TsugieMiniProgressView(snapshot: item.snapshot)
+                TsugieMiniProgressView(snapshot: item.snapshot, renderMode: .lightweight)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
@@ -823,7 +1165,9 @@ struct CalendarPageView: View {
     }
 
     private func closeDayDrawer() {
-        selectedDayKey = nil
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.92)) {
+            selectedDayKey = nil
+        }
         dayFilterID = "all"
         resetDayDrawerVisibleItemLimit()
     }
@@ -866,6 +1210,7 @@ struct CalendarPageView: View {
             return
         }
         cachedPlacesSignature = signature
+        cachedDetailPlacesByDayKey = [:]
         cachedDetailItemsByDayKey = [:]
         monthBlockPool = [:]
         isMonthPaging = false
@@ -878,16 +1223,19 @@ struct CalendarPageView: View {
         let baseDate = now
         let calendar = Calendar.current
         let locale = L10n.locale
+        let requestedMonthCursor = force ? startOfMonth(baseDate) : startOfMonth(currentMonthCursor)
 
         if let prewarmed = Self.consumePrewarmedPayload(signature: signature, localeIdentifier: locale.identifier) {
             cachedBucketsByDayKey = prewarmed.bucketsByDayKey
             cachedDetailItemsByDayKey = [:]
+            loadingDetailDayKeys = []
             if force {
                 currentMonthCursor = startOfMonth(baseDate)
             }
             monthBlockPool = prewarmed.monthBlockPool
             rebuildVisibleMonthBlocks()
             scheduleMonthBlockPoolPrebuild(anchorMonth: currentMonthCursor, force: false)
+            scheduleDetailPlacesPrebuild(calendar: calendar, buildToken: buildToken)
             isCalendarCacheLoading = false
 
             if let selectedDayKey, cachedBucketsByDayKey[selectedDayKey] == nil {
@@ -898,8 +1246,22 @@ struct CalendarPageView: View {
         isCalendarCacheLoading = true
 
         DispatchQueue.global(qos: .userInitiated).async {
+            #if DEBUG
+            let buildStart = Self.debugTimestamp()
+            #endif
             let buckets = Self.buildCalendarBuckets(from: sourcePlaces, calendar: calendar)
             let bucketsByDayKey = Dictionary(uniqueKeysWithValues: buckets.map { ($0.id, $0) })
+            let visibleMonthPool = Self.buildMonthBlockPool(
+                anchorMonth: requestedMonthCursor,
+                offsets: -1...1,
+                bucketMap: bucketsByDayKey,
+                locale: locale,
+                calendar: calendar
+            )
+            #if DEBUG
+            let buildElapsed = (Self.debugTimestamp() - buildStart) * 1000
+            Self.debugLog("refreshCalendarCache buckets=\(buckets.count) visibleMonths=\(visibleMonthPool.count) sourcePlaces=\(sourcePlaces.count) elapsed=\(Int(buildElapsed))ms")
+            #endif
 
             DispatchQueue.main.async {
                 guard buildToken == calendarCacheBuildToken else {
@@ -907,19 +1269,14 @@ struct CalendarPageView: View {
                 }
                 cachedBucketsByDayKey = bucketsByDayKey
                 cachedDetailItemsByDayKey = [:]
+                loadingDetailDayKeys = []
                 if force {
-                    currentMonthCursor = startOfMonth(baseDate)
+                    currentMonthCursor = requestedMonthCursor
                 }
-                let anchorMonth = startOfMonth(currentMonthCursor)
-                monthBlockPool = Self.buildMonthBlockPool(
-                    anchorMonth: anchorMonth,
-                    offsets: -1...1,
-                    bucketMap: bucketsByDayKey,
-                    locale: locale,
-                    calendar: calendar
-                )
+                monthBlockPool = visibleMonthPool
                 rebuildVisibleMonthBlocks()
                 scheduleMonthBlockPoolPrebuild(anchorMonth: currentMonthCursor, force: true)
+                scheduleDetailPlacesPrebuild(calendar: calendar, buildToken: buildToken)
                 isCalendarCacheLoading = false
 
                 if let selectedDayKey, cachedBucketsByDayKey[selectedDayKey] == nil {
@@ -929,22 +1286,136 @@ struct CalendarPageView: View {
         }
     }
 
+    private func scheduleDetailPlacesPrebuild(
+        calendar: Calendar,
+        buildToken: Int
+    ) {
+        DispatchQueue.main.async {
+            guard buildToken == calendarCacheBuildToken else {
+                return
+            }
+            let sourceDetailPlaces = detailPlacesProvider()
+            guard !sourceDetailPlaces.isEmpty else {
+                cachedDetailPlacesByDayKey = [:]
+                return
+            }
+
+            DispatchQueue.global(qos: .utility).async {
+                #if DEBUG
+                let groupStart = Self.debugTimestamp()
+                #endif
+                let grouped = Self.groupDetailPlacesByDayKey(from: sourceDetailPlaces, calendar: calendar)
+                #if DEBUG
+                let groupElapsed = (Self.debugTimestamp() - groupStart) * 1000
+                Self.debugLog("groupDetailPlaces days=\(grouped.count) places=\(sourceDetailPlaces.count) elapsed=\(Int(groupElapsed))ms")
+                #endif
+
+                DispatchQueue.main.async {
+                    guard buildToken == calendarCacheBuildToken else {
+                        return
+                    }
+                    cachedDetailPlacesByDayKey = grouped
+                }
+            }
+        }
+    }
+
     private func loadDetailItemsIfNeeded(for dayKey: String) {
-        if cachedDetailItemsByDayKey[dayKey] != nil {
+        if cachedDetailItemsByDayKey[dayKey] != nil || loadingDetailDayKeys.contains(dayKey) {
             return
         }
 
-        let built = buildDetailItems(for: dayKey)
-        cachedDetailItemsByDayKey[dayKey] = built
+        loadingDetailDayKeys.insert(dayKey)
+        let buildToken = calendarCacheBuildToken
+        let referenceNow = now
+        let calendar = Calendar.current
+
+        if let groupedDetailPlaces = cachedDetailPlacesByDayKey[dayKey] {
+            scheduleDetailItemsBuild(
+                dayKey: dayKey,
+                detailPlaces: groupedDetailPlaces,
+                buildToken: buildToken,
+                now: referenceNow,
+                calendar: calendar
+            )
+            return
+        }
+
+        DispatchQueue.main.async {
+            guard buildToken == calendarCacheBuildToken else {
+                loadingDetailDayKeys.remove(dayKey)
+                return
+            }
+            let sourceDetailPlaces = detailPlacesProvider()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let dayPlaces = sourceDetailPlaces.filter { place in
+                    guard let startAt = place.startAt else {
+                        return false
+                    }
+                    return Self.calendarDayKey(startAt, calendar: calendar) == dayKey
+                }
+
+                DispatchQueue.main.async {
+                    guard buildToken == calendarCacheBuildToken else {
+                        loadingDetailDayKeys.remove(dayKey)
+                        return
+                    }
+                    scheduleDetailItemsBuild(
+                        dayKey: dayKey,
+                        detailPlaces: dayPlaces,
+                        buildToken: buildToken,
+                        now: referenceNow,
+                        calendar: calendar
+                    )
+                }
+            }
+        }
     }
 
-    private func buildDetailItems(for dayKey: String) -> [CalendarScoredItem] {
-        let detailPlaces = detailPlacesProvider()
+    private func scheduleDetailItemsBuild(
+        dayKey: String,
+        detailPlaces: [HePlace],
+        buildToken: Int,
+        now: Date,
+        calendar: Calendar
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            #if DEBUG
+            let buildStart = Self.debugTimestamp()
+            #endif
+            let built = Self.buildDetailItems(
+                for: dayKey,
+                detailPlaces: detailPlaces,
+                now: now,
+                calendar: calendar
+            )
+            #if DEBUG
+            let buildElapsed = (Self.debugTimestamp() - buildStart) * 1000
+            Self.debugLog("buildDetailItems day=\(dayKey) places=\(detailPlaces.count) items=\(built.count) elapsed=\(Int(buildElapsed))ms")
+            #endif
+
+            DispatchQueue.main.async {
+                guard buildToken == calendarCacheBuildToken else {
+                    loadingDetailDayKeys.remove(dayKey)
+                    return
+                }
+                cachedDetailItemsByDayKey[dayKey] = built
+                loadingDetailDayKeys.remove(dayKey)
+            }
+        }
+    }
+
+    private static func buildDetailItems(
+        for dayKey: String,
+        detailPlaces: [HePlace],
+        now: Date,
+        calendar: Calendar
+    ) -> [CalendarScoredItem] {
         let items = detailPlaces.compactMap { place -> CalendarScoredItem? in
             guard let startAt = place.startAt else {
                 return nil
             }
-            guard dayKeyOf(startAt) == dayKey else {
+            guard calendarDayKey(startAt, calendar: calendar) == dayKey else {
                 return nil
             }
             let snapshot = EventStatusResolver.snapshot(startAt: place.startAt, endAt: place.endAt, now: now)
@@ -953,11 +1424,29 @@ struct CalendarPageView: View {
                 place: place,
                 snapshot: snapshot,
                 distanceMeters: place.distanceMeters,
-                categoryID: categoryID(for: place),
+                categoryID: calendarCategoryID(for: place),
                 dayKey: dayKey
             )
         }
-        return items.sorted(by: recommendationCompare)
+        return items.sorted(by: recommendationCompareStatic)
+    }
+
+    private static func groupDetailPlacesByDayKey(
+        from sourcePlaces: [HePlace],
+        calendar: Calendar
+    ) -> [String: [HePlace]] {
+        var grouped: [String: [HePlace]] = [:]
+        grouped.reserveCapacity(max(sourcePlaces.count / 3, 8))
+
+        for place in sourcePlaces {
+            guard let startAt = place.startAt else {
+                continue
+            }
+            let dayKey = calendarDayKey(startAt, calendar: calendar)
+            grouped[dayKey, default: []].append(place)
+        }
+
+        return grouped
     }
 
     private static func buildCalendarBuckets(from sourcePlaces: [HePlace], calendar: Calendar) -> [CalendarBucket] {
@@ -1010,7 +1499,7 @@ struct CalendarPageView: View {
         while cursor <= end {
             let year = calendar.component(.year, from: cursor)
             let month = calendar.component(.month, from: cursor)
-            let firstWeekday = calendar.component(.weekday, from: cursor) - 1
+            let firstWeekday = weekdayColumnIndex(for: cursor, calendar: calendar)
             let daysInMonth = calendar.range(of: .day, in: .month, for: cursor)?.count ?? 30
             var cells: [CalendarMonthBlock.Cell] = []
             let monthID = "\(year)-\(String(format: "%02d", month))"
@@ -1102,6 +1591,10 @@ struct CalendarPageView: View {
         }
     }
 
+    private func categoryMeta(for categoryID: String) -> CalendarCategoryMeta {
+        categories.first(where: { $0.id == categoryID }) ?? categories[0]
+    }
+
     private func recommendationCompare(_ lhs: CalendarScoredItem, _ rhs: CalendarScoredItem) -> Bool {
         Self.recommendationCompareStatic(lhs, rhs)
     }
@@ -1161,7 +1654,7 @@ struct CalendarPageView: View {
         let locale = L10n.locale
         let bucketMap = cachedBucketsByDayKey
         let baseMonth = startOfMonth(anchorMonth)
-        let offsets = Array(-4...8)
+        let offsets = Array(-2...4)
         let targetMonths = offsets.map { calendar.date(byAdding: .month, value: $0, to: baseMonth) ?? baseMonth }
         let targetKeys = Set(targetMonths.map { Self.calendarMonthKey($0, calendar: calendar) })
         let snapshotPool = monthBlockPool
@@ -1177,6 +1670,9 @@ struct CalendarPageView: View {
         monthBlockPoolBuildToken &+= 1
         let buildToken = monthBlockPoolBuildToken
         DispatchQueue.global(qos: .utility).async {
+            #if DEBUG
+            let buildStart = Self.debugTimestamp()
+            #endif
             var additions: [String: CalendarMonthBlock] = [:]
             additions.reserveCapacity(missingMonths.count)
             for monthStart in missingMonths {
@@ -1188,6 +1684,10 @@ struct CalendarPageView: View {
                     calendar: calendar
                 )
             }
+            #if DEBUG
+            let buildElapsed = (Self.debugTimestamp() - buildStart) * 1000
+            Self.debugLog("scheduleMonthBlockPoolPrebuild missing=\(missingMonths.count) target=\(targetMonths.count) elapsed=\(Int(buildElapsed))ms")
+            #endif
 
             DispatchQueue.main.async {
                 guard buildToken == monthBlockPoolBuildToken else {
@@ -1206,6 +1706,54 @@ struct CalendarPageView: View {
         }
     }
 
+    private func scheduleImmediateMonthBlockWarmup(anchorMonth: Date, relativeOffsets: [Int]) {
+        let calendar = Calendar.current
+        let locale = L10n.locale
+        let bucketMap = cachedBucketsByDayKey
+        let baseMonth = startOfMonth(anchorMonth)
+        let snapshotPool = monthBlockPool
+        let targetMonths = relativeOffsets.map { calendar.date(byAdding: .month, value: $0, to: baseMonth) ?? baseMonth }
+        let missingMonths = targetMonths.filter { monthStart in
+            let key = Self.calendarMonthKey(monthStart, calendar: calendar)
+            return snapshotPool[key] == nil
+        }
+        guard !missingMonths.isEmpty else {
+            return
+        }
+
+        monthBlockPoolBuildToken &+= 1
+        let buildToken = monthBlockPoolBuildToken
+        DispatchQueue.global(qos: .userInitiated).async {
+            #if DEBUG
+            let buildStart = Self.debugTimestamp()
+            #endif
+            var additions: [String: CalendarMonthBlock] = [:]
+            additions.reserveCapacity(missingMonths.count)
+            for monthStart in missingMonths {
+                let key = Self.calendarMonthKey(monthStart, calendar: calendar)
+                additions[key] = Self.buildSingleCalendarMonth(
+                    monthStart: monthStart,
+                    bucketMap: bucketMap,
+                    locale: locale,
+                    calendar: calendar
+                )
+            }
+            #if DEBUG
+            let buildElapsed = (Self.debugTimestamp() - buildStart) * 1000
+            Self.debugLog("scheduleImmediateMonthBlockWarmup missing=\(missingMonths.count) elapsed=\(Int(buildElapsed))ms")
+            #endif
+
+            DispatchQueue.main.async {
+                guard buildToken == monthBlockPoolBuildToken else {
+                    return
+                }
+                for (key, block) in additions {
+                    monthBlockPool[key] = block
+                }
+            }
+        }
+    }
+
     private static func buildSingleCalendarMonth(
         monthStart: Date,
         bucketMap: [String: CalendarBucket],
@@ -1215,7 +1763,7 @@ struct CalendarPageView: View {
         let year = calendar.component(.year, from: monthStart)
         let month = calendar.component(.month, from: monthStart)
         let monthID = "\(year)-\(String(format: "%02d", month))"
-        let firstWeekday = calendar.component(.weekday, from: monthStart) - 1
+        let firstWeekday = weekdayColumnIndex(for: monthStart, calendar: calendar)
         let daysInMonth = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
 
         var cells: [CalendarMonthBlock.Cell] = []
@@ -1283,6 +1831,13 @@ struct CalendarPageView: View {
         return "\(year)-\(String(format: "%02d", month))"
     }
 
+    private static func weekdayColumnIndex(for date: Date, calendar: Calendar) -> Int {
+        let weekday = calendar.component(.weekday, from: date)
+        return (weekday + 5) % 7
+    }
+
+    private static let dayCellCategoryIDs = ["hanabi", "matsuri", "nature", "other"]
+
     private static func consumePrewarmedPayload(
         signature: String,
         localeIdentifier: String
@@ -1324,51 +1879,40 @@ struct CalendarPageView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.62),
-                    activeGlowColor.opacity(0.32),
-                    Color.white.opacity(0.72),
-                    activeGlowColor.opacity(0.26)
+                    Color.white.opacity(0.78),
+                    activeGlowColor.opacity(0.14),
+                    Color.white.opacity(0.84)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Rectangle()
                 .fill(activeGradient)
-                .opacity(0.26)
-                .blendMode(.overlay)
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.46)
+                .opacity(0.12)
 
             Circle()
-                .fill(activeGlowColor.opacity(0.36))
-                .frame(width: 420, height: 420)
-                .blur(radius: 118)
-                .offset(x: 150, y: -220)
-            Circle()
-                .fill(activeGlowColor.opacity(0.28))
-                .frame(width: 360, height: 360)
-                .blur(radius: 104)
-                .offset(x: -180, y: 180)
+                .fill(activeGlowColor.opacity(0.18))
+                .frame(width: 320, height: 320)
+                .blur(radius: 72)
+                .offset(x: 140, y: -200)
             Circle()
                 .fill(activeGradient)
-                .frame(width: 360, height: 360)
-                .blur(radius: 122)
-                .opacity(0.22)
-                .offset(x: 110, y: -80)
+                .frame(width: 260, height: 260)
+                .blur(radius: 76)
+                .opacity(0.14)
+                .offset(x: -130, y: 120)
             Circle()
-                .fill(activeGradient)
-                .frame(width: 300, height: 300)
-                .blur(radius: 108)
-                .opacity(0.18)
-                .offset(x: -150, y: 140)
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 220, height: 220)
+                .blur(radius: 64)
+                .offset(x: 40, y: 40)
 
             Image("HomeCalendarIcon")
                 .resizable()
                 .renderingMode(.original)
                 .scaledToFit()
-                .frame(width: 168, height: 168)
-                .opacity(0.22)
+                .frame(width: 148, height: 148)
+                .opacity(0.14)
                 .blendMode(.multiply)
                 .padding(.trailing, 18)
                 .padding(.bottom, 24)
