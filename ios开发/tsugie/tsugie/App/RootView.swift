@@ -39,7 +39,7 @@ struct RootView: View {
             ) {
                 CalendarPageView(
                     places: viewModel.places,
-                    detailPlaces: viewModel.calendarDetailPlaces,
+                    detailPlacesProvider: { viewModel.calendarDetailPlaces },
                     placeStateProvider: { viewModel.placeState(for: $0) },
                     stampProvider: { viewModel.stampPresentation(for: $0, heType: $1) },
                     onClose: {

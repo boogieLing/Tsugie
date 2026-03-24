@@ -3751,6 +3751,33 @@ final class HomeMapViewModel: ObservableObject {
         source.filter { isPlaceInteractionEnabled($0, now: now) }
     }
 
+    nonisolated private static func isPlaceArchivedAfterRetention(
+        startAt: Date?,
+        endAt: Date?,
+        now: Date,
+        interactionRetentionDaysAfterEnded: Int,
+        calendar: Calendar
+    ) -> Bool {
+        guard let startAt else {
+            return false
+        }
+        if now < startAt {
+            return false
+        }
+        if let endAt, endAt >= startAt, now <= endAt {
+            return false
+        }
+        guard let cutoffDate = calendar.date(
+            byAdding: .day,
+            value: -interactionRetentionDaysAfterEnded,
+            to: now
+        ) else {
+            return false
+        }
+        let anchorDate = endAt ?? startAt
+        return anchorDate < cutoffDate
+    }
+
     private func markerClusters(from source: [HePlace], region: MKCoordinateRegion) -> [MarkerClusterSummary] {
         guard !source.isEmpty else {
             return []
@@ -3853,25 +3880,13 @@ final class HomeMapViewModel: ObservableObject {
     }
 
     private func isPlaceArchivedAfterRetention(_ place: HePlace, now: Date) -> Bool {
-        let snapshot = EventStatusResolver.snapshot(
+        Self.isPlaceArchivedAfterRetention(
             startAt: place.startAt,
             endAt: place.endAt,
-            now: now
+            now: now,
+            interactionRetentionDaysAfterEnded: interactionRetentionDaysAfterEnded,
+            calendar: Calendar.current
         )
-        guard snapshot.status == .ended else {
-            return false
-        }
-        guard let anchorDate = snapshot.endDate ?? snapshot.startDate else {
-            return false
-        }
-        guard let cutoffDate = Calendar.current.date(
-            byAdding: .day,
-            value: -interactionRetentionDaysAfterEnded,
-            to: now
-        ) else {
-            return false
-        }
-        return anchorDate < cutoffDate
     }
 
     private func expandedMapRegion(_ region: MKCoordinateRegion, scale: Double) -> MKCoordinateRegion {
@@ -3933,22 +3948,30 @@ final class HomeMapViewModel: ObservableObject {
         nearbyRankingCache = []
     }
 
-    private func calendarDetailSnapshot(now: Date = Date()) -> [HePlace] {
+    private func makeCalendarDetailSnapshotCacheKey(now: Date) -> CalendarDetailSnapshotCacheKey {
         let usesRenderedSource = places.isEmpty
         let sourceRevision = usesRenderedSource ? placesRevision : allPlacesRevision
         let dayStart = Calendar.current.startOfDay(for: now)
         let daySerial = Int(dayStart.timeIntervalSince1970 / 86_400)
-        let cacheKey = CalendarDetailSnapshotCacheKey(
+        return CalendarDetailSnapshotCacheKey(
             sourceRevision: sourceRevision,
             usesRenderedSource: usesRenderedSource,
             daySerial: daySerial
         )
+    }
+
+    private func calendarDetailSnapshotSource() -> [HePlace] {
+        places.isEmpty ? renderedPlaces : places
+    }
+
+    private func calendarDetailSnapshot(now: Date = Date()) -> [HePlace] {
+        let cacheKey = makeCalendarDetailSnapshotCacheKey(now: now)
 
         if calendarDetailSnapshotCacheKey == cacheKey {
             return calendarDetailSnapshotCache
         }
 
-        let source = usesRenderedSource ? renderedPlaces : places
+        let source = calendarDetailSnapshotSource()
         let interactive = interactivePlaces(from: source, now: now)
         calendarDetailSnapshotCacheKey = cacheKey
         calendarDetailSnapshotCache = interactive
@@ -3962,16 +3985,50 @@ final class HomeMapViewModel: ObservableObject {
 
     private func prewarmCalendarCacheForLaunch() {
         let sourcePlaces = places
-        let sourceDetailPlaces = calendarDetailPlaces
         let referenceNow = Date()
         let locale = selectedLanguageLocale
+        prewarmCalendarDetailSnapshotForLaunch(now: referenceNow)
         DispatchQueue.global(qos: .userInitiated).async {
             CalendarPageView.prewarmCache(
                 places: sourcePlaces,
-                detailPlaces: sourceDetailPlaces,
                 now: referenceNow,
                 locale: locale
             )
+        }
+    }
+
+    private func prewarmCalendarDetailSnapshotForLaunch(now: Date) {
+        let cacheKey = makeCalendarDetailSnapshotCacheKey(now: now)
+        guard calendarDetailSnapshotCacheKey != cacheKey else {
+            return
+        }
+
+        let source = calendarDetailSnapshotSource()
+        let retentionDays = interactionRetentionDaysAfterEnded
+        DispatchQueue.global(qos: .utility).async {
+            let interactive = source.filter { place in
+                !Self.isPlaceArchivedAfterRetention(
+                    startAt: place.startAt,
+                    endAt: place.endAt,
+                    now: now,
+                    interactionRetentionDaysAfterEnded: retentionDays,
+                    calendar: Calendar.current
+                )
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else {
+                    return
+                }
+                guard self.makeCalendarDetailSnapshotCacheKey(now: now) == cacheKey else {
+                    return
+                }
+                guard self.calendarDetailSnapshotCacheKey != cacheKey else {
+                    return
+                }
+                self.calendarDetailSnapshotCacheKey = cacheKey
+                self.calendarDetailSnapshotCache = interactive
+            }
         }
     }
 
